@@ -32,7 +32,7 @@ Editor (Vue)  →  JSON Schema  →  Server (Fastify)  →  Renderer (Vue)
 ## 克隆后启动
 
 ```bash
-git clone https://github.com/<你的用户名>/mvp_vue.git
+git clone https://github.com/Derek-Wang2016/mvp_vue.git
 cd mvp_vue
 pnpm install
 
