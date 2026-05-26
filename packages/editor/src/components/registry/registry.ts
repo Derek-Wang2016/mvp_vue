@@ -1,0 +1,111 @@
+import type { ComponentType } from '@mvp-vue/schema'
+import type { EditorRegistry } from './types'
+import { textDefaultProps, textDefaultSize } from './text/defaults'
+import { imageDefaultProps, imageDefaultSize } from './image/defaults'
+import { datetimeDefaultProps, datetimeDefaultSize } from './datetime/defaults'
+import { analogClockDefaultProps, analogClockDefaultSize } from './analog-clock/defaults'
+import { pageNavButtonDefaultProps, pageNavButtonDefaultSize } from './page-nav-button/defaults'
+import { tableDefaultProps, tableDefaultSize } from './table/defaults'
+import { chartDefaultProps, chartDefaultSize } from './chart/defaults'
+import { cardListDefaultProps, cardListDefaultSize } from './card-list/defaults'
+import { mapDefaultProps, mapDefaultSize } from './map/defaults'
+
+// Stubs (fallback for types not yet implemented)
+import StubPropertyFields from './StubPropertyFields.vue'
+import StubCanvasPreview from './StubCanvasPreview.vue'
+import StubDataFields from './StubDataFields.vue'
+
+// Real component implementations
+import TextPropertyFields from './text/TextPropertyFields.vue'
+import TextCanvasPreview from './text/TextCanvasPreview.vue'
+import TextDataFields from './text/TextDataFields.vue'
+import ImagePropertyFields from './image/ImagePropertyFields.vue'
+import ImageCanvasPreview from './image/ImageCanvasPreview.vue'
+import DatetimePropertyFields from './datetime/DatetimePropertyFields.vue'
+import DatetimeCanvasPreview from './datetime/DatetimeCanvasPreview.vue'
+import AnalogClockPropertyFields from './analog-clock/AnalogClockPropertyFields.vue'
+import AnalogClockCanvasPreview from './analog-clock/AnalogClockCanvasPreview.vue'
+import PageNavButtonPropertyFields from './page-nav-button/PageNavButtonPropertyFields.vue'
+import PageNavButtonCanvasPreview from './page-nav-button/PageNavButtonCanvasPreview.vue'
+import ChartPropertyFields from './chart/ChartPropertyFields.vue'
+import ChartCanvasPreview from './chart/ChartCanvasPreview.vue'
+import TablePropertyFields from './table/TablePropertyFields.vue'
+import TableCanvasPreview from './table/TableCanvasPreview.vue'
+import MapPropertyFields from './map/MapPropertyFields.vue'
+import MapCanvasPreview from './map/MapCanvasPreview.vue'
+import CardListPropertyFields from './card-list/CardListPropertyFields.vue'
+import CardListCanvasPreview from './card-list/CardListCanvasPreview.vue'
+
+const chartDef = {
+  defaultProps: chartDefaultProps,
+  defaultSize: chartDefaultSize,
+  PropertyFields: ChartPropertyFields,
+  CanvasPreview: ChartCanvasPreview,
+}
+
+export const editorRegistry: EditorRegistry = {
+  text: {
+    defaultProps: textDefaultProps,
+    defaultSize: textDefaultSize,
+    PropertyFields: TextPropertyFields,
+    CanvasPreview: TextCanvasPreview,
+    DataFields: TextDataFields,
+  },
+  image: {
+    defaultProps: imageDefaultProps,
+    defaultSize: imageDefaultSize,
+    PropertyFields: ImagePropertyFields,
+    CanvasPreview: ImageCanvasPreview,
+  },
+  datetime: {
+    defaultProps: datetimeDefaultProps,
+    defaultSize: datetimeDefaultSize,
+    PropertyFields: DatetimePropertyFields,
+    CanvasPreview: DatetimeCanvasPreview,
+  },
+  'analog-clock': {
+    defaultProps: analogClockDefaultProps,
+    defaultSize: analogClockDefaultSize,
+    PropertyFields: AnalogClockPropertyFields,
+    CanvasPreview: AnalogClockCanvasPreview,
+  },
+  'page-nav-button': {
+    defaultProps: pageNavButtonDefaultProps,
+    defaultSize: pageNavButtonDefaultSize,
+    PropertyFields: PageNavButtonPropertyFields,
+    CanvasPreview: PageNavButtonCanvasPreview,
+  },
+  table: {
+    defaultProps: tableDefaultProps,
+    defaultSize: tableDefaultSize,
+    PropertyFields: TablePropertyFields,
+    CanvasPreview: TableCanvasPreview,
+  },
+  'bar-chart': chartDef,
+  'line-chart': chartDef,
+  'pie-chart': chartDef,
+  'card-list': {
+    defaultProps: cardListDefaultProps,
+    defaultSize: cardListDefaultSize,
+    PropertyFields: CardListPropertyFields,
+    CanvasPreview: CardListCanvasPreview,
+  },
+  map: {
+    defaultProps: mapDefaultProps,
+    defaultSize: mapDefaultSize,
+    PropertyFields: MapPropertyFields,
+    CanvasPreview: MapCanvasPreview,
+  },
+}
+
+export function getEditorDef(type: ComponentType) {
+  return editorRegistry[type]
+}
+
+export function getDefaultProps(type: ComponentType): Record<string, unknown> {
+  return editorRegistry[type]?.defaultProps() ?? {}
+}
+
+export function getDefaultSize(type: ComponentType): { w: number; h: number } {
+  return editorRegistry[type]?.defaultSize() ?? { w: 200, h: 150 }
+}

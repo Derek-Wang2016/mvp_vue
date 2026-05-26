@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 卡片字段值超出宽度时横向自动滚动（跑马灯） */
+.card-field-value-marquee-inner {
+  display: inline-block;
+  white-space: nowrap;
+  animation-name: card-field-value-marquee;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes card-field-value-marquee {
+  0%,
+  12% {
+    transform: translateX(0);
+  }
+  88%,
+  100% {
+    transform: translateX(calc(-1 * var(--marquee-distance, 0px)));
+  }
+}

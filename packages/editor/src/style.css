@@ -1,0 +1,100 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Editor-specific control styles (matching React mvp dark theme) */
+
+.editor-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
+  padding-right: 2.5rem;
+}
+
+.editor-select option {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.editor-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.editor-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.editor-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+}
+.editor-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Number input stepper wrapper */
+.editor-number-wrap {
+  position: relative;
+}
+.editor-number-wrap input[type='number'] {
+  -moz-appearance: textfield;
+}
+.editor-number-wrap input[type='number']::-webkit-outer-spin-button,
+.editor-number-wrap input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Stepper buttons */
+.editor-number-step {
+  position: absolute;
+  right: 1px;
+  width: 20px;
+  height: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  padding: 0;
+}
+.editor-number-step:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+.editor-number-step::after {
+  content: '';
+  display: block;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+}
+.editor-number-step-up {
+  top: 1px;
+  border-radius: 0 4px 0 0;
+}
+.editor-number-step-up::after {
+  border-bottom: 5px solid #94a3b8;
+}
+.editor-number-step-down {
+  bottom: 1px;
+  border-radius: 0 0 4px 0;
+}
+.editor-number-step-down::after {
+  border-top: 5px solid #94a3b8;
+}
+
+/* Color swatch - hide native picker */
+.editor-color-swatch {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  height: 100%;
+  width: 100%;
+  cursor: pointer;
+  border: 0;
+  padding: 0;
+  opacity: 0;
+}

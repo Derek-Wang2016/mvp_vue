@@ -1,0 +1,53 @@
+# --- 依赖与构建产物 ---
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Vite / Vitest
+.vite/
+vitest.config.ts.timestamp-*
+*.tsbuildinfo
+
+# 环境变量（勿提交密钥）
+.env
+.env.*
+!.env.example
+
+# 日志与覆盖率
+*.log
+npm-debug.log*
+pnpm-debug.log*
+logs/
+coverage/
+.nyc_output/
+
+# 编辑器与 IDE
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+
+# Cursor / Claude 本地配置（个人偏好，不入库）
+.cursor/
+.claude/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# TypeScript / Vue 工具缓存
+packages/*/node_modules/.vue-global-types/
+
+# Prisma / SQLite（若日后在本仓启用 server）
+.prisma/
+packages/server/prisma/*.db
+packages/server/prisma/*.db-journal
+
+# 本地调试、临时文件
+*.swp
+*.swo
+.cache/
+.turbo/

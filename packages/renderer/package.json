@@ -1,0 +1,30 @@
+{
+  "name": "@mvp-vue/renderer",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5001",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@mvp-vue/schema": "workspace:*",
+    "vue": "^3.5.13",
+    "@vueuse/core": "^11.3.0",
+    "echarts": "^5.5.1",
+    "@iconify/vue": "^4.2.0",
+    "@iconify-json/tabler": "^1.2.35",
+    "@fontsource/share-tech-mono": "^5.1.0",
+    "@fontsource/dseg7-classic": "^5.2.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.3",
+    "vue-tsc": "^2.2.0",
+    "tailwindcss": "^3.4.10",
+    "postcss": "^8.4.47",
+    "autoprefixer": "^10.4.20"
+  }
+}
