@@ -95,7 +95,7 @@ onMounted(fetchPages)
       </div>
 
       <!-- list -->
-      <div class="flex-1 overflow-y-auto p-2">
+      <div class="editor-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2">
         <div v-if="loading" class="p-4 text-xs text-slate-500 text-center">加载中...</div>
         <div v-else-if="error" class="p-4 text-xs text-red-400 text-center">{{ error }}</div>
         <div v-else-if="pages.length === 0" class="p-4 text-xs text-slate-600 text-center">暂无页面</div>

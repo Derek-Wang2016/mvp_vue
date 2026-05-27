@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue'
 import { useEditorStore } from './stores/editorStore'
 import { storeToRefs } from 'pinia'
-import { savePage, updatePage, getPage } from './api'
+import { savePage, updatePage, getPage, listPages } from './api'
+import type { PageListItem } from './api'
 import ComponentPanel from './components/ComponentPanel.vue'
 import Canvas from './components/Canvas.vue'
 import PropertyPanel from './components/PropertyPanel.vue'
@@ -21,6 +22,14 @@ const lastSavedAt = ref<string | null>(null)
 const dialogOpen = ref(false)
 const jsonDialogOpen = ref(false)
 const showGrid = ref(true)
+const pageOptions = ref<PageListItem[]>([])
+const pageOptionsLoading = ref(false)
+const savedFingerprint = ref('')
+
+const currentPageId = computed<number | null>(() => (
+  pageId.value && pageId.value > 0 ? pageId.value : null
+))
+const hasUnsavedChanges = computed(() => makeFingerprint() !== savedFingerprint.value)
 
 // Shift key tracking
 const shiftRef = ref(false)
@@ -33,14 +42,39 @@ const contextMenu = ref<ContextMenuState | null>(null)
 
 // URL ?id= loading
 onMounted(() => {
+  fetchPageOptions()
   const params = new URLSearchParams(window.location.search)
   const id = params.get('id')
   if (id) {
     getPage(Number(id))
-      .then((data) => store.loadPage(data.id, data.name, data.schemaJson))
+      .then((data) => {
+        store.loadPage(data.id, data.name, data.schemaJson)
+        markSaved()
+      })
       .catch(() => { saveMsg.value = '加载失败' })
+  } else {
+    markSaved()
   }
 })
+
+function makeFingerprint() {
+  return JSON.stringify({ name: store.pageName, schema: store.toSchema() })
+}
+
+function markSaved() {
+  savedFingerprint.value = makeFingerprint()
+}
+
+async function fetchPageOptions() {
+  pageOptionsLoading.value = true
+  try {
+    pageOptions.value = await listPages()
+  } catch {
+    // keep existing options if refresh fails
+  } finally {
+    pageOptionsLoading.value = false
+  }
+}
 
 // Shift key listeners
 function onKeyDown(e: KeyboardEvent) {
@@ -72,6 +106,8 @@ async function handleSave() {
       store.pageId = result.id
       saveMsg.value = '已保存'
     }
+    markSaved()
+    await fetchPageOptions()
     lastSavedAt.value = new Date().toLocaleString('zh-CN', { hour12: false })
   } catch {
     saveMsg.value = '保存失败'
@@ -79,6 +115,41 @@ async function handleSave() {
     saving.value = false
   }
 }
+
+async function switchPageById(id: number) {
+  const data = await getPage(id)
+  store.loadPage(data.id, data.name, data.schemaJson)
+  markSaved()
+}
+
+async function handlePageSelectChange(e: Event) {
+  const selected = Number((e.target as HTMLSelectElement).value)
+  if (!Number.isFinite(selected) || selected <= 0 || selected === currentPageId.value) return
+
+  if (hasUnsavedChanges.value) {
+    const shouldSave = window.confirm('当前页面有未保存修改。点击“确定”先保存再切换，点击“取消”放弃切换。')
+    if (!shouldSave) return
+    await handleSave()
+    if (hasUnsavedChanges.value) return
+  }
+
+  try {
+    await switchPageById(selected)
+    saveMsg.value = ''
+    lastSavedAt.value = null
+  } catch {
+    saveMsg.value = '切换页面失败'
+  }
+}
+
+function handleOpenDialogClose() {
+  dialogOpen.value = false
+  fetchPageOptions()
+}
+
+watch(pageId, (next, prev) => {
+  if (next !== prev) markSaved()
+})
 
 // Context menu
 function handleCanvasContextMenu(e: MouseEvent, compId: string) {
@@ -160,12 +231,29 @@ const ToFrontIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none"
       </svg>
       <span class="text-slate-300 font-semibold tracking-wide">大屏编辑器</span>
 
-      <!-- page name -->
-      <input
-        class="bg-white/5 border border-white/10 rounded-md px-2.5 py-0.5 text-xs w-40 focus:border-indigo-400/50 focus:ring-1 focus:ring-indigo-400/30 outline-none transition-colors"
-        :value="pageName"
-        @input="(e) => store.setPageName((e.target as HTMLInputElement).value)"
-      />
+      <!-- page switcher -->
+      <select
+        class="appearance-none bg-[#0f1824] border border-white/15 rounded-md px-2.5 py-0.5 pr-7 text-xs w-52 text-slate-200 shadow-sm shadow-black/10 hover:bg-white/[0.06] hover:border-white/25 focus:border-indigo-400/50 focus:ring-1 focus:ring-indigo-400/30 outline-none transition-colors disabled:opacity-60"
+        :value="currentPageId ?? ''"
+        :disabled="pageOptionsLoading"
+        @change="handlePageSelectChange"
+      >
+        <option class="bg-[#111d2e] text-slate-200" value="" disabled>{{ pageOptionsLoading ? '页面加载中...' : '选择页面...' }}</option>
+        <option v-for="p in pageOptions" :key="p.id" :value="p.id" class="bg-[#111d2e] text-slate-200">
+          #{{ p.id }} {{ p.name }}
+        </option>
+      </select>
+      <svg class="-ml-6 h-3.5 w-3.5 pointer-events-none text-slate-500" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z" clip-rule="evenodd" />
+      </svg>
+
+      <!-- page id -->
+      <span
+        class="text-[10px] tabular-nums px-2 py-1 rounded-md border border-white/10 bg-white/5 text-slate-400"
+        :title="currentPageId ? `当前页面 ID：${currentPageId}` : '当前页面尚未保存（无 ID）'"
+      >
+        ID: <span class="text-slate-200">{{ currentPageId ?? '未保存' }}</span>
+      </span>
 
       <!-- undo/redo -->
       <button
@@ -276,7 +364,7 @@ const ToFrontIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none"
     </div>
 
     <!-- Dialogs -->
-    <OpenDialog v-if="dialogOpen" @close="dialogOpen = false" />
+    <OpenDialog v-if="dialogOpen" @close="handleOpenDialogClose" />
     <ViewJsonDialog :open="jsonDialogOpen" @close="jsonDialogOpen = false" />
 
     <!-- Context menu -->

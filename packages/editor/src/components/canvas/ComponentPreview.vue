@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { PageComponent } from '@mvp-vue/schema'
 import { getEditorDef } from '../registry/registry'
 
@@ -10,13 +11,14 @@ const props = defineProps<{
   onEndEdit?: () => void
 }>()
 
-const def = getEditorDef(props.comp.type)
+const def = computed(() => getEditorDef(props.comp.type))
 </script>
 
 <template>
   <component
     v-if="def"
     :is="def.CanvasPreview"
+    :key="`${comp.id}-${comp.type}`"
     :comp="comp"
     :update-props="updateProps"
     :is-editing="isEditing"

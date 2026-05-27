@@ -275,7 +275,7 @@ function handleDrop(e: DragEvent) {
         <!-- components -->
         <div
           v-for="comp in components"
-          :key="comp.id"
+          :key="`${comp.id}-${comp.type}`"
           :style="{
             position: 'absolute',
             left: `${comp.x}px`,

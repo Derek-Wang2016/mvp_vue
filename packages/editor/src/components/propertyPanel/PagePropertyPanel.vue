@@ -10,6 +10,7 @@ import IconPickerModal from '../IconPickerModal.vue'
 import JsonExportDialog from '../JsonExportDialog.vue'
 import DictJsonImportDialog from '../DictJsonImportDialog.vue'
 import ColorField from '../ColorField.vue'
+import { Icon } from '@iconify/vue'
 import { PROP_LABEL, PROP_HINT, PROP_SECTION, PROP_SELECT_COMPACT } from './shared'
 
 const store = useEditorStore()
@@ -337,8 +338,16 @@ function tabClass(id: TabId) {
             >
               {{ entry.iconType === 'preset' ? (entry.iconName ?? '选择...') : '自定义 SVG' }}
             </button>
-            <div class="h-7 w-7 flex shrink-0 items-center justify-center rounded border border-white/10 bg-white/5 text-slate-400">
-              <span class="text-[9px]">-</span>
+            <div
+              class="h-7 w-7 flex shrink-0 items-center justify-center overflow-hidden rounded border border-white/10 bg-white/5 text-slate-300 [&_svg]:max-h-[18px] [&_svg]:max-w-[18px]"
+            >
+              <template v-if="entry.iconType === 'preset' && entry.iconName">
+                <Icon :icon="entry.iconName" :width="18" :height="18" />
+              </template>
+              <template v-else-if="entry.iconType === 'custom' && entry.iconSvg">
+                <span class="inline-flex items-center justify-center" v-html="entry.iconSvg" />
+              </template>
+              <span v-else class="text-[9px] text-slate-500">—</span>
             </div>
             <button type="button"
               class="flex h-7 w-7 shrink-0 items-center justify-center p-0 text-base leading-none text-red-400/60 hover:text-red-400"
