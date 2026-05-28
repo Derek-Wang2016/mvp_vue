@@ -186,6 +186,7 @@ editor/src/components/registry/
 ├── analog-clock/
 ├── page-nav-button/
 ├── card-list/
+├── key-value-tag/
 └── map/
 ```
 

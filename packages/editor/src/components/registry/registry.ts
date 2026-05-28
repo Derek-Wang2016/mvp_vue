@@ -8,6 +8,7 @@ import { pageNavButtonDefaultProps, pageNavButtonDefaultSize } from './page-nav-
 import { tableDefaultProps, tableDefaultSize } from './table/defaults'
 import { chartDefaultProps, chartDefaultSize } from './chart/defaults'
 import { cardListDefaultProps, cardListDefaultSize } from './card-list/defaults'
+import { keyValueTagDefaultProps, keyValueTagDefaultSize } from './key-value-tag/defaults'
 import { mapDefaultProps, mapDefaultSize } from './map/defaults'
 
 // Stubs (fallback for types not yet implemented)
@@ -35,6 +36,9 @@ import MapPropertyFields from './map/MapPropertyFields.vue'
 import MapCanvasPreview from './map/MapCanvasPreview.vue'
 import CardListPropertyFields from './card-list/CardListPropertyFields.vue'
 import CardListCanvasPreview from './card-list/CardListCanvasPreview.vue'
+import KeyValueTagPropertyFields from './key-value-tag/KeyValueTagPropertyFields.vue'
+import KeyValueTagCanvasPreview from './key-value-tag/KeyValueTagCanvasPreview.vue'
+import KeyValueTagDataFields from './key-value-tag/KeyValueTagDataFields.vue'
 
 const chartDef = {
   defaultProps: chartDefaultProps,
@@ -89,6 +93,13 @@ export const editorRegistry: EditorRegistry = {
     defaultSize: cardListDefaultSize,
     PropertyFields: CardListPropertyFields,
     CanvasPreview: CardListCanvasPreview,
+  },
+  'key-value-tag': {
+    defaultProps: keyValueTagDefaultProps,
+    defaultSize: keyValueTagDefaultSize,
+    PropertyFields: KeyValueTagPropertyFields,
+    CanvasPreview: KeyValueTagCanvasPreview,
+    DataFields: KeyValueTagDataFields,
   },
   map: {
     defaultProps: mapDefaultProps,

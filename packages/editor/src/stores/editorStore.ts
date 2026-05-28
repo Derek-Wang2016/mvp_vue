@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { shallowRef, ref, computed } from 'vue'
+import { shallowRef, ref, computed, triggerRef } from 'vue'
 import type { PageComponent, ComponentType, PageSchema, DataSource, ColorDictEntry, IconDictEntry, AbbrevDictEntry, BgGradient } from '@mvp-vue/schema'
 import { DEFAULT_PAGE_WIDTH, DEFAULT_PAGE_HEIGHT } from '@mvp-vue/schema'
 import { clampPageSize } from '../pageSizePresets'
@@ -7,15 +7,39 @@ import { getDefaultProps, getDefaultSize } from '../components/registry/registry
 
 const MAX_HISTORY = 50
 const PASTE_OFFSET = 20
+const MIN_COMPONENT_W = 30
+const MIN_COMPONENT_H = 20
+
+function clonePageComponent(c: PageComponent): PageComponent {
+  try {
+    return structuredClone(c)
+  } catch {
+    return JSON.parse(JSON.stringify(c)) as PageComponent
+  }
+}
+
+function cloneComponentsList(list: PageComponent[]): PageComponent[] {
+  try {
+    return structuredClone(list)
+  } catch {
+    return JSON.parse(JSON.stringify(list)) as PageComponent[]
+  }
+}
 
 function cloneComponentsByIds(components: PageComponent[], ids: string[]): PageComponent[] {
-  return components.filter((c) => ids.includes(c.id)).map((c) => structuredClone(c))
+  const byId = new Map(components.map((c) => [c.id, c]))
+  return ids
+    .map((id) => byId.get(id))
+    .filter((c): c is PageComponent => c != null)
+    .map((c) => clonePageComponent(c))
 }
 
 interface Snapshot {
   components: PageComponent[]
   nextId: number
 }
+
+export type AlignMode = 'left' | 'right' | 'top' | 'bottom'
 
 let nextId = 1
 let nextColorDictId = 1
@@ -62,10 +86,21 @@ export const useEditorStore = defineStore('editor', () => {
     const idx = components.value.findIndex((c) => c.id === id)
     return idx > 0
   })
+  const canAlign = computed(() => selectedIds.value.length >= 2)
 
   // === helpers ===
+  /** 避免 HMR 后模块级 nextId 重置导致粘贴出重复 id（Vue v-for 重复 key 不渲染新节点） */
+  function ensureNextComponentId() {
+    let maxNum = 0
+    for (const c of components.value) {
+      const m = c.id.match(/^comp-(\d+)$/)
+      if (m) maxNum = Math.max(maxNum, Number(m[1]))
+    }
+    if (nextId <= maxNum) nextId = maxNum + 1
+  }
+
   function pushHistory() {
-    past.value = [...past.value, { components: structuredClone(components.value), nextId }].slice(-MAX_HISTORY)
+    past.value = [...past.value, { components: cloneComponentsList(components.value), nextId }].slice(-MAX_HISTORY)
     future.value = []
   }
 
@@ -73,9 +108,9 @@ export const useEditorStore = defineStore('editor', () => {
   function undo() {
     if (past.value.length === 0) return
     const prev = past.value[past.value.length - 1]!
-    future.value = [...future.value, { components: structuredClone(components.value), nextId }]
+    future.value = [...future.value, { components: cloneComponentsList(components.value), nextId }]
     past.value = past.value.slice(0, -1)
-    components.value = structuredClone(prev.components)
+    components.value = cloneComponentsList(prev.components)
     selectedIds.value = []
     nextId = prev.nextId
   }
@@ -83,9 +118,9 @@ export const useEditorStore = defineStore('editor', () => {
   function redo() {
     if (future.value.length === 0) return
     const nxt = future.value[future.value.length - 1]!
-    past.value = [...past.value, { components: structuredClone(components.value), nextId }]
+    past.value = [...past.value, { components: cloneComponentsList(components.value), nextId }]
     future.value = future.value.slice(0, -1)
-    components.value = structuredClone(nxt.components)
+    components.value = cloneComponentsList(nxt.components)
     selectedIds.value = []
     nextId = nxt.nextId
   }
@@ -112,6 +147,7 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function addComponent(type: ComponentType, x: number, y: number) {
+    ensureNextComponentId()
     const { w, h } = getDefaultSize(type)
     const component: PageComponent = {
       id: `comp-${nextId++}`,
@@ -150,6 +186,72 @@ export const useEditorStore = defineStore('editor', () => {
     pushHistory()
     components.value = components.value.map((c) =>
       ids.includes(c.id) ? { ...c, x: Math.round(c.x + dx), y: Math.round(c.y + dy) } : c,
+    )
+  }
+
+  function alignSelectedComponents(mode: AlignMode) {
+    const ids = selectedIds.value
+    if (ids.length < 2) return
+
+    const selected = components.value.filter((c) => ids.includes(c.id))
+    if (selected.length < 2) return
+
+    pushHistory()
+
+    const posById = new Map<string, { x: number; y: number }>()
+    switch (mode) {
+      case 'left': {
+        const minX = Math.min(...selected.map((c) => c.x))
+        for (const c of selected) posById.set(c.id, { x: minX, y: c.y })
+        break
+      }
+      case 'right': {
+        const maxRight = Math.max(...selected.map((c) => c.x + c.w))
+        for (const c of selected) posById.set(c.id, { x: maxRight - c.w, y: c.y })
+        break
+      }
+      case 'top': {
+        const minY = Math.min(...selected.map((c) => c.y))
+        for (const c of selected) posById.set(c.id, { x: c.x, y: minY })
+        break
+      }
+      case 'bottom': {
+        const maxBottom = Math.max(...selected.map((c) => c.y + c.h))
+        for (const c of selected) posById.set(c.id, { x: c.x, y: maxBottom - c.h })
+        break
+      }
+    }
+
+    components.value = components.value.map((c) => {
+      const pos = posById.get(c.id)
+      if (!pos) return c
+      return { ...c, x: Math.round(pos.x), y: Math.round(pos.y) }
+    })
+  }
+
+  function equalizeSelectedWidth() {
+    const ids = selectedIds.value
+    if (ids.length < 2) return
+    const ref = components.value.find((c) => c.id === ids[0])
+    if (!ref) return
+
+    const targetW = Math.max(MIN_COMPONENT_W, Math.round(ref.w))
+    pushHistory()
+    components.value = components.value.map((c) =>
+      ids.includes(c.id) ? { ...c, w: targetW } : c,
+    )
+  }
+
+  function equalizeSelectedHeight() {
+    const ids = selectedIds.value
+    if (ids.length < 2) return
+    const ref = components.value.find((c) => c.id === ids[0])
+    if (!ref) return
+
+    const targetH = Math.max(MIN_COMPONENT_H, Math.round(ref.h))
+    pushHistory()
+    components.value = components.value.map((c) =>
+      ids.includes(c.id) ? { ...c, h: targetH } : c,
     )
   }
 
@@ -224,17 +326,37 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function pasteComponents() {
-    if (!clipboard.value || clipboard.value.length === 0) return
+    const source = clipboard.value
+    if (!source || source.length === 0) return
+
+    ensureNextComponentId()
     pushHistory()
-    const newComps = clipboard.value.map((c) => ({
-      ...structuredClone(c),
-      id: `comp-${nextId++}`,
-      x: Math.round(c.x + PASTE_OFFSET),
-      y: Math.round(c.y + PASTE_OFFSET),
-    }))
+
+    const newComps: PageComponent[] = []
+    for (const c of source) {
+      const cloned = clonePageComponent(c)
+      newComps.push({
+        ...cloned,
+        id: `comp-${nextId++}`,
+        x: Math.round(Number(cloned.x) + PASTE_OFFSET) || 0,
+        y: Math.round(Number(cloned.y) + PASTE_OFFSET) || 0,
+      })
+    }
+
+    const existingIds = new Set(components.value.map((c) => c.id))
+    for (const c of newComps) {
+      if (existingIds.has(c.id)) {
+        console.warn('[editor] paste: duplicate component id avoided by resync —', c.id)
+        ensureNextComponentId()
+        c.id = `comp-${nextId++}`
+      }
+      existingIds.add(c.id)
+    }
+
     components.value = [...components.value, ...newComps]
+    triggerRef(components)
     selectedIds.value = newComps.map((c) => c.id)
-    clipboard.value = newComps.map((c) => structuredClone(c))
+    clipboard.value = newComps.map((c) => clonePageComponent(c))
   }
 
   function setGroupDragOffset(offset: { dx: number; dy: number } | null) {
@@ -429,12 +551,13 @@ export const useEditorStore = defineStore('editor', () => {
     dataSources, colorDict, iconDict, abbrevDict,
     past, future, groupDragOffset, clipboard,
     // computed
-    firstSelectedId, canUndo, canRedo, canCopy, canPaste, canMoveUp, canMoveDown,
+    firstSelectedId, canUndo, canRedo, canCopy, canPaste, canMoveUp, canMoveDown, canAlign,
     // actions
     undo, redo,
     selectComponent, selectComponents,
     addComponent, updateComponentProps, replaceComponentProps,
-    moveComponent, moveComponents, resizeComponent,
+    moveComponent, moveComponents, alignSelectedComponents,
+    equalizeSelectedWidth, equalizeSelectedHeight, resizeComponent,
     removeComponent, removeComponents,
     bringToFront, sendToBack, bringForward, sendBackward,
     copySelectedComponents, cutSelectedComponents, pasteComponents,

@@ -50,7 +50,7 @@
 
 | ID | 优先级 | 项 | 状态 |
 |----|--------|-----|------|
-| C1 | P0 | `editorRegistry` 12 类型注册完整 | [x] |
+| C1 | P0 | `editorRegistry` 13 类型注册完整 | [x] |
 | C2 | P0 | 页面属性：尺寸预设、底图、透明度 | [x] |
 | C3 | P1 | 页面级数据源 CRUD（REST/SQL/静态 JSON） | [x] |
 | C4 | P1 | 颜色/图标/缩略语字典 | [x] |
@@ -67,7 +67,7 @@
 | D1 | P0 | `?id=` 加载 Schema，错误/加载态 | [x] |
 | D2 | P0 | 适应窗口 scale + 居中 | [x] |
 | D3 | P0 | `?fullscreen=1` 1:1 模式 + 全屏按钮 + Esc 同步 | [x] |
-| D4 | P0 | `componentMap` 12 类型运行时渲染 | [x] |
+| D4 | P0 | `componentMap` 13 类型运行时渲染 | [x] |
 | D5 | P0 | text / image / table / datetime / analog-clock | [x] |
 | D6 | P0 | bar / line / pie ECharts + 字段映射 | [x] |
 | D7 | P1 | DataContext 轮询、setOption 不闪烁 | [x] |
@@ -78,7 +78,7 @@
 
 ---
 
-## E. 组件类型明细（12）
+## E. 组件类型明细（13）
 
 | type | Editor 预览 | Renderer | 状态 |
 |------|-------------|----------|------|
@@ -92,6 +92,7 @@
 | analog-clock | [x] | [x] | [x] |
 | page-nav-button | [x] | [x] | [x] |
 | card-list | [x] | [~] | [~] |
+| key-value-tag | [x] | [x] | [x] 新增 |
 | map | [x] | [x] | [x] |
 | iframe | [ ] | [ ] | 基线未实现，可延后 |
 | video | [ ] | [ ] | 基线未实现，可延后 |

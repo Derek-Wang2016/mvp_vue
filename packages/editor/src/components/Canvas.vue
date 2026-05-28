@@ -5,6 +5,7 @@ import { useEditorStore } from '../stores/editorStore'
 import { storeToRefs } from 'pinia'
 import ResizeHandles from './ResizeHandles.vue'
 import ComponentPreview from './canvas/ComponentPreview.vue'
+import { getEditorDef } from './registry/registry'
 
 const emit = defineEmits<{
   contextmenu: [e: MouseEvent, compId: string]
@@ -138,11 +139,14 @@ const dragState = ref<DragState | null>(null)
 
 function handleCompPointerDown(e: PointerEvent, comp: PageComponent) {
   if (editingCompId.value) return
+  // 右键会先触发 pointerdown；忽略非主键，避免破坏多选或误开拖拽
+  if (e.button !== 0) return
   e.stopPropagation()
 
   if (e.shiftKey) {
     store.selectComponent(comp.id, true)
-  } else if (!isSelected(comp.id) || selectedIds.value.length > 1) {
+  } else if (!isOnlySelected(comp.id)) {
+    // 普通点击组件时，收敛到单选，避免多选态下误触发群组拖拽
     store.selectComponent(comp.id)
   }
 
@@ -205,20 +209,34 @@ function handleCompPointerDown(e: PointerEvent, comp: PageComponent) {
 }
 
 function handleCompContextMenu(e: MouseEvent, compId: string) {
-  store.selectComponent(compId)
+  e.preventDefault()
+  e.stopPropagation()
+  if (!selectedIds.value.includes(compId)) {
+    store.selectComponent(compId)
+  }
   emit('contextmenu', e, compId)
 }
 
 // Panel → Canvas drop (HTML5 DnD)
 function handleDragOver(e: DragEvent) {
+  const dt = e.dataTransfer
+  if (!dt) return
+  const customType = dt.getData('application/x-mvp-component-type')
+  const plainType = dt.getData('text/plain')
+  const dragType = customType || plainType
+  if (!dragType || !getEditorDef(dragType as ComponentType)) return
   e.preventDefault()
-  if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+  dt.dropEffect = 'copy'
 }
 
 function handleDrop(e: DragEvent) {
   e.preventDefault()
-  const type = e.dataTransfer?.getData('text/plain') as ComponentType | undefined
-  if (!type) return
+  const dt = e.dataTransfer
+  if (!dt) return
+  const customType = dt.getData('application/x-mvp-component-type')
+  const plainType = dt.getData('text/plain')
+  const type = (customType || plainType) as ComponentType | ''
+  if (!type || !getEditorDef(type as ComponentType)) return
   const canvas = canvasRef.value
   if (!canvas) return
   const rect = canvas.getBoundingClientRect()

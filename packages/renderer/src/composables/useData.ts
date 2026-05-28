@@ -1,4 +1,4 @@
-import { ref, computed, provide, inject, onBeforeUnmount, type Ref, type InjectionKey, type ComputedRef } from 'vue'
+import { ref, computed, provide, inject, onBeforeUnmount, watch, type Ref, type InjectionKey, type ComputedRef } from 'vue'
 import type { DataSource } from '@mvp-vue/schema'
 import { getApiBase } from '../config'
 
@@ -44,19 +44,38 @@ export function useData(dsId?: string): DataStateRefs {
   }
 }
 
-export function provideDataSources(dataSources: DataSource[]) {
+function buildInitialMap(dataSources: DataSource[]): DataMap {
   const init: DataMap = {}
   for (const ds of dataSources) {
     init[ds.id] = { data: null, loading: true, error: null }
   }
-  const dataMap = ref<DataMap>(init)
+  return init
+}
 
+/** 在 DataProvider 内调用：注册 dataMap、拉取数据源，并返回 dispose */
+export function useProvideDataSources(getDataSources: () => DataSource[]) {
+  const dataMap = ref<DataMap>(buildInitialMap(getDataSources()))
+  let generation = 0
   const timers = new Map<string, ReturnType<typeof setInterval>>()
 
+  function dispose() {
+    generation++
+    timers.forEach((t) => clearInterval(t))
+    timers.clear()
+  }
+
   async function fetchData(ds: DataSource) {
+    const gen = generation
+    const prev = dataMap.value[ds.id]
+    const hasPrevData = prev?.data != null
     dataMap.value = {
       ...dataMap.value,
-      [ds.id]: { data: dataMap.value[ds.id]?.data ?? null, loading: dataMap.value[ds.id]?.data == null, error: null },
+      // 有历史数据时采用静默刷新：保留当前展示，避免刷新闪烁
+      [ds.id]: {
+        data: hasPrevData ? prev!.data : null,
+        loading: hasPrevData ? false : true,
+        error: null,
+      },
     }
     try {
       let result: unknown
@@ -86,23 +105,44 @@ export function provideDataSources(dataSources: DataSource[]) {
         const json = await res.json()
         result = json.data
       }
+      if (gen !== generation) return
       dataMap.value = { ...dataMap.value, [ds.id]: { data: result, loading: false, error: null } }
-    } catch (err: any) {
-      dataMap.value = { ...dataMap.value, [ds.id]: { data: null, loading: false, error: err.message } }
+    } catch (err: unknown) {
+      if (gen !== generation) return
+      const message = err instanceof Error ? err.message : String(err)
+      const current = dataMap.value[ds.id]
+      const keepData = current?.data ?? null
+      dataMap.value = {
+        ...dataMap.value,
+        [ds.id]: {
+          data: keepData,
+          loading: false,
+          // 若已有可展示数据，则不打断渲染面板，仅在无数据时暴露错误态
+          error: keepData != null ? null : message,
+        },
+      }
     }
   }
 
-  for (const ds of dataSources) {
-    fetchData(ds)
-    if (ds.refreshInterval && ds.refreshInterval > 0) {
-      const timer = setInterval(() => fetchData(ds), ds.refreshInterval * 1000)
-      timers.set(ds.id, timer)
+  function load(dataSources: DataSource[]) {
+    dispose()
+    dataMap.value = buildInitialMap(dataSources)
+    for (const ds of dataSources) {
+      void fetchData(ds)
+      if (ds.refreshInterval && ds.refreshInterval > 0) {
+        const timer = setInterval(() => void fetchData(ds), ds.refreshInterval * 1000)
+        timers.set(ds.id, timer)
+      }
     }
   }
-
-  onBeforeUnmount(() => {
-    timers.forEach((t) => clearInterval(t))
-  })
 
   provide(DATA_MAP_KEY, dataMap)
+
+  watch(getDataSources, (sources) => load(sources), { deep: true })
+
+  onBeforeUnmount(() => dispose())
+
+  load(getDataSources())
+
+  return { dispose, dataMap }
 }

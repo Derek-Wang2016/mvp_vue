@@ -1,12 +1,14 @@
 <script setup lang="ts">
+import { toRef } from 'vue'
 import type { DataSource } from '@mvp-vue/schema'
-import { provideDataSources } from '../composables/useData'
+import { useProvideDataSources } from '../composables/useData'
 
 const props = defineProps<{
   dataSources: DataSource[]
 }>()
 
-provideDataSources(props.dataSources)
+const dataSourcesRef = toRef(props, 'dataSources')
+useProvideDataSources(() => dataSourcesRef.value ?? [])
 </script>
 
 <template>

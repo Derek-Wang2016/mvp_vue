@@ -22,8 +22,8 @@ const FALLBACK_PIE = [
 ]
 const FALLBACK_CAT = ['A', 'B', 'C', 'D', 'E']
 
-const CATEGORY_KEYS = ['x', 'name', 'label', 'title', 'symbol', 'id', 'key']
-const VALUE_KEYS = ['y', 'value', 'current_price', 'market_cap', 'total_volume', 'price', 'revenue', 'orders', 'amount', 'count']
+const CATEGORY_KEYS = ['KEY', 'key', 'x', 'name', 'label', 'title', 'symbol', 'id']
+const VALUE_KEYS = ['VALUE', 'value', 'y', 'current_price', 'market_cap', 'total_volume', 'price', 'revenue', 'orders', 'amount', 'count']
 
 function pickKey(obj: Record<string, unknown>, preferred: string | undefined, fallbacks: string[]): string | undefined {
   if (preferred && preferred in obj) return preferred

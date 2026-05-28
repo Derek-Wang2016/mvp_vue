@@ -1,5 +1,5 @@
 // ===== 组件类型 =====
-export type ComponentType = 'text' | 'image' | 'bar-chart' | 'line-chart' | 'pie-chart' | 'table' | 'iframe' | 'video' | 'datetime' | 'analog-clock' | 'page-nav-button' | 'card-list' | 'map'
+export type ComponentType = 'text' | 'image' | 'bar-chart' | 'line-chart' | 'pie-chart' | 'table' | 'iframe' | 'video' | 'datetime' | 'analog-clock' | 'page-nav-button' | 'card-list' | 'key-value-tag' | 'map'
 
 export {
   type MapLevel,
@@ -328,6 +328,7 @@ export const DEFAULT_CHART_TEXT_FONT_SIZE = 16
 export const DEFAULT_CHART_TEXT_COLOR = '#cbd5e1'
 
 export { buildPieSeriesLayout, type PieSeriesLayout } from './pieChartLayout'
+export { parseKeyValueTagKeyList, filterKeyValueTagItems } from './keyValueTag'
 
 // ===== 页面 Schema =====
 export type BgGradient = 'none' | 'linear-top' | 'linear-left' | 'linear-diagonal' | 'radial'

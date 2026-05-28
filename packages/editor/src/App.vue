@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch, computed, nextTick } from 'vue'
 import { useEditorStore } from './stores/editorStore'
 import { storeToRefs } from 'pinia'
 import { savePage, updatePage, getPage, listPages } from './api'
@@ -13,7 +13,7 @@ import ViewJsonDialog from './components/ViewJsonDialog.vue'
 const store = useEditorStore()
 const {
   pageName, pageId, canUndo, canRedo, canCopy, canPaste,
-  canMoveUp, canMoveDown, firstSelectedId,
+  canMoveUp, canMoveDown, canAlign, firstSelectedId,
 } = storeToRefs(store)
 
 const saving = ref(false)
@@ -40,7 +40,7 @@ interface ContextMenuState {
 }
 const contextMenu = ref<ContextMenuState | null>(null)
 
-// URL ?id= loading
+// URL ?id= loading + global shortcuts（须挂 window，否则画布选中后根节点无焦点快捷键失效）
 onMounted(() => {
   fetchPageOptions()
   const params = new URLSearchParams(window.location.search)
@@ -55,6 +55,15 @@ onMounted(() => {
   } else {
     markSaved()
   }
+  window.addEventListener('keydown', handleKeyDown)
+  window.addEventListener('keyup', handleKeyUp)
+  editorRootRef.value?.focus({ preventScroll: true })
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeyDown)
+  window.removeEventListener('keyup', handleKeyUp)
+  disarmCloseOnClickOutside()
 })
 
 function makeFingerprint() {
@@ -76,19 +85,7 @@ async function fetchPageOptions() {
   }
 }
 
-// Shift key listeners
-function onKeyDown(e: KeyboardEvent) {
-  if (e.key === 'Shift') shiftRef.value = true
-}
-function onKeyUp(e: KeyboardEvent) {
-  if (e.key === 'Shift') shiftRef.value = false
-}
-window.addEventListener('keydown', onKeyDown)
-window.addEventListener('keyup', onKeyUp)
-onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onKeyDown)
-  window.removeEventListener('keyup', onKeyUp)
-})
+const editorRootRef = ref<HTMLElement | null>(null)
 
 // Save
 async function handleSave() {
@@ -153,6 +150,7 @@ watch(pageId, (next, prev) => {
 
 // Context menu
 function handleCanvasContextMenu(e: MouseEvent, compId: string) {
+  e.preventDefault()
   contextMenu.value = { x: e.clientX, y: e.clientY, compId }
 }
 
@@ -160,49 +158,111 @@ function closeContextMenu() {
   contextMenu.value = null
 }
 
+let disarmContextMenuClose: (() => void) | null = null
+
+function disarmCloseOnClickOutside() {
+  disarmContextMenuClose?.()
+  disarmContextMenuClose = null
+}
+
+function armCloseOnClickOutside() {
+  disarmCloseOnClickOutside()
+  const close = () => {
+    contextMenu.value = null
+    disarmCloseOnClickOutside()
+  }
+  const onClick = () => close()
+  const onContextMenu = () => close()
+  window.addEventListener('click', onClick)
+  // 须延后注册：否则会立刻捕获「打开菜单」的同一次 contextmenu 冒泡
+  void nextTick(() => {
+    window.addEventListener('contextmenu', onContextMenu)
+  })
+  disarmContextMenuClose = () => {
+    window.removeEventListener('click', onClick)
+    window.removeEventListener('contextmenu', onContextMenu)
+  }
+}
+
 watch(contextMenu, (val) => {
-  if (!val) return
-  const close = () => { contextMenu.value = null }
-  window.addEventListener('click', close, { once: true })
-  window.addEventListener('contextmenu', close, { once: true })
+  if (!val) {
+    disarmCloseOnClickOutside()
+    return
+  }
+  armCloseOnClickOutside()
 })
 
-// Keyboard shortcuts
+function isShortcutMod(e: KeyboardEvent) {
+  return e.ctrlKey || e.metaKey
+}
+
+function handleKeyUp(e: KeyboardEvent) {
+  if (e.key === 'Shift') shiftRef.value = false
+}
+
+// Keyboard shortcuts（window 级，支持 Ctrl / Cmd）
 function handleKeyDown(e: KeyboardEvent) {
+  if (e.key === 'Shift') {
+    shiftRef.value = true
+    return
+  }
+
   const target = e.target as HTMLElement
   const tag = target.tagName
   const editable = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable
+  const mod = isShortcutMod(e)
+  const key = e.key.toLowerCase()
 
-  if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
+  if (mod && key === 'z' && !e.shiftKey) {
     e.preventDefault(); store.undo(); return
   }
-  if ((e.ctrlKey && e.key === 'z' && e.shiftKey) || (e.ctrlKey && e.key === 'y')) {
+  if ((mod && key === 'z' && e.shiftKey) || (mod && key === 'y')) {
     e.preventDefault(); store.redo(); return
   }
-  if (e.ctrlKey && e.key === 's') {
+  if (mod && key === 's') {
     e.preventDefault(); handleSave(); return
   }
-  if (e.ctrlKey && e.key === 'c' && !editable) {
+  if (mod && key === 'c' && !editable) {
     if (store.selectedIds.length > 0) {
       e.preventDefault(); store.copySelectedComponents()
     }
     return
   }
-  if (e.ctrlKey && e.key === 'x' && !editable) {
+  if (mod && key === 'x' && !editable) {
     if (store.selectedIds.length > 0) {
       e.preventDefault(); store.cutSelectedComponents()
     }
     return
   }
-  if (e.ctrlKey && e.key === 'v' && !editable) {
-    if (store.clipboard && store.clipboard.length > 0) {
+  if (mod && key === 'v' && !editable) {
+    if (canPaste.value) {
       e.preventDefault(); store.pasteComponents()
     }
     return
   }
-  if ((e.key === 'Delete' || e.key === 'Backspace') && !editable) {
+  if ((e.key === 'Delete' || e.key === 'Backspace') && !editable && !mod) {
     if (store.selectedIds.length > 0) {
+      e.preventDefault()
       store.removeComponents([...store.selectedIds])
+    }
+    return
+  }
+
+  // 方向键微调位置（Shift 步进 10px，支持多选整体移动）
+  if (!editable && !mod && store.selectedIds.length > 0) {
+    const step = e.shiftKey ? 10 : 1
+    let dx = 0
+    let dy = 0
+    switch (e.key) {
+      case 'ArrowLeft': dx = -step; break
+      case 'ArrowRight': dx = step; break
+      case 'ArrowUp': dy = -step; break
+      case 'ArrowDown': dy = step; break
+      default: break
+    }
+    if (dx !== 0 || dy !== 0) {
+      e.preventDefault()
+      store.moveComponents([...store.selectedIds], dx, dy)
     }
   }
 }
@@ -218,10 +278,21 @@ const ToBackIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" 
 const DownIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="10" height="8" rx="1.5"/><polyline points="5 12.5 8 15 11 12.5"/></svg>`
 const UpIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="10" height="8" rx="1.5"/><polyline points="5 3.5 8 1 11 3.5"/></svg>`
 const ToFrontIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="10" height="7" rx="1.5"/><line x1="8" y1="5" x2="8" y2="1.5"/><polyline points="5 3.5 8 1 11 3.5"/><line x1="2" y1="1" x2="14" y2="1"/></svg>`
+const AlignLeftIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><line x1="2.5" y1="2" x2="2.5" y2="14"/><rect x="5" y="3.5" width="4" height="3" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/><rect x="6.5" y="9" width="6" height="3.5" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/></svg>`
+const AlignRightIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><line x1="13.5" y1="2" x2="13.5" y2="14"/><rect x="7" y="3.5" width="4" height="3" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/><rect x="3.5" y="9" width="6" height="3.5" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/></svg>`
+const AlignTopIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="2.5" x2="14" y2="2.5"/><rect x="3.5" y="5" width="3" height="4" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/><rect x="9" y="6.5" width="3.5" height="6" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/></svg>`
+const AlignBottomIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="13.5" x2="14" y2="13.5"/><rect x="3.5" y="7" width="3" height="4" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/><rect x="9" y="3.5" width="3.5" height="6" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/></svg>`
+const EqualWidthIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="2.5" x2="4" y2="13.5"/><line x1="12" y1="2.5" x2="12" y2="13.5"/><rect x="5.5" y="4" width="5" height="3" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/><rect x="5.5" y="9.5" width="5" height="2.5" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/></svg>`
+const EqualHeightIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><line x1="2.5" y1="4" x2="13.5" y2="4"/><line x1="2.5" y1="12" x2="13.5" y2="12"/><rect x="4" y="5.5" width="3" height="5" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/><rect x="9.5" y="5.5" width="2.5" height="5" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/></svg>`
+
+const alignBtnClass = (enabled: boolean) =>
+  enabled
+    ? 'text-slate-400 border-white/10 bg-white/5 hover:text-slate-200 hover:bg-white/10 hover:border-white/15'
+    : 'text-slate-700 border-white/5 bg-white/[0.02] cursor-not-allowed'
 </script>
 
 <template>
-  <div class="h-screen flex flex-col" @keydown="handleKeyDown" tabindex="-1">
+  <div ref="editorRootRef" class="h-screen flex flex-col outline-none" tabindex="-1" @mousedown="editorRootRef?.focus({ preventScroll: true })">
     <!-- Header / Toolbar -->
     <header class="h-11 border-b border-white/10 flex items-center px-4 text-xs shrink-0 gap-2.5 bg-gradient-to-b from-[#111d2e] to-[#0f1a28]">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2" class="shrink-0">
@@ -289,6 +360,58 @@ const ToFrontIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none"
         :class="canPaste ? 'text-slate-400 border-white/10 bg-white/5 hover:text-slate-200 hover:bg-white/10 hover:border-white/15' : 'text-slate-700 border-white/5 bg-white/[0.02] cursor-not-allowed'"
         :disabled="!canPaste" @click="store.pasteComponents()" title="粘贴 (Ctrl+V)"
         v-html="PasteIcon"
+      />
+
+      <span class="w-px h-4 bg-white/10" />
+
+      <!-- align (multi-select) -->
+      <button
+        class="px-2 py-1 rounded-md border transition-colors"
+        :class="alignBtnClass(canAlign)"
+        :disabled="!canAlign"
+        title="左对齐（需选中 2 个及以上组件）"
+        v-html="AlignLeftIcon"
+        @click="store.alignSelectedComponents('left')"
+      />
+      <button
+        class="px-2 py-1 rounded-md border transition-colors"
+        :class="alignBtnClass(canAlign)"
+        :disabled="!canAlign"
+        title="右对齐（需选中 2 个及以上组件）"
+        v-html="AlignRightIcon"
+        @click="store.alignSelectedComponents('right')"
+      />
+      <button
+        class="px-2 py-1 rounded-md border transition-colors"
+        :class="alignBtnClass(canAlign)"
+        :disabled="!canAlign"
+        title="上对齐（需选中 2 个及以上组件）"
+        v-html="AlignTopIcon"
+        @click="store.alignSelectedComponents('top')"
+      />
+      <button
+        class="px-2 py-1 rounded-md border transition-colors"
+        :class="alignBtnClass(canAlign)"
+        :disabled="!canAlign"
+        title="下对齐（需选中 2 个及以上组件）"
+        v-html="AlignBottomIcon"
+        @click="store.alignSelectedComponents('bottom')"
+      />
+      <button
+        class="px-2 py-1 rounded-md border transition-colors"
+        :class="alignBtnClass(canAlign)"
+        :disabled="!canAlign"
+        title="等宽（以首个选中组件为基准，需选中 2 个及以上）"
+        v-html="EqualWidthIcon"
+        @click="store.equalizeSelectedWidth()"
+      />
+      <button
+        class="px-2 py-1 rounded-md border transition-colors"
+        :class="alignBtnClass(canAlign)"
+        :disabled="!canAlign"
+        title="等高（以首个选中组件为基准，需选中 2 个及以上）"
+        v-html="EqualHeightIcon"
+        @click="store.equalizeSelectedHeight()"
       />
 
       <span class="w-px h-4 bg-white/10" />
@@ -372,6 +495,8 @@ const ToFrontIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none"
       v-if="contextMenu"
       class="fixed z-50 bg-[#111d2e]/95 backdrop-blur-sm border border-white/10 rounded-lg shadow-xl shadow-black/40 py-1 min-w-[140px]"
       :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
+      @click.stop
+      @contextmenu.stop.prevent
     >
       <button class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed" :disabled="!canCopy" @click="store.copySelectedComponents(); closeContextMenu()">
         拷贝 <span class="float-right text-slate-500 text-xs">Ctrl+C</span>
@@ -381,6 +506,49 @@ const ToFrontIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none"
       </button>
       <button class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed" :disabled="!canPaste" @click="store.pasteComponents(); closeContextMenu()">
         粘贴 <span class="float-right text-slate-500 text-xs">Ctrl+V</span>
+      </button>
+      <div class="border-t border-white/10 my-1" />
+      <button
+        class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        :disabled="!canAlign"
+        @click="store.alignSelectedComponents('left'); closeContextMenu()"
+      >
+        左对齐
+      </button>
+      <button
+        class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        :disabled="!canAlign"
+        @click="store.alignSelectedComponents('right'); closeContextMenu()"
+      >
+        右对齐
+      </button>
+      <button
+        class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        :disabled="!canAlign"
+        @click="store.alignSelectedComponents('top'); closeContextMenu()"
+      >
+        上对齐
+      </button>
+      <button
+        class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        :disabled="!canAlign"
+        @click="store.alignSelectedComponents('bottom'); closeContextMenu()"
+      >
+        下对齐
+      </button>
+      <button
+        class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        :disabled="!canAlign"
+        @click="store.equalizeSelectedWidth(); closeContextMenu()"
+      >
+        等宽
+      </button>
+      <button
+        class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        :disabled="!canAlign"
+        @click="store.equalizeSelectedHeight(); closeContextMenu()"
+      >
+        等高
       </button>
       <div class="border-t border-white/10 my-1" />
       <button class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors" @click="contextMenu && store.bringToFront(contextMenu.compId); closeContextMenu()">置顶</button>

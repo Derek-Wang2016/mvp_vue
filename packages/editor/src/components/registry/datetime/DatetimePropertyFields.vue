@@ -2,6 +2,7 @@
 import ColorSwatch from '../../ColorSwatch.vue'
 import EditorNumberInput from '../../EditorNumberInput.vue'
 import { PROP_LABEL, PROP_NUMBER_WRAP, PROP_NUMBER_INNER } from '../../propertyPanel/shared'
+import { FONT_FAMILY_SELECT_CLASS, FONT_FAMILY_OPTIONS } from '../../propertyPanel/editorFontOptions'
 import type { ComponentPropertyFieldsProps } from '../types'
 
 const props = defineProps<ComponentPropertyFieldsProps>()
@@ -29,17 +30,11 @@ const props = defineProps<ComponentPropertyFieldsProps>()
   <label class="block">
     <span :class="PROP_LABEL">字体</span>
     <select
-      class="editor-select w-full mt-1 bg-white/[0.08] border border-white/15 rounded-md px-2.5 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-indigo-400/50 outline-none transition-colors"
+      :class="FONT_FAMILY_SELECT_CLASS"
       :value="(comp.props.fontFamily as string) ?? 'sans-serif'"
       @change="props.updateProps({ fontFamily: ($event.target as HTMLSelectElement).value })"
     >
-      <option value="sans-serif">无衬线体</option>
-      <option value="serif">衬线体</option>
-      <option value="monospace">等宽字体</option>
-      <option value="cursive">手写体</option>
-      <option value="fantasy">装饰体</option>
-      <option value="Share Tech Mono">LCD 数码</option>
-      <option value="DSEG7 Classic">七段数码 (DSEG7)</option>
+      <option v-for="opt in FONT_FAMILY_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
     </select>
   </label>
   <label class="block">

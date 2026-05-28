@@ -9,6 +9,7 @@ import TableRenderer from './TableRenderer.vue'
 import ChartRenderer from './ChartRenderer.vue'
 import MapRenderer from './MapRenderer.vue'
 import CardListRenderer from './CardListRenderer.vue'
+import KeyValueTagRenderer from './KeyValueTagRenderer.vue'
 
 export interface CompRendererProps {
   comp: PageComponent
@@ -30,5 +31,6 @@ export const componentMap: Record<ComponentType, Component<CompRendererProps> | 
   'analog-clock': AnalogClockRenderer,
   'page-nav-button': PageNavButtonRenderer,
   'card-list': CardListRenderer,
+  'key-value-tag': KeyValueTagRenderer,
   'map': MapRenderer,
 }

@@ -122,6 +122,7 @@ watch(pageId, (id) => {
   }
   loading.value = true
   error.value = null
+  schema.value = null
   getPage(id)
     .then((data) => {
       schema.value = data.schemaJson
@@ -270,7 +271,10 @@ watch([schema, fullscreenMode, pageWidth, pageHeight], () => {
           />
 
           <!-- DataProvider wraps all components -->
-          <DataProvider :dataSources="schema.dataSources ?? []">
+          <DataProvider
+            :key="`page-${pageId}`"
+            :dataSources="schema.dataSources ?? []"
+          >
             <!-- Components -->
             <template v-for="comp in schema.components" :key="comp.id">
               <div

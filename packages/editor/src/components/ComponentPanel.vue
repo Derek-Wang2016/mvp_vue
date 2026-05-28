@@ -12,6 +12,7 @@ const PANEL_ITEMS: { type: ComponentType; label: string }[] = [
   { type: 'analog-clock', label: '表盘时钟' },
   { type: 'page-nav-button', label: '页面跳转按钮' },
   { type: 'card-list', label: '卡片列表' },
+  { type: 'key-value-tag', label: '键值标签' },
   { type: 'map', label: '地图' },
 ]
 
@@ -26,6 +27,7 @@ const ICONS: Record<string, string> = {
   'analog-clock': '🕰',
   'page-nav-button': '➜',
   'card-list': '▦',
+  'key-value-tag': '▤',
   map: '🗺',
 }
 </script>
@@ -44,7 +46,7 @@ const ICONS: Record<string, string> = {
         class="h-8 bg-white/[0.03] border border-white/[0.06] hover:border-white/10 hover:bg-white/[0.06] rounded-md flex items-center gap-2 px-2.5 text-xs cursor-grab active:cursor-grabbing transition-colors select-none"
         data-draggable="panel"
         :data-drag-type="item.type"
-        @dragstart="(e: DragEvent) => { e.dataTransfer!.effectAllowed = 'copy'; e.dataTransfer!.setData('text/plain', item.type); }"
+        @dragstart="(e: DragEvent) => { e.dataTransfer!.effectAllowed = 'copy'; e.dataTransfer!.setData('application/x-mvp-component-type', item.type); e.dataTransfer!.setData('text/plain', item.type); }"
       >
         <span class="text-slate-500 text-xs w-4 text-center">{{ ICONS[item.type] }}</span>
         <span class="text-slate-400">{{ item.label }}</span>
