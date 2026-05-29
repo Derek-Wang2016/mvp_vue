@@ -127,6 +127,24 @@ pnpm dev:server       # → http://localhost:3002
 
 ---
 
+## 编辑器 UI 约定（Agent 编码时必读）
+
+### 滚动条
+
+凡编辑器内**可滚动**区域（`overflow-auto` / `overflow-y-auto` 的 `<div>`、`<pre>`、`<textarea>` 等），必须加 **`editor-scrollbar`**，与暗色主题一致。
+
+- 样式定义：`packages/editor/src/style.css`（`.editor-scrollbar`）
+- 参考：`PagePropertyPanel.vue`、`OpenDialog.vue`、`IconPickerModal.vue` 图标网格、`ViewJsonDialog.vue` 等
+- **禁止**依赖 Windows / 浏览器默认浅色粗滚动条
+
+### 确认与提示
+
+- **禁止**使用 `window.confirm` / `window.alert` / `window.prompt`
+- 删除、覆盖、不可逆操作 → 使用 **`ConfirmDialog.vue`**（`tone="danger"` 等）
+- 嵌套弹窗内确认框需更高层级：传 `overlay-class="z-[80]"`（高于父级 `z-[70]` 的 `Teleport` 弹窗）
+
+---
+
 ## Vue 迁移要点（Agent 编码时）
 
 | React 模式 | Vue 对应 |

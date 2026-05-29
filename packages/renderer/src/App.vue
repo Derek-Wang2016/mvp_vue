@@ -293,6 +293,7 @@ watch([schema, fullscreenMode, pageWidth, pageHeight], () => {
                   :comp="comp"
                   :colorDict="schema.colorDict"
                   :iconDict="schema.iconDict"
+                  :savedIcons="schema.savedIcons"
                   :abbrevDict="schema.abbrevDict"
                 />
               </div>

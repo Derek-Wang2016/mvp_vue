@@ -4,20 +4,27 @@ import type { CardFieldConfig, CardFieldLayoutId, CardEmptyDisplayConfig, IconDi
 import {
   CARD_FIELD_LAYOUTS,
   DATE_FORMAT_PRESETS,
-  DEFAULT_CARD_TAG_SEPARATOR,
-  CARD_TAG_BG_COLOR_DICT_VALUE,
   isCardFieldVisible,
 } from '@mvp-vue/schema'
 import { useEditorStore } from '../../../stores/editorStore'
 import { storeToRefs } from 'pinia'
-import { autoImportCardFieldsFromApi, hasConfiguredCardFields } from '../../../cardFieldAutoImport'
-import ColorSwatch from '../../ColorSwatch.vue'
+import {
+  autoImportCardListFieldsFromApi,
+  autoImportCardListFieldsFromPageDataSource,
+  buildImportWhitelistOptions,
+  hasConfiguredCardFields,
+} from '../../../cardFieldAutoImport'
+import { parseImportFieldWhitelist } from '@mvp-vue/schema'
 import ColorField from '../../ColorField.vue'
 import EditorNumberInput from '../../EditorNumberInput.vue'
 import ConfirmDialog from '../../ConfirmDialog.vue'
 import ComponentPropsJsonDialog from '../../ComponentPropsJsonDialog.vue'
 import IconPickerModal from '../../IconPickerModal.vue'
 import CardListEmptyDisplaySection from './CardListEmptyDisplaySection.vue'
+import CardFieldValueDisplaySection from '../shared/CardFieldValueDisplaySection.vue'
+import CardFieldLabelStyleSection from '../shared/CardFieldLabelStyleSection.vue'
+import CardFieldValueStyleSection from '../shared/CardFieldValueStyleSection.vue'
+import CardFieldTagSplitSection from '../shared/CardFieldTagSplitSection.vue'
 import type { ComponentPropertyFieldsProps } from '../types'
 import {
   PROP_LABEL,
@@ -32,8 +39,10 @@ import {
 
 const props = defineProps<ComponentPropertyFieldsProps>()
 
+const usesPageDataSource = computed(() => Boolean(props.comp.dataSourceId))
+
 const store = useEditorStore()
-const { iconDict } = storeToRefs(store)
+const { iconDict, savedIcons } = storeToRefs(store)
 
 const cardFieldImporting = ref(false)
 const cardFieldImportErr = ref('')
@@ -69,8 +78,18 @@ function patchEmptyDisplay(patch: Partial<CardEmptyDisplayConfig>) {
 
 function emptyDisplayIconEntry(): IconDictEntry {
   const ed = getEmptyDisplay()
-  if (ed.iconType && (ed.iconName || ed.iconSvg)) {
-    return { id: 'empty-inline', key: '', iconType: ed.iconType, iconName: ed.iconName, iconSvg: ed.iconSvg }
+  if (ed.iconDictKey) {
+    const hit = iconDict.value.find((e) => e.key === ed.iconDictKey)
+    if (hit) return { ...hit, id: 'empty-inline', key: '' }
+  }
+  if (ed.iconType === 'saved' && ed.savedIconId != null) {
+    return { id: 'empty-inline', key: '', iconType: 'saved', savedIconId: ed.savedIconId }
+  }
+  if (ed.iconType === 'custom' && ed.iconSvg) {
+    return { id: 'empty-inline', key: '', iconType: 'custom', iconSvg: ed.iconSvg }
+  }
+  if (ed.iconType === 'preset' && ed.iconName) {
+    return { id: 'empty-inline', key: '', iconType: 'preset', iconName: ed.iconName }
   }
   return { id: 'empty-inline', key: '', iconType: 'preset', iconName: 'tabler:box-off' }
 }
@@ -87,11 +106,25 @@ async function runCardFieldImport() {
   cardFieldImporting.value = true
   cardFieldImportErr.value = ''
   try {
-    const fields = await autoImportCardFieldsFromApi({
-      apiUrl: (props.comp.props.apiUrl as string) ?? '',
-      fixedParams: (props.comp.props.fixedParams as Record<string, string>) ?? {},
-      dataListPath: (props.comp.props.dataListPath as string) ?? 'data.list',
-    })
+    const dataListPath = (props.comp.props.dataListPath as string) ?? 'data.list'
+    const compWl = parseImportFieldWhitelist(props.comp.props.importFieldWhitelist)
+    let fields: CardFieldConfig[]
+    if (usesPageDataSource.value && props.comp.dataSourceId) {
+      const ds = store.dataSources.find((d) => d.id === props.comp.dataSourceId)
+      if (!ds) throw new Error('数据源不存在')
+      fields = await autoImportCardListFieldsFromPageDataSource(
+        ds,
+        dataListPath,
+        compWl.length > 0 ? compWl : undefined,
+      )
+    } else {
+      fields = await autoImportCardListFieldsFromApi({
+        apiUrl: (props.comp.props.apiUrl as string) ?? '',
+        fixedParams: (props.comp.props.fixedParams as Record<string, string>) ?? {},
+        dataListPath,
+        whitelists: buildImportWhitelistOptions(props.comp.props.importFieldWhitelist),
+      })
+    }
     props.updateProps({ fields })
     cardFieldImportConfirm.value = null
   } catch (err) {
@@ -169,8 +202,16 @@ function moveField(entryIdx: number, dir: -1 | 1) {
 function openEmptyIconPicker() {
   const entry = emptyDisplayIconEntry()
   emptyIconSearch.value = ''
-  emptyIconPickerTab.value = entry.iconType === 'custom' ? 'custom' : 'preset'
-  emptyIconCustomSvg.value = entry.iconSvg ?? ''
+  if (entry.iconType === 'custom') {
+    emptyIconPickerTab.value = 'custom'
+    emptyIconCustomSvg.value = entry.iconSvg ?? ''
+  } else if (entry.iconType === 'saved') {
+    emptyIconPickerTab.value = 'custom'
+    emptyIconCustomSvg.value = ''
+  } else {
+    emptyIconPickerTab.value = 'preset'
+    emptyIconCustomSvg.value = ''
+  }
   emptyIconPickerOpen.value = true
 }
 </script>
@@ -424,6 +465,7 @@ function openEmptyIconPicker() {
     <CardListEmptyDisplaySection
       :comp="comp"
       :icon-dict="iconDict"
+      :saved-icons="savedIcons"
       @update:empty-display="patchEmptyDisplay"
       @toggle-field="(listKey, fieldName, checked) => toggleEmptyFieldList(listKey, fieldName, checked)"
       @open-icon-picker="openEmptyIconPicker"
@@ -437,11 +479,11 @@ function openEmptyIconPicker() {
           <button
             type="button"
             class="text-[11px] text-emerald-400 hover:text-emerald-300 disabled:opacity-40"
-            :disabled="cardFieldImporting || !(comp.props.apiUrl as string)?.trim()"
-            :title="!(comp.props.apiUrl as string)?.trim() ? '请先填写 API URL' : undefined"
+            :disabled="cardFieldImporting || (!usesPageDataSource && !(comp.props.apiUrl as string)?.trim())"
+            :title="!usesPageDataSource && !(comp.props.apiUrl as string)?.trim() ? '请先填写 API URL 或绑定数据源' : undefined"
             @click="onImportClick"
           >
-            {{ cardFieldImporting ? '导入中…' : '从 API 导入' }}
+            {{ cardFieldImporting ? '导入中…' : '导入字段' }}
           </button>
           <button
             type="button"
@@ -451,7 +493,7 @@ function openEmptyIconPicker() {
         </div>
       </div>
       <p :class="[PROP_HINT, 'mb-1.5 leading-relaxed']">
-        按当前 API、固定参数与列表路径请求第 1 页数据，从首条记录推断字段（标签默认与字段名相同）。
+        先应用页面数据源白名单，再应用本组件「数据」Tab 中的字段白名单；均未配置则导入全部字段。
       </p>
       <p v-if="cardFieldImportErr" class="text-[10px] text-red-400 mb-1.5">{{ cardFieldImportErr }}</p>
       <label class="mb-1.5 flex cursor-pointer items-center gap-1.5">
@@ -572,81 +614,13 @@ function openEmptyIconPicker() {
           </div>
         </template>
 
-        <!-- fontSize + fontWeight -->
-        <div class="flex gap-1 items-start mb-1">
-          <div class="flex-1">
-            <span class="text-[11px] font-medium text-slate-400 block">字号</span>
-            <input
-              class="w-full mt-0.5 bg-white/[0.08] border border-white/15 rounded px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500"
-              placeholder="14px"
-              :value="f.fontSize ?? ''"
-              @input="updateField(idx, { fontSize: ($event.target as HTMLInputElement).value || undefined })"
-            />
-          </div>
-          <div class="flex-1">
-            <span class="text-[11px] font-medium text-slate-400 block">粗细</span>
-            <select
-              :class="[PROP_SELECT_COMPACT, 'focus:ring-1 focus:ring-indigo-400/30']"
-              :value="f.fontWeight ?? ''"
-              @change="updateField(idx, { fontWeight: (($event.target as HTMLSelectElement).value || undefined) as CardFieldConfig['fontWeight'] })"
-            >
-              <option value="">默认</option>
-              <option value="normal">常规</option>
-              <option value="bold">粗体</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- textColor + bgColor -->
-        <div class="flex gap-1 items-start mb-1">
-          <div class="flex-1">
-            <span class="text-[11px] font-medium text-slate-400 block">文字色</span>
-            <div class="flex gap-1 mt-0.5">
-              <ColorSwatch
-                class="w-8 h-8 shrink-0 border border-white/10"
-                :value="f.textColor ?? '#cbd5e1'"
-                @change="(textColor: string) => updateField(idx, { textColor })"
-              />
-              <input
-                class="w-0 flex-1 bg-white/[0.08] border border-white/15 rounded px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono min-w-0"
-                :value="f.textColor ?? ''"
-                placeholder="#cbd5e1"
-                @input="updateField(idx, { textColor: ($event.target as HTMLInputElement).value || undefined })"
-              />
-            </div>
-          </div>
-          <div class="flex-1">
-            <span class="text-[11px] font-medium text-slate-400 block">底色</span>
-            <div class="flex gap-1 mt-0.5">
-              <ColorSwatch
-                class="w-8 h-8 shrink-0 border border-white/10"
-                :value="f.bgColor ?? '#000000'"
-                @change="(bgColor: string) => updateField(idx, { bgColor })"
-              />
-              <input
-                class="w-0 flex-1 bg-white/[0.08] border border-white/15 rounded px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono min-w-0"
-                :value="f.bgColor ?? ''"
-                placeholder="#000 或 DICT:字段名"
-                @input="updateField(idx, { bgColor: ($event.target as HTMLInputElement).value || undefined })"
-              />
-            </div>
-          </div>
-        </div>
-
-        <!-- textAlign -->
-        <label class="block flex-1 mb-1">
-          <span class="text-[11px] font-medium text-slate-400 block">对齐</span>
-          <select
-            :class="[PROP_SELECT_COMPACT, 'focus:ring-1 focus:ring-indigo-400/30']"
-            :value="f.textAlign ?? ''"
-            @change="updateField(idx, { textAlign: (($event.target as HTMLSelectElement).value || undefined) as CardFieldConfig['textAlign'] })"
-          >
-            <option value="">默认</option>
-            <option value="left">← 左</option>
-            <option value="center">◼ 中</option>
-            <option value="right">→ 右</option>
-          </select>
-        </label>
+        <!-- label + value appearance -->
+        <CardFieldLabelStyleSection
+          v-if="(f.layoutId ?? 'default') !== 'value-only' && (f.layoutId ?? 'default') !== 'divider'"
+          :field="f"
+          @update="(patch) => updateField(idx, patch)"
+        />
+        <CardFieldValueStyleSection :field="f" @update="(patch) => updateField(idx, patch)" />
 
         <!-- date format -->
         <label class="block">
@@ -662,74 +636,30 @@ function openEmptyIconPicker() {
         </label>
 
         <!-- abbrev dict -->
-        <label class="flex items-center gap-2 mb-1 cursor-pointer">
-          <input
-            type="checkbox"
-            class="rounded border-white/20"
-            :checked="f.abbrevDictEnabled === true"
-            @change="updateField(idx, { abbrevDictEnabled: ($event.target as HTMLInputElement).checked || undefined })"
-          />
-          <span class="text-[11px] font-medium text-slate-400">匹配缩略语字典</span>
-        </label>
-        <p v-if="f.abbrevDictEnabled" class="text-[9px] text-slate-500 mb-1 -mt-0.5">
-          字段值与页面缩略语字典 KEY 精确匹配时显示缩略语，否则显示原值
-        </p>
+        <template v-if="f.valueDisplay !== 'qrcode'">
+          <label class="flex items-center gap-2 mb-1 cursor-pointer">
+            <input
+              type="checkbox"
+              class="rounded border-white/20"
+              :checked="f.abbrevDictEnabled === true"
+              @change="updateField(idx, { abbrevDictEnabled: ($event.target as HTMLInputElement).checked || undefined })"
+            />
+            <span class="text-[11px] font-medium text-slate-400">匹配缩略语字典</span>
+          </label>
+          <p v-if="f.abbrevDictEnabled" class="text-[9px] text-slate-500 mb-1 -mt-0.5">
+            字段值与页面缩略语字典 KEY 精确匹配时显示缩略语，否则显示原值
+          </p>
+        </template>
 
         <!-- value display mode -->
-        <label class="block">
-          <span class="text-[11px] font-medium text-slate-400 block">值显示方式</span>
-          <select
-            :class="[PROP_SELECT_COMPACT, 'focus:ring-1 focus:ring-indigo-400/30']"
-            :value="f.valueDisplay ?? 'text'"
-            @change="updateField(idx, { valueDisplay: (($event.target as HTMLSelectElement).value as 'text' | 'icon') || undefined })"
-          >
-            <option value="text">原始值</option>
-            <option value="icon">图标</option>
-          </select>
-        </label>
+        <CardFieldValueDisplaySection :field="f" @update="(patch) => updateField(idx, patch)" />
 
         <!-- tag split -->
-        <label class="flex items-center gap-2 mb-1 cursor-pointer">
-          <input
-            type="checkbox"
-            class="rounded border-white/20"
-            :checked="f.tagSplitEnabled === true"
-            @change="(e) => {
-              const checked = (e.target as HTMLInputElement).checked
-              updateField(idx, {
-                tagSplitEnabled: checked || undefined,
-                tagSeparator: checked ? (f.tagSeparator ?? DEFAULT_CARD_TAG_SEPARATOR) : undefined,
-                tagBgColor: checked
-                  ? (f.tagBgColor === 'DICT' || !f.tagBgColor ? CARD_TAG_BG_COLOR_DICT_VALUE : f.tagBgColor)
-                  : undefined,
-              })
-            }"
-          />
-          <span class="text-[11px] font-medium text-slate-400">Tag 切分展示</span>
-        </label>
-        <template v-if="f.tagSplitEnabled">
-          <label class="block mb-1">
-            <span class="text-[11px] font-medium text-slate-400 block">切分字符</span>
-            <input
-              :class="PROP_INPUT"
-              :placeholder="DEFAULT_CARD_TAG_SEPARATOR"
-              :value="f.tagSeparator ?? DEFAULT_CARD_TAG_SEPARATOR"
-              @input="updateField(idx, { tagSeparator: ($event.target as HTMLInputElement).value || DEFAULT_CARD_TAG_SEPARATOR })"
-            />
-          </label>
-          <label class="block">
-            <span class="text-[11px] font-medium text-slate-400 block">Tag 底色</span>
-            <input
-              :class="PROP_INPUT"
-              :placeholder="CARD_TAG_BG_COLOR_DICT_VALUE"
-              :value="f.tagBgColor === 'DICT' || !f.tagBgColor ? CARD_TAG_BG_COLOR_DICT_VALUE : f.tagBgColor"
-              @input="updateField(idx, { tagBgColor: ($event.target as HTMLInputElement).value.trim() || CARD_TAG_BG_COLOR_DICT_VALUE })"
-            />
-            <p class="text-[9px] text-slate-500 mt-0.5">
-              {{ CARD_TAG_BG_COLOR_DICT_VALUE }}：每个 tag 用切分后的文字查颜色字典（如「青霉素」「黄瓜」）；或填 #334155 等固定色
-            </p>
-          </label>
-        </template>
+        <CardFieldTagSplitSection
+          :field="f"
+          :show="f.valueDisplay !== 'qrcode'"
+          @update="(patch) => updateField(idx, patch)"
+        />
       </div>
     </div>
   </div>
@@ -780,6 +710,7 @@ function openEmptyIconPicker() {
         iconType: updated.iconType,
         iconName: updated.iconName,
         iconSvg: updated.iconSvg,
+        savedIconId: updated.savedIconId,
       })
       emptyIconPickerOpen = false
     }"

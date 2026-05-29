@@ -10,6 +10,7 @@ import {
   type ColorDictEntry,
   type IconDictEntry,
   type AbbrevDictEntry,
+  type CustomIconRecord,
 } from '@mvp-vue/schema'
 import { getApiBase } from '../config'
 import CardListIcon from './CardListIcon.vue'
@@ -20,6 +21,7 @@ const props = defineProps<{
   comp: PageComponent
   colorDict?: ColorDictEntry[]
   iconDict?: IconDictEntry[]
+  savedIcons?: CustomIconRecord[]
   abbrevDict?: AbbrevDictEntry[]
 }>()
 
@@ -201,6 +203,9 @@ function resolveEmptyIcon(config: CardEmptyDisplayConfig, imap: Map<string, Icon
   if (config.iconDictKey) { const hit = imap.get(config.iconDictKey); if (hit) return hit }
   if (config.iconType === 'preset' && config.iconName) return { id: '', key: '', iconType: 'preset', iconName: config.iconName }
   if (config.iconType === 'custom' && config.iconSvg) return { id: '', key: '', iconType: 'custom', iconSvg: config.iconSvg }
+  if (config.iconType === 'saved' && config.savedIconId != null) {
+    return { id: '', key: '', iconType: 'saved', savedIconId: config.savedIconId }
+  }
   return FALLBACK_EMPTY_ICON
 }
 
@@ -341,6 +346,7 @@ function isLastVisibleField(meta: ReturnType<typeof cardMeta>, j: number): boole
             :hidden-for-card-empty="meta.isCardEmpty && !meta.retainSet.has(f.field)"
             :color-dict="colorDict"
             :icon-map="iconMap"
+            :saved-icons="savedIcons"
             :abbrev-dict="abbrevDict"
             :default-label-width-ch="defaultLabelWidthCh"
             :item-inset="itemInset"
@@ -357,6 +363,7 @@ function isLastVisibleField(meta: ReturnType<typeof cardMeta>, j: number): boole
           >
             <CardListIcon
               :entry="meta.emptyIconEntry"
+              :saved-icons="savedIcons"
               :size="emptyDisplay.fontSize ?? '2em'"
               :color="meta.emptyTextColor"
             />

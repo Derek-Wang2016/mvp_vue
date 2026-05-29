@@ -9,6 +9,7 @@ export function cardListDefaultProps() {
     refreshInterval: 0,
     dataListPath: 'data.list',
     dataTotalPath: 'data.total',
+    importFieldWhitelist: [] as string[],
     cols: 5,
     rows: 2,
     gap: 12,

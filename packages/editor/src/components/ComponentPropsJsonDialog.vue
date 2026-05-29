@@ -38,7 +38,7 @@ function handleImport() {
       <h3 class="text-sm font-medium text-slate-200 mb-3">{{ title }}</h3>
 
       <template v-if="mode === 'export'">
-        <pre class="text-[11px] text-slate-300 bg-white/5 p-3 rounded max-h-80 overflow-auto font-mono">{{ JSON.stringify(props, null, 2) }}</pre>
+        <pre class="editor-scrollbar text-[11px] text-slate-300 bg-white/5 p-3 rounded max-h-80 overflow-y-auto overflow-x-hidden font-mono">{{ JSON.stringify(props, null, 2) }}</pre>
         <div class="flex justify-end mt-3">
           <button class="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors" @click="emit('close')">关闭</button>
         </div>
@@ -47,7 +47,7 @@ function handleImport() {
       <template v-else>
         <textarea
           v-model="importText"
-          class="w-full h-60 bg-white/5 border border-white/10 rounded-md px-3 py-2 text-xs text-slate-200 font-mono resize-none outline-none focus:border-indigo-400/50"
+          class="editor-scrollbar w-full h-60 bg-white/5 border border-white/10 rounded-md px-3 py-2 text-xs text-slate-200 font-mono resize-none outline-none focus:border-indigo-400/50 overflow-y-auto"
           placeholder="粘贴 JSON..."
         />
         <p v-if="importErr" class="text-[10px] text-red-400 mt-1">{{ importErr }}</p>

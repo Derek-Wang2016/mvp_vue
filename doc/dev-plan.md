@@ -204,6 +204,7 @@ editor/src/components/registry/
 ### 3.2 复杂类型
 
 - [ ] card-list：空态、字段布局、API 导入字段
+- [x] card：单对象/数组过滤、双数据源、复用 card-list 字段渲染
 - [ ] map：省级选择、视觉样式、mock 联调说明
 - [ ] chart：分类/数值字段显式指定
 

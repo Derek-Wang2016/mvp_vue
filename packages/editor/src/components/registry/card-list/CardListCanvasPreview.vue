@@ -2,14 +2,14 @@
 import { computed } from 'vue'
 import type { CanvasPreviewProps } from '../types'
 import type { CardEmptyDisplayConfig, IconDictEntry } from '@mvp-vue/schema'
-import { Icon } from '@iconify/vue'
+import IconDictEntryPreview from '../../IconDictEntryPreview.vue'
 import { useEditorStore } from '../../../stores/editorStore'
 import { storeToRefs } from 'pinia'
 
 const props = defineProps<CanvasPreviewProps>()
 
 const store = useEditorStore()
-const { iconDict } = storeToRefs(store)
+const { iconDict, savedIcons } = storeToRefs(store)
 
 const cols = computed(() => (props.comp.props.cols as number) ?? 5)
 const rows = computed(() => (props.comp.props.rows as number) ?? 2)
@@ -38,6 +38,9 @@ const emptyIconPreview = computed((): IconDictEntry | undefined => {
   if (!emptyPreview.value || !emptyDisplay.value) return undefined
   const ed = emptyDisplay.value
   if (ed.iconDictKey) return iconDict.value.find((e) => e.key === ed.iconDictKey)
+  if (ed.iconType === 'saved' && ed.savedIconId != null) {
+    return { id: '', key: '', iconType: 'saved', savedIconId: ed.savedIconId }
+  }
   if (ed.iconType === 'preset' && ed.iconName) return { id: '', key: '', iconType: 'preset', iconName: ed.iconName }
   if (ed.iconType === 'custom' && ed.iconSvg) return { id: '', key: '', iconType: 'custom', iconSvg: ed.iconSvg }
   return { id: '', key: '', iconType: 'preset', iconName: 'tabler:box-off' }
@@ -83,12 +86,7 @@ const cardPad = computed(() => Math.max(3, Math.round(gap.value / 8)))
           borderRadius: '4px',
         }"
       >
-        <template v-if="emptyIconPreview.iconType === 'preset' && emptyIconPreview.iconName">
-          <Icon :icon="emptyIconPreview.iconName" :width="20" :height="20" />
-        </template>
-        <template v-else-if="emptyIconPreview.iconType === 'custom' && emptyIconPreview.iconSvg">
-          <span class="inline-flex h-5 w-5" v-html="emptyIconPreview.iconSvg" />
-        </template>
+        <IconDictEntryPreview :entry="emptyIconPreview" :saved-icons="savedIcons" :size="20" />
       </div>
       <template v-if="previewFields.length > 0">
         <div v-for="(f, fi) in previewFields" :key="fi" class="flex flex-row items-center gap-1 overflow-hidden" style="opacity: 0.5">

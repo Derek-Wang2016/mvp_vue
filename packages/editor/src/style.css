@@ -18,6 +18,13 @@
   color: #e2e8f0;
 }
 
+.editor-scrollbar {
+  /* 为滚动条预留沟槽，避免末行右侧控件（色块等）被滚动条拇指挡住 */
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+
 .editor-scrollbar::-webkit-scrollbar {
   width: 6px;
 }
@@ -86,15 +93,29 @@
   border-top: 5px solid #94a3b8;
 }
 
-/* Color swatch - hide native picker */
-.editor-color-swatch {
-  position: absolute;
-  inset: 0;
-  margin: 0;
-  height: 100%;
-  width: 100%;
-  cursor: pointer;
-  border: 0;
+/* ColorPickerDialog：居中对话框内可见 color input */
+.editor-color-picker-dialog-input {
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
+  width: 64px;
+  height: 40px;
   padding: 0;
-  opacity: 0;
+  border: 1px solid rgb(255 255 255 / 0.15);
+  border-radius: 0.375rem;
+  cursor: pointer;
+  background: transparent;
+}
+
+.editor-color-picker-dialog-input::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.editor-color-picker-dialog-input::-webkit-color-swatch {
+  border: none;
+  border-radius: 0.25rem;
+}
+
+.editor-color-picker-dialog-input::-moz-color-swatch {
+  border: none;
 }

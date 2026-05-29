@@ -1,5 +1,5 @@
 // ===== 组件类型 =====
-export type ComponentType = 'text' | 'image' | 'bar-chart' | 'line-chart' | 'pie-chart' | 'table' | 'iframe' | 'video' | 'datetime' | 'analog-clock' | 'page-nav-button' | 'card-list' | 'key-value-tag' | 'map'
+export type ComponentType = 'text' | 'image' | 'icon' | 'rectangle' | 'line' | 'bar-chart' | 'line-chart' | 'pie-chart' | 'table' | 'iframe' | 'video' | 'datetime' | 'analog-clock' | 'page-nav-button' | 'card-list' | 'card' | 'key-value-tag' | 'map'
 
 export {
   type MapLevel,
@@ -70,6 +70,14 @@ export function getCardFieldLayout(id: CardFieldLayoutId | undefined): CardField
 }
 
 // ===== 卡片字段配置 =====
+/** 卡片字段值区域展示方式 */
+export type CardFieldValueDisplay = 'text' | 'icon' | 'qrcode'
+
+export const DEFAULT_CARD_QR_SIZE_PX = 64
+export const DEFAULT_CARD_QR_MARGIN = 1
+export const DEFAULT_CARD_QR_COLOR = '#000000'
+export const DEFAULT_CARD_QR_BG_COLOR = '#ffffff'
+
 /** 卡片字段是否在渲染器中显示；省略或为 true 时显示 */
 export function isCardFieldVisible(f: CardFieldConfig): boolean {
   return f.visible !== false
@@ -85,13 +93,37 @@ export interface CardFieldConfig {
   gridRowSpan?: number
   gridColSpan?: number
   layoutId?: CardFieldLayoutId
+  /** 值区域字号 */
   fontSize?: string
+  /** 值区域文字色；支持 DICT: */
   textColor?: string
+  /** 值区域底色；支持 DICT:字段名 */
   bgColor?: string
+  /** 值区域对齐 */
   textAlign?: 'left' | 'center' | 'right'
+  /** 值区域粗细 */
   fontWeight?: 'normal' | 'bold'
+  /** 标签字号；未设时继承 fontSize */
+  labelFontSize?: string
+  /** 标签文字色；未设时继承 textColor；支持 DICT: */
+  labelTextColor?: string
+  /** 标签底色；支持 DICT:字段名；仅作用于标签区域 */
+  labelBgColor?: string
+  /** 标签对齐；未设时「标签+值」右对齐，「标签在上」左对齐 */
+  labelTextAlign?: 'left' | 'center' | 'right'
+  /** 标签粗细；未设时继承 fontWeight */
+  labelFontWeight?: 'normal' | 'bold'
   dateFormat?: string
-  valueDisplay?: 'text' | 'icon'
+  /** 值区域展示方式：原始文本、图标字典匹配、二维码 */
+  valueDisplay?: CardFieldValueDisplay
+  /** 二维码边长（px），valueDisplay 为 qrcode 时生效 */
+  qrSizePx?: number
+  /** 二维码 quiet zone（模块数），默认 1 */
+  qrMargin?: number
+  /** 二维码前景色（模块色） */
+  qrColor?: string
+  /** 二维码背景色 */
+  qrBgColor?: string
   /** 将字段值按 tagSeparator 切分为多个 tag 展示 */
   tagSplitEnabled?: boolean
   /** 切分分隔符，默认英文逗号 `,` */
@@ -101,6 +133,10 @@ export interface CardFieldConfig {
    * 也可填固定色值如 `#334155`。裸写 `DICT` 同 `DICT:$VALUE`（兼容旧配置）。
    */
   tagBgColor?: string
+  /**
+   * Tag 切分后的排列：`inline` 一行多项（默认）；`stack` 一行一项，底色铺满值区域行宽
+   */
+  tagLayout?: 'inline' | 'stack'
   /** 字段值文本是否按页面缩略语字典精确匹配并显示缩略语 */
   abbrevDictEnabled?: boolean
 }
@@ -154,9 +190,10 @@ export interface CardEmptyDisplayConfig {
   /** 引用页面 iconDict 条目的 key */
   iconDictKey?: string
   /** 内联图标（与 IconDictEntry 同形） */
-  iconType?: 'preset' | 'custom'
+  iconType?: 'preset' | 'custom' | 'saved'
   iconName?: string
   iconSvg?: string
+  savedIconId?: number
   /** 空态下仍渲染的字段 field 名列表 */
   retainFields?: string[]
   fontSize?: string
@@ -274,13 +311,60 @@ export function resolveAbbrevDictValue(
   return hit?.abbrev ?? text
 }
 
+// ===== 自定义 SVG 图标库（Server /api/custom-icons） =====
+import type { CustomIconRecord, CustomIconListItem } from './savedIcons'
+export type { CustomIconRecord, CustomIconListItem }
+export {
+  savedIconsToMap,
+  collectReferencedSavedIconIds,
+  buildSavedIconsSnapshot,
+  mergeSavedIconIntoPool,
+  listItemToRecord,
+  iconEntryPickerLabel,
+  collectSavedIconsFromSchema,
+} from './savedIcons'
+
+export { iconPropsToDictEntry, iconPickerResultToProps, resolveIconLayoutSizes, type IconLayoutSizes } from './iconComponent'
+export {
+  type RectangleComponentProps,
+  DEFAULT_RECTANGLE_PROPS,
+  resolveRectangleProps,
+  resolveRectangleStyle,
+  type RectangleInlineStyle,
+} from './rectangleComponent'
+export {
+  type LineOrientation,
+  type LineStrokeStyle,
+  type LineCap,
+  type LineComponentProps,
+  DEFAULT_LINE_PROPS,
+  LINE_ORIENTATION_OPTIONS,
+  LINE_STROKE_STYLE_OPTIONS,
+  LINE_CAP_OPTIONS,
+  resolveLineProps,
+  resolveLineEndpoints,
+  resolveLineStrokeDasharray,
+  resolveLineSvgAttrs,
+  type LineSvgEndpoints,
+  type LineSvgAttrs,
+} from './lineComponent'
+export {
+  tintInlineSvg,
+  svgToMaskDataUrl,
+  canRecolorInlineSvg,
+  countDistinctPaintColors,
+  resolveInlineSvgColorMode,
+  type InlineSvgColorMode,
+} from './svgIconTint'
+
 // ===== 图标字典 =====
 export interface IconDictEntry {
   id: string
   key: string
-  iconType: 'preset' | 'custom'
+  iconType: 'preset' | 'custom' | 'saved'
   iconName?: string   // preset: 'tabler:activity'
-  iconSvg?: string    // custom: raw <svg>...</svg>
+  iconSvg?: string    // custom: 内联 <svg>...</svg>
+  savedIconId?: number // saved: 引用 CustomIconRecord.id
 }
 
 // ===== 数据源类型 =====
@@ -305,6 +389,12 @@ export interface DataSource {
 
   // Refresh
   refreshInterval?: number  // seconds, 0 = load once
+
+  /**
+   * 卡片/卡片列表「导入字段」白名单：非空时仅导入所列字段名（按列表顺序）；
+   * 省略或空数组时导入样本对象的全部键。
+   */
+  importFieldWhitelist?: string[]
 }
 
 // ===== 组件定义 =====
@@ -329,6 +419,20 @@ export const DEFAULT_CHART_TEXT_COLOR = '#cbd5e1'
 
 export { buildPieSeriesLayout, type PieSeriesLayout } from './pieChartLayout'
 export { parseKeyValueTagKeyList, filterKeyValueTagItems } from './keyValueTag'
+export {
+  parseImportFieldWhitelist,
+  resolveImportFieldNames,
+  resolveCombinedImportFieldNames,
+} from './dataSource'
+export {
+  type CardArrayFilterOperator,
+  type CardArrayFilterCondition,
+  CARD_ARRAY_FILTER_OPERATORS,
+  resolveByPath,
+  resolveCardItem,
+  matchCardArrayItem,
+  getActiveCardArrayFilters,
+} from './cardComponent'
 
 // ===== 页面 Schema =====
 export type BgGradient = 'none' | 'linear-top' | 'linear-left' | 'linear-diagonal' | 'radial'
@@ -343,6 +447,8 @@ export interface PageSchema {
   dataSources?: DataSource[]
   colorDict?: ColorDictEntry[]
   iconDict?: IconDictEntry[]
+  /** 本页引用的已保存 SVG 快照（Renderer 离线可读） */
+  savedIcons?: CustomIconRecord[]
   abbrevDict?: AbbrevDictEntry[]
   components: PageComponent[]
 }

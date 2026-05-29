@@ -9,6 +9,7 @@ import Canvas from './components/Canvas.vue'
 import PropertyPanel from './components/PropertyPanel.vue'
 import OpenDialog from './components/OpenDialog.vue'
 import ViewJsonDialog from './components/ViewJsonDialog.vue'
+import ColorPickerDialog from './components/ColorPickerDialog.vue'
 
 const store = useEditorStore()
 const {
@@ -489,6 +490,7 @@ const alignBtnClass = (enabled: boolean) =>
     <!-- Dialogs -->
     <OpenDialog v-if="dialogOpen" @close="handleOpenDialogClose" />
     <ViewJsonDialog :open="jsonDialogOpen" @close="jsonDialogOpen = false" />
+    <ColorPickerDialog />
 
     <!-- Context menu -->
     <div

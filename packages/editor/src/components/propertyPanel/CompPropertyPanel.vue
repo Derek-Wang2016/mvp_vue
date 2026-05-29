@@ -25,7 +25,7 @@ function onDataSourceChange(e: Event) {
 </script>
 
 <template>
-  <aside class="editor-scrollbar relative z-10 shrink-0 w-[320px] border-l border-white/10 p-3 bg-[#0f1824] overflow-y-auto overflow-x-hidden min-h-0">
+  <aside class="editor-scrollbar relative z-30 shrink-0 w-[320px] border-l border-white/10 p-3 bg-[#0f1824] overflow-y-auto overflow-x-hidden min-h-0">
     <h2 :class="[PROP_SECTION, 'mb-3 flex items-center gap-1.5']">
       <span class="text-indigo-400 text-[8px]">◆</span>
       属性

@@ -8,7 +8,11 @@ import { pageNavButtonDefaultProps, pageNavButtonDefaultSize } from './page-nav-
 import { tableDefaultProps, tableDefaultSize } from './table/defaults'
 import { chartDefaultProps, chartDefaultSize } from './chart/defaults'
 import { cardListDefaultProps, cardListDefaultSize } from './card-list/defaults'
+import { cardDefaultProps, cardDefaultSize } from './card/defaults'
 import { keyValueTagDefaultProps, keyValueTagDefaultSize } from './key-value-tag/defaults'
+import { iconDefaultProps, iconDefaultSize } from './icon/defaults'
+import { rectangleDefaultProps, rectangleDefaultSize } from './rectangle/defaults'
+import { lineDefaultProps, lineDefaultSize } from './line/defaults'
 import { mapDefaultProps, mapDefaultSize } from './map/defaults'
 
 // Stubs (fallback for types not yet implemented)
@@ -36,9 +40,19 @@ import MapPropertyFields from './map/MapPropertyFields.vue'
 import MapCanvasPreview from './map/MapCanvasPreview.vue'
 import CardListPropertyFields from './card-list/CardListPropertyFields.vue'
 import CardListCanvasPreview from './card-list/CardListCanvasPreview.vue'
+import CardListDataFields from './card-list/CardListDataFields.vue'
+import CardPropertyFields from './card/CardPropertyFields.vue'
+import CardCanvasPreview from './card/CardCanvasPreview.vue'
+import CardDataFields from './card/CardDataFields.vue'
 import KeyValueTagPropertyFields from './key-value-tag/KeyValueTagPropertyFields.vue'
 import KeyValueTagCanvasPreview from './key-value-tag/KeyValueTagCanvasPreview.vue'
 import KeyValueTagDataFields from './key-value-tag/KeyValueTagDataFields.vue'
+import IconPropertyFields from './icon/IconPropertyFields.vue'
+import IconCanvasPreview from './icon/IconCanvasPreview.vue'
+import RectanglePropertyFields from './rectangle/RectanglePropertyFields.vue'
+import RectangleCanvasPreview from './rectangle/RectangleCanvasPreview.vue'
+import LinePropertyFields from './line/LinePropertyFields.vue'
+import LineCanvasPreview from './line/LineCanvasPreview.vue'
 
 const chartDef = {
   defaultProps: chartDefaultProps,
@@ -60,6 +74,24 @@ export const editorRegistry: EditorRegistry = {
     defaultSize: imageDefaultSize,
     PropertyFields: ImagePropertyFields,
     CanvasPreview: ImageCanvasPreview,
+  },
+  icon: {
+    defaultProps: iconDefaultProps,
+    defaultSize: iconDefaultSize,
+    PropertyFields: IconPropertyFields,
+    CanvasPreview: IconCanvasPreview,
+  },
+  rectangle: {
+    defaultProps: rectangleDefaultProps,
+    defaultSize: rectangleDefaultSize,
+    PropertyFields: RectanglePropertyFields,
+    CanvasPreview: RectangleCanvasPreview,
+  },
+  line: {
+    defaultProps: lineDefaultProps,
+    defaultSize: lineDefaultSize,
+    PropertyFields: LinePropertyFields,
+    CanvasPreview: LineCanvasPreview,
   },
   datetime: {
     defaultProps: datetimeDefaultProps,
@@ -93,6 +125,14 @@ export const editorRegistry: EditorRegistry = {
     defaultSize: cardListDefaultSize,
     PropertyFields: CardListPropertyFields,
     CanvasPreview: CardListCanvasPreview,
+    DataFields: CardListDataFields,
+  },
+  card: {
+    defaultProps: cardDefaultProps,
+    defaultSize: cardDefaultSize,
+    PropertyFields: CardPropertyFields,
+    CanvasPreview: CardCanvasPreview,
+    DataFields: CardDataFields,
   },
   'key-value-tag': {
     defaultProps: keyValueTagDefaultProps,

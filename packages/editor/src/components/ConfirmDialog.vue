@@ -9,8 +9,11 @@ const props = withDefaults(defineProps<{
   danger?: boolean
   tone?: 'default' | 'warning' | 'danger'
   loading?: boolean
+  /** 遮罩层级，需高于父级弹窗时使用，如 z-[80] */
+  overlayClass?: string
 }>(), {
   open: true,
+  overlayClass: 'z-[60]',
 })
 
 const emit = defineEmits<{
@@ -34,7 +37,7 @@ function onBackdrop() {
 </script>
 
 <template>
-  <div v-if="open" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60" @click.self="onBackdrop">
+  <div v-if="open" class="fixed inset-0 flex items-center justify-center bg-black/60" :class="overlayClass" @click.self="onBackdrop">
     <div class="bg-[#15202d] border border-white/10 rounded-xl shadow-2xl shadow-black/60 w-[400px] max-w-[90vw] overflow-hidden">
       <div class="p-5">
         <h4 class="text-sm font-semibold text-slate-200 mb-2">{{ title || '确认' }}</h4>

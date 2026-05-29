@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, nextTick, onMounted, onUpdated } from 'vue'
-import type { PageComponent, ColorDictEntry, IconDictEntry, AbbrevDictEntry } from '@mvp-vue/schema'
+import type { PageComponent, ColorDictEntry, IconDictEntry, AbbrevDictEntry, CustomIconRecord } from '@mvp-vue/schema'
 import { resolveAbbrevDictValue, filterKeyValueTagItems } from '@mvp-vue/schema'
 import { useData } from '../composables/useData'
-import { Icon } from '@iconify/vue'
+import CardListIcon from './CardListIcon.vue'
 
 const props = defineProps<{
   comp: PageComponent
   colorDict?: ColorDictEntry[]
   iconDict?: IconDictEntry[]
+  savedIcons?: CustomIconRecord[]
   abbrevDict?: AbbrevDictEntry[]
 }>()
 
@@ -469,13 +470,16 @@ function tagChipStyle(): Record<string, string> {
             borderRadius: labelBgColor !== 'transparent' ? `${valueBorderRadius}px` : undefined,
           }"
         >
-          <Icon
+          <span
             v-if="resolveLabelDisplay(item.key).icon"
-            :icon="resolveLabelDisplay(item.key).icon!.iconName!"
-            :width="labelFontSize"
-            :height="labelFontSize"
             class="inline-block align-text-bottom mr-0.5"
-          />
+          >
+            <CardListIcon
+              :entry="resolveLabelDisplay(item.key).icon!"
+              :saved-icons="savedIcons"
+              :size="labelFontSize"
+            />
+          </span>
           {{ resolveLabelDisplay(item.key).text }}
           <template v-if="showValueCount && item.tagCount > 1">({{ item.tagCount }})</template>
         </span>

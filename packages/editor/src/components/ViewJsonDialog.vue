@@ -16,7 +16,7 @@ const json = computed(() => JSON.stringify(store.toSchema(), null, 2))
         <h3 class="text-sm font-semibold text-slate-200">页面 JSON</h3>
         <button class="text-slate-500 hover:text-slate-300 text-lg leading-none" @click="emit('close')">&times;</button>
       </div>
-      <div class="flex-1 overflow-auto p-4">
+      <div class="editor-scrollbar flex-1 overflow-y-auto overflow-x-hidden p-4 min-h-0">
         <pre class="text-xs text-slate-300 font-mono whitespace-pre-wrap break-all">{{ json }}</pre>
       </div>
     </div>

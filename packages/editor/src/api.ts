@@ -1,7 +1,56 @@
-import type { PageSchema } from '@mvp-vue/schema'
+import type { CustomIconListItem, CustomIconRecord, PageSchema } from '@mvp-vue/schema'
 import { getApiBase } from './config'
 
 const BASE = `${getApiBase()}/api`
+
+export type { CustomIconListItem, CustomIconRecord }
+
+export async function listCustomIcons(includeSvg = true): Promise<CustomIconListItem[]> {
+  const q = includeSvg ? '?includeSvg=1' : ''
+  const res = await fetch(`${BASE}/custom-icons${q}`)
+  if (!res.ok) throw new Error('加载图标库失败')
+  return res.json() as Promise<CustomIconListItem[]>
+}
+
+export async function getCustomIcon(id: number): Promise<CustomIconRecord> {
+  const res = await fetch(`${BASE}/custom-icons/${id}`)
+  if (!res.ok) throw new Error('图标不存在')
+  return res.json() as Promise<CustomIconRecord>
+}
+
+export async function createCustomIcon(name: string, svgContent: string): Promise<CustomIconRecord> {
+  const res = await fetch(`${BASE}/custom-icons`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, svgContent }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: string }
+    throw new Error(err.error ?? '保存图标失败')
+  }
+  return res.json() as Promise<CustomIconRecord>
+}
+
+export async function updateCustomIcon(
+  id: number,
+  patch: { name?: string; svgContent?: string },
+): Promise<CustomIconRecord> {
+  const res = await fetch(`${BASE}/custom-icons/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: string }
+    throw new Error(err.error ?? '更新图标失败')
+  }
+  return res.json() as Promise<CustomIconRecord>
+}
+
+export async function deleteCustomIcon(id: number): Promise<void> {
+  const res = await fetch(`${BASE}/custom-icons/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('删除图标失败')
+}
 
 export interface PageListItem {
   id: number

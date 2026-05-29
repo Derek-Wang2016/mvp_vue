@@ -4,6 +4,9 @@ import type { ComponentType } from '@mvp-vue/schema'
 const PANEL_ITEMS: { type: ComponentType; label: string }[] = [
   { type: 'text', label: '文本' },
   { type: 'image', label: '图片' },
+  { type: 'icon', label: '图标' },
+  { type: 'rectangle', label: '矩形' },
+  { type: 'line', label: '线条' },
   { type: 'bar-chart', label: '柱状图' },
   { type: 'line-chart', label: '折线图' },
   { type: 'pie-chart', label: '饼图' },
@@ -12,6 +15,7 @@ const PANEL_ITEMS: { type: ComponentType; label: string }[] = [
   { type: 'analog-clock', label: '表盘时钟' },
   { type: 'page-nav-button', label: '页面跳转按钮' },
   { type: 'card-list', label: '卡片列表' },
+  { type: 'card', label: '卡片' },
   { type: 'key-value-tag', label: '键值标签' },
   { type: 'map', label: '地图' },
 ]
@@ -19,6 +23,9 @@ const PANEL_ITEMS: { type: ComponentType; label: string }[] = [
 const ICONS: Record<string, string> = {
   text: 'T',
   image: '🖼',
+  icon: '◇',
+  rectangle: '▭',
+  line: '╱',
   'bar-chart': '📊',
   'line-chart': '📈',
   'pie-chart': '🥧',
@@ -27,6 +34,7 @@ const ICONS: Record<string, string> = {
   'analog-clock': '🕰',
   'page-nav-button': '➜',
   'card-list': '▦',
+  card: '▣',
   'key-value-tag': '▤',
   map: '🗺',
 }

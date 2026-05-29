@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { PageComponent, CardFieldConfig, CardEmptyDisplayConfig, IconDictEntry } from '@mvp-vue/schema'
-import { Icon } from '@iconify/vue'
+import type { PageComponent, CardFieldConfig, CardEmptyDisplayConfig, IconDictEntry, CustomIconRecord } from '@mvp-vue/schema'
+import IconDictEntryPreview from '../../IconDictEntryPreview.vue'
 import ColorSwatch from '../../ColorSwatch.vue'
 import EditorNumberInput from '../../EditorNumberInput.vue'
 import { PROP_LABEL, PROP_HINT, PROP_SELECT_COMPACT, PROP_NUMBER_WRAP_COMPACT, PROP_NUMBER_INNER_COMPACT } from '../../propertyPanel/shared'
@@ -9,6 +9,7 @@ import { PROP_LABEL, PROP_HINT, PROP_SELECT_COMPACT, PROP_NUMBER_WRAP_COMPACT, P
 const props = defineProps<{
   comp: PageComponent
   iconDict: IconDictEntry[]
+  savedIcons: CustomIconRecord[]
 }>()
 
 const emit = defineEmits<{
@@ -50,6 +51,7 @@ const emptyIconPreview = computed(() => {
       iconType: ed.iconType,
       iconName: ed.iconName,
       iconSvg: ed.iconSvg,
+      savedIconId: ed.savedIconId,
     } as IconDictEntry
   }
   return null
@@ -57,8 +59,14 @@ const emptyIconPreview = computed(() => {
 
 const emptyIconEntry = computed((): IconDictEntry => {
   const ed = getEmptyDisplay()
-  if (ed.iconType && (ed.iconName || ed.iconSvg)) {
-    return { id: 'empty-inline', key: '', iconType: ed.iconType, iconName: ed.iconName, iconSvg: ed.iconSvg }
+  if (ed.iconType === 'saved' && ed.savedIconId != null) {
+    return { id: 'empty-inline', key: '', iconType: 'saved', savedIconId: ed.savedIconId }
+  }
+  if (ed.iconType === 'custom' && ed.iconSvg) {
+    return { id: 'empty-inline', key: '', iconType: 'custom', iconSvg: ed.iconSvg }
+  }
+  if (ed.iconType === 'preset' && ed.iconName) {
+    return { id: 'empty-inline', key: '', iconType: 'preset', iconName: ed.iconName }
   }
   return { id: 'empty-inline', key: '', iconType: 'preset', iconName: 'tabler:box-off' }
 })
@@ -134,7 +142,7 @@ function onToggleField(listKey: 'watchFields' | 'retainFields', fieldName: strin
             ($event) => {
               const v = ($event.target as HTMLSelectElement).value
               if (v) {
-                patchEmptyDisplay({ iconDictKey: v, iconType: undefined, iconName: undefined, iconSvg: undefined })
+                patchEmptyDisplay({ iconDictKey: v, iconType: undefined, iconName: undefined, iconSvg: undefined, savedIconId: undefined })
               } else {
                 patchEmptyDisplay({ iconDictKey: undefined })
               }
@@ -155,12 +163,12 @@ function onToggleField(listKey: 'watchFields' | 'retainFields', fieldName: strin
             选择空值图标…
           </button>
           <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-white/10 bg-white/5 text-slate-400">
-            <template v-if="emptyIconPreview?.iconType === 'preset' && emptyIconPreview.iconName">
-              <Icon :icon="emptyIconPreview.iconName" :width="18" :height="18" />
-            </template>
-            <template v-else-if="emptyIconPreview?.iconType === 'custom' && emptyIconPreview.iconSvg">
-              <span class="inline-flex h-4 w-4" v-html="emptyIconPreview.iconSvg" />
-            </template>
+            <IconDictEntryPreview
+              v-if="emptyIconPreview"
+              :entry="emptyIconPreview"
+              :saved-icons="savedIcons"
+              :size="18"
+            />
             <span v-else class="text-[9px]">—</span>
           </div>
         </div>

@@ -48,12 +48,24 @@ const shouldMarquee = computed(() => marqueeDistance.value > 0)
 const durationSec = computed(() => (shouldMarquee.value ? Math.max(4, marqueeDistance.value / 35) : 0))
 const innerTextStyle = computed(() => pickFieldTextStyles(props.fieldStyle))
 
-const viewportStyle = computed((): CSSProperties => ({
-  ...props.fieldStyle,
-  overflow: 'hidden',
-  minWidth: props.fieldStyle.minWidth ?? '0',
-  maxWidth: props.fieldStyle.maxWidth ?? '100%',
-}))
+/** 视口只承接伸缩与对齐；排版样式交给 inner，避免 display:flex 破坏「标签+值」横排 */
+const viewportStyle = computed((): CSSProperties => {
+  const s = props.fieldStyle
+  const out: CSSProperties = {
+    overflow: 'hidden',
+    minWidth: s.minWidth ?? '0',
+    maxWidth: s.maxWidth ?? '100%',
+    display: 'block',
+    boxSizing: 'border-box',
+  }
+  if (s.flex != null) out.flex = s.flex
+  if (s.flexGrow != null) out.flexGrow = s.flexGrow
+  if (s.flexShrink != null) out.flexShrink = s.flexShrink
+  if (s.flexBasis != null) out.flexBasis = s.flexBasis
+  if (s.alignSelf) out.alignSelf = s.alignSelf
+  if (s.textAlign) out.textAlign = s.textAlign
+  return out
+})
 
 const innerStyle = computed((): CSSProperties => {
   if (shouldMarquee.value) {

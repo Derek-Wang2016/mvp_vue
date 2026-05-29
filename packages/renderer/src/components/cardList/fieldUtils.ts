@@ -106,8 +106,8 @@ function fieldWillBgBleed(
   cardGridCols: number,
   gridEdge: CardFieldGridEdge | undefined,
 ): boolean {
-  if (itemInset <= 0 || !gridEdge) return false
-  if (!inCardGrid || colSpan >= cardGridCols) return true
+  if (itemInset <= 0 || !inCardGrid || !gridEdge) return false
+  if (colSpan >= cardGridCols) return true
   return gridEdge.bleedLeft || gridEdge.bleedRight || gridEdge.bleedTop || gridEdge.bleedBottom
 }
 
@@ -120,14 +120,7 @@ export function resolveFieldGridEdge(
 ): CardFieldGridEdge | undefined {
   const hit = fieldGridEdges?.get(fieldIndex)
   if (hit) return hit
-  if (cardGridCols <= 1) {
-    return {
-      bleedLeft: true,
-      bleedRight: true,
-      bleedTop: isFirstVisible,
-      bleedBottom: isLastVisible,
-    }
-  }
+  // 单列卡片内容区已有 itemInset，不再合成 bleed 边距
   return undefined
 }
 
@@ -176,8 +169,15 @@ export function applyFieldBgToContainer(
   style.backgroundColor = bgPaint
   style.boxSizing = 'border-box'
 
-  const fullRowBleed = itemInset > 0 && (!inCardGrid || colSpan >= cardGridCols)
-  const partialBleed = itemInset > 0 && inCardGrid && gridEdge && colSpan < cardGridCols
+  // 单列（cardGridCols=1）：字段在已有 itemInset 的内容区内铺满即可，勿再用负 margin 外扩
+  if (!inCardGrid) {
+    style.width = '100%'
+    style.maxWidth = '100%'
+    return
+  }
+
+  const fullRowBleed = itemInset > 0 && colSpan >= cardGridCols
+  const partialBleed = itemInset > 0 && gridEdge && colSpan < cardGridCols
 
   if (!fullRowBleed && !partialBleed) return
 
@@ -235,7 +235,10 @@ export interface FieldPresentation {
   hiddenForCardEmpty: boolean
   showLabel: boolean
   labelIconEntry?: IconDictEntry
+  /** 值区域文字色（已解析 DICT） */
   textColor?: string
+  /** 标签文字色（已解析 DICT） */
+  labelTextColor?: string
   tagItems?: { matchKey: string; display: string }[]
   valueIconEntry?: IconDictEntry
   displayValue: string
@@ -281,6 +284,17 @@ export function buildFieldPresentation(opts: {
   const fieldValue = item[f.field]
   const resolvedTextColor = resolveColor(colorDict, item, f.textColor, fieldValue)
   const textColor = f.textColor?.startsWith('DICT') ? resolvedTextColor : f.textColor
+  const resolvedLabelTextColor = resolveColor(
+    colorDict,
+    item,
+    f.labelTextColor ?? f.textColor,
+    fieldValue,
+  )
+  const labelTextColorRaw = f.labelTextColor ?? f.textColor
+  const labelTextColor = labelTextColorRaw?.startsWith('DICT') ? resolvedLabelTextColor : labelTextColorRaw
+  const labelBgColorRaw = f.labelBgColor?.trim()
+  const resolvedLabelBg = resolveColor(colorDict, item, f.labelBgColor, fieldValue)
+  const labelBgPaint = labelBgColorRaw?.startsWith('DICT') ? resolvedLabelBg : labelBgColorRaw
   const bgColorRaw = f.bgColor?.trim()
   const wantsBgSlot = Boolean(bgColorRaw)
   const resolvedBg = resolveColor(colorDict, item, f.bgColor, fieldValue)
@@ -293,26 +307,53 @@ export function buildFieldPresentation(opts: {
   const valueStyle: Record<string, string> = {}
   const labelStyle: Record<string, string> = {}
 
+  const effectiveLabelFontSize = f.labelFontSize ?? f.fontSize
+  const effectiveLabelFontWeight = f.labelFontWeight ?? f.fontWeight
+
   if (f.fontSize) {
     valueStyle.fontSize = f.fontSize
-    labelStyle.fontSize = f.fontSize
   }
   if (f.fontWeight) {
     valueStyle.fontWeight = f.fontWeight
-    labelStyle.fontWeight = f.fontWeight
   }
   if (textColor) {
     valueStyle.color = textColor
-    labelStyle.color = textColor
+  }
+  if (effectiveLabelFontSize) {
+    labelStyle.fontSize = effectiveLabelFontSize
+  }
+  if (effectiveLabelFontWeight) {
+    labelStyle.fontWeight = effectiveLabelFontWeight
+  }
+  if (labelTextColor) {
+    labelStyle.color = labelTextColor
+  }
+  if (labelBgPaint) {
+    labelStyle.backgroundColor = labelBgPaint
+    labelStyle.padding = `${FIELD_TEXT_PAD_Y}px ${FIELD_TEXT_PAD_X}px`
+    labelStyle.borderRadius = '2px'
   }
 
+  const labelAlign = f.labelTextAlign
+  const labelJustifyContent =
+    labelAlign === 'center' ? 'center' : labelAlign === 'right' ? 'flex-end' : labelAlign === 'left' ? 'flex-start' : undefined
+
   const labelIsIcon = Boolean(f.label && iconMap.has(f.label))
-  if (isDefaultLayout && defaultLabelWidthCh > 0 && f.label && !labelIsIcon) {
-    const labelCol = `${defaultLabelWidthCh}ch`
-    labelStyle.flex = `0 0 ${labelCol}`
-    labelStyle.width = labelCol
-    labelStyle.minWidth = labelCol
-    labelStyle.maxWidth = labelCol
+  // 「标签+值」横排：多列网格内禁止全卡统一 ch 宽（仅 value-only / label-above 无此逻辑）
+  if (isDefaultLayout && f.label && !labelIsIcon) {
+    if (inCardGrid) {
+      labelStyle.flex = '0 1 auto'
+      labelStyle.minWidth = '0'
+      labelStyle.maxWidth = colSpan >= cardGridCols ? '32%' : '44%'
+      labelStyle.overflow = 'hidden'
+      labelStyle.textOverflow = 'ellipsis'
+    } else if (defaultLabelWidthCh > 0) {
+      const labelCol = `${defaultLabelWidthCh}ch`
+      labelStyle.flex = `0 0 ${labelCol}`
+      labelStyle.width = labelCol
+      labelStyle.minWidth = labelCol
+      labelStyle.maxWidth = labelCol
+    }
   }
 
   if (f.textAlign) {
@@ -357,6 +398,18 @@ export function buildFieldPresentation(opts: {
 
   if (!valueStyle.maxWidth) valueStyle.maxWidth = '100%'
 
+  const tagStackLayout = f.tagSplitEnabled === true && (f.tagLayout ?? 'inline') === 'stack'
+  if (tagStackLayout) {
+    valueStyle.width = '100%'
+    valueStyle.maxWidth = '100%'
+    valueStyle.flex = '1 1 auto'
+    valueStyle.minWidth = '0'
+    valueStyle.alignSelf = 'stretch'
+    if (layout.id === 'default' || layout.id === 'label-above') {
+      valueStyle.display = 'block'
+    }
+  }
+
   if (layout.id === 'divider') {
     return {
       fieldKey,
@@ -389,10 +442,11 @@ export function buildFieldPresentation(opts: {
     width: inCardGrid ? flowWidth : '100%',
     maxWidth: inCardGrid ? flowWidth : '100%',
     flex: inCardGrid ? `0 0 ${flowWidth}` : undefined,
-    height: inCardGrid ? undefined : '100%',
+    height: undefined,
     boxSizing: 'border-box',
     display: 'flex',
     alignSelf: 'stretch',
+    overflow: inCardGrid && isDefaultLayout && !tagStackLayout ? 'hidden' : undefined,
     ...(hiddenForCardEmpty ? { visibility: 'hidden', pointerEvents: 'none' as const } : {}),
   }
 
@@ -428,20 +482,21 @@ export function buildFieldPresentation(opts: {
 
   if (layout.id === 'default') {
     fieldContainerStyle.flexDirection = 'row'
-    fieldContainerStyle.alignItems = 'stretch'
+    fieldContainerStyle.alignItems = 'center'
     fieldContainerStyle.gap = '6px'
     labelStyle.display = 'flex'
     labelStyle.alignItems = 'center'
-    labelStyle.justifyContent = 'flex-end'
-    labelStyle.alignSelf = 'stretch'
+    labelStyle.justifyContent = labelJustifyContent ?? 'flex-end'
     labelStyle.boxSizing = 'border-box'
-    if (!labelStyle.flex && f.label) labelStyle.flex = '0 0 auto'
+    if (!labelStyle.flex && f.label) labelStyle.flex = '0 1 auto'
     if (!wantsBgSlot) {
-      valueStyle.display = valueStyle.display || 'flex'
-      valueStyle.alignItems = 'center'
+      // 与 label-above 一致：值区域用 block + flex-1，避免 display:flex 与跑马灯视口冲突
+      valueStyle.display = 'block'
       valueStyle.alignSelf = 'stretch'
-      valueStyle.flex = valueStyle.flex || '1 1 0%'
-      valueStyle.minWidth = valueStyle.minWidth || '0'
+      valueStyle.flex = '1 1 auto'
+      valueStyle.minWidth = '0'
+      valueStyle.width = 'auto'
+      valueStyle.maxWidth = '100%'
     }
   } else if (layout.id === 'label-above') {
     fieldContainerStyle.flexDirection = 'column'
@@ -452,8 +507,7 @@ export function buildFieldPresentation(opts: {
     labelStyle.display = 'flex'
     labelStyle.alignItems = 'center'
     labelStyle.boxSizing = 'border-box'
-    labelStyle.justifyContent =
-      f.textAlign === 'center' ? 'center' : f.textAlign === 'right' ? 'flex-end' : 'flex-start'
+    labelStyle.justifyContent = labelJustifyContent ?? 'flex-start'
   } else if (layout.id === 'value-only') {
     fieldContainerStyle.alignItems = valueFillsCell || wantsBgSlot ? 'stretch' : 'center'
     fieldContainerStyle.justifyContent =
@@ -464,12 +518,12 @@ export function buildFieldPresentation(opts: {
     }
   }
 
-  if (valueFillsCell && isDefaultLayout) {
-    valueStyle.flex = '1 1 0%'
+  if (valueFillsCell && isDefaultLayout && !wantsBgSlot) {
+    valueStyle.flex = '1 1 auto'
     valueStyle.minWidth = '0'
-    valueStyle.width = '100%'
-    valueStyle.display = valueStyle.display || 'flex'
-    valueStyle.alignItems = 'center'
+    valueStyle.width = 'auto'
+    valueStyle.maxWidth = '100%'
+    valueStyle.display = 'block'
     valueStyle.alignSelf = 'stretch'
   }
   if (inCardGrid && wantsBgSlot && isDefaultLayout) {
@@ -487,11 +541,16 @@ export function buildFieldPresentation(opts: {
   const labelIconEntry = f.label ? iconMap.get(f.label) : undefined
   const showLabel = layout.id !== 'value-only' && Boolean(f.label)
 
+  const labelClass =
+    isDefaultLayout && inCardGrid
+      ? 'whitespace-nowrap text-right min-w-0'
+      : layout.labelClass
+
   return {
     fieldKey,
     layoutId: layout.id,
     containerClass: layout.containerClass,
-    labelClass: layout.labelClass,
+    labelClass,
     valueClass: layout.valueClass,
     isDivider: false,
     containerStyle: fieldContainerStyle,
@@ -501,6 +560,7 @@ export function buildFieldPresentation(opts: {
     showLabel,
     labelIconEntry,
     textColor,
+    labelTextColor,
     valueFillsCell,
     wantsBgSlot,
     displayValue: '',

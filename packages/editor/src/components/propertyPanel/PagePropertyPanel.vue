@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useEditorStore } from '../../stores/editorStore'
 import { storeToRefs } from 'pinia'
-import type { DataSourceType, BgGradient, DataSource, IconDictEntry } from '@mvp-vue/schema'
+import type { DataSourceType, BgGradient, DataSource, IconDictEntry, ColorDictEntry } from '@mvp-vue/schema'
+import { iconEntryPickerLabel, savedIconsToMap } from '@mvp-vue/schema'
+import IconDictEntryPreview from '../IconDictEntryPreview.vue'
 import PageSizeFields from '../PageSizeFields.vue'
 import ColorSwatch from '../ColorSwatch.vue'
 import EditorNumberInput from '../EditorNumberInput.vue'
@@ -11,13 +13,17 @@ import JsonExportDialog from '../JsonExportDialog.vue'
 import DictJsonImportDialog from '../DictJsonImportDialog.vue'
 import ColorField from '../ColorField.vue'
 import { Icon } from '@iconify/vue'
-import { PROP_LABEL, PROP_HINT, PROP_SECTION, PROP_SELECT_COMPACT } from './shared'
+import { PROP_LABEL, PROP_HINT, PROP_SECTION, PROP_SELECT_COMPACT, parseColor } from './shared'
+import { useColorPicker } from '../../composables/useColorPicker'
 
 const store = useEditorStore()
+const { openColorPicker } = useColorPicker()
 const {
   pageWidth, pageHeight, bgColor, bgGradient, bgImage, bgOpacity,
-  dataSources, colorDict, iconDict, abbrevDict,
+  dataSources, colorDict, iconDict, savedIcons, abbrevDict,
 } = storeToRefs(store)
+
+const savedIconMap = computed(() => savedIconsToMap(savedIcons.value))
 
 type TabId = 'page' | 'dataSources' | 'colorDict' | 'iconDict' | 'abbrevDict'
 const tab = ref<TabId>('page')
@@ -32,6 +38,28 @@ const newDsDataPath = ref('')
 const newDsRefresh = ref(0)
 const newDsQuery = ref('')
 const newDsStaticData = ref('')
+/** 字段导入白名单；空列表表示导入全部字段 */
+const newDsImportWhitelist = ref<string[]>([])
+
+function addImportWhitelistField() {
+  newDsImportWhitelist.value = [...newDsImportWhitelist.value, '']
+}
+
+function removeImportWhitelistField(idx: number) {
+  const next = [...newDsImportWhitelist.value]
+  next.splice(idx, 1)
+  newDsImportWhitelist.value = next
+}
+
+function updateImportWhitelistField(idx: number, value: string) {
+  const next = [...newDsImportWhitelist.value]
+  next[idx] = value
+  newDsImportWhitelist.value = next
+}
+
+function buildImportFieldWhitelist(): string[] {
+  return newDsImportWhitelist.value.map((s) => s.trim()).filter((s) => s.length > 0)
+}
 
 // Icon picker state
 const iconPickerEntryId = ref<string | null>(null)
@@ -43,13 +71,20 @@ const customSvgInput = ref('')
 const pageConfigExportOpen = ref(false)
 const pageConfigImportOpen = ref(false)
 
-const pageConfigExportData = { dataSources: dataSources.value, colorDict: colorDict.value, iconDict: iconDict.value, abbrevDict: abbrevDict.value }
+const pageConfigExportData = computed(() => ({
+  dataSources: dataSources.value,
+  colorDict: colorDict.value,
+  iconDict: iconDict.value,
+  savedIcons: savedIcons.value,
+  abbrevDict: abbrevDict.value,
+}))
 
 // --- Data Source Form ---
 function handleSubmit() {
   if (!newDsId.value.trim()) return
   if (editingDsId.value) {
     const partial: Partial<DataSource> = {}
+    partial.importFieldWhitelist = buildImportFieldWhitelist()
     if (newDsType.value === 'rest') {
       partial.url = newDsUrl.value
       partial.dataPath = newDsDataPath.value || undefined
@@ -62,7 +97,12 @@ function handleSubmit() {
     }
     store.updateDataSource(editingDsId.value, partial)
   } else {
-    const ds: DataSource = { id: newDsId.value.trim(), type: newDsType.value }
+    const wl = buildImportFieldWhitelist()
+    const ds: DataSource = {
+      id: newDsId.value.trim(),
+      type: newDsType.value,
+      ...(wl.length > 0 ? { importFieldWhitelist: wl } : {}),
+    }
     if (newDsType.value === 'rest') {
       ds.url = newDsUrl.value
       ds.dataPath = newDsDataPath.value || undefined
@@ -89,6 +129,9 @@ function startEdit(dsId: string) {
   newDsRefresh.value = ds.refreshInterval ?? 0
   newDsQuery.value = ds.query ?? ''
   newDsStaticData.value = ds.staticData ? JSON.stringify(ds.staticData, null, 2) : ''
+  newDsImportWhitelist.value = ds.importFieldWhitelist?.length
+    ? [...ds.importFieldWhitelist]
+    : []
   showAddDs.value = true
 }
 
@@ -101,6 +144,7 @@ function resetForm() {
   newDsRefresh.value = 0
   newDsQuery.value = ''
   newDsStaticData.value = ''
+  newDsImportWhitelist.value = []
 }
 
 // --- Icon Picker (placeholder) ---
@@ -108,12 +152,31 @@ function openIconPicker(entryId: string) {
   const entry = iconDict.value.find((e) => e.id === entryId)
   iconPickerEntryId.value = entryId
   iconSearch.value = ''
-  iconPickerTab.value = entry?.iconType === 'custom' ? 'custom' : 'preset'
-  customSvgInput.value = entry?.iconSvg ?? ''
+  if (entry?.iconType === 'custom') {
+    iconPickerTab.value = 'custom'
+    customSvgInput.value = entry.iconSvg ?? ''
+  } else if (entry?.iconType === 'saved') {
+    iconPickerTab.value = 'custom'
+    customSvgInput.value = ''
+  } else {
+    iconPickerTab.value = 'preset'
+    customSvgInput.value = ''
+  }
 }
 
 function closeIconPicker() {
   iconPickerEntryId.value = null
+}
+
+function toPickerHex(css: string) {
+  const { r, g, b } = parseColor(css)
+  return `#${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('')}`
+}
+
+function openEntryColorPicker(entry: ColorDictEntry) {
+  openColorPicker(toPickerHex(entry.matchColor), (hex) => {
+    store.updateColorDictEntry(entry.id, { ...entry, matchColor: hex })
+  })
 }
 
 // --- Tab button class ---
@@ -125,7 +188,7 @@ function tabClass(id: TabId) {
 </script>
 
 <template>
-  <aside class="relative z-10 flex h-full min-h-0 w-[320px] shrink-0 flex-col border-l border-white/10 bg-[#0f1824] p-3">
+  <aside class="relative z-30 flex h-full min-h-0 w-[320px] shrink-0 flex-col border-l border-white/10 bg-[#0f1824] p-3">
     <h2 :class="[PROP_SECTION, 'mb-3 flex shrink-0 items-center gap-1.5']">
       <span class="text-indigo-400 text-[8px]">◆</span>
       页面属性
@@ -153,7 +216,7 @@ function tabClass(id: TabId) {
     </div>
 
     <!-- Scrollable content -->
-    <div class="editor-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+    <div class="editor-scrollbar relative z-0 min-h-0 flex-1 overflow-y-auto overflow-x-hidden scroll-pb-8 pr-2">
 
       <!-- === PAGE TAB === -->
       <div v-if="tab === 'page'" class="space-y-3 pb-2">
@@ -261,6 +324,46 @@ function tabClass(id: TabId) {
               @update:model-value="newDsRefresh = Number($event)"
             />
           </label>
+          <div class="block border-t border-white/10 pt-2 mt-1">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-[9px] text-slate-500">字段导入白名单</span>
+              <button
+                type="button"
+                class="text-[10px] text-indigo-400 hover:text-indigo-300"
+                @click="addImportWhitelistField"
+              >
+                + 字段
+              </button>
+            </div>
+            <p :class="[PROP_HINT, 'mb-1.5 leading-snug']">
+              留空表示不限制；填写后作为第一层过滤，组件「数据」Tab 中可再配置本组件白名单。
+            </p>
+            <div
+              v-if="newDsImportWhitelist.length === 0"
+              class="text-[10px] text-slate-600 italic py-1"
+            >
+              未配置（导入全部）
+            </div>
+            <div
+              v-for="(name, idx) in newDsImportWhitelist"
+              :key="idx"
+              class="flex gap-1 mb-1"
+            >
+              <input
+                class="flex-1 min-w-0 bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-slate-200 font-mono"
+                placeholder="字段名，如 name"
+                :value="name"
+                @input="updateImportWhitelistField(idx, ($event.target as HTMLInputElement).value)"
+              />
+              <button
+                type="button"
+                class="text-red-400/60 hover:text-red-400 text-xs px-1"
+                @click="removeImportWhitelistField(idx)"
+              >
+                &times;
+              </button>
+            </div>
+          </div>
           <button class="w-full py-1 bg-indigo-500/30 text-indigo-300 text-xs rounded hover:bg-indigo-500/40"
             @click="handleSubmit"
           >{{ editingDsId ? '保存修改' : '添加数据源' }}</button>
@@ -273,6 +376,13 @@ function tabClass(id: TabId) {
           <div>
             <span class="text-slate-300">{{ ds.id }}</span>
             <span class="text-slate-600 ml-1">({{ ds.type }})</span>
+            <span
+              v-if="ds.importFieldWhitelist?.length"
+              class="text-slate-500 ml-1"
+              :title="ds.importFieldWhitelist.join(', ')"
+            >
+              · 白名单 {{ ds.importFieldWhitelist.length }} 项
+            </span>
           </div>
           <div class="flex items-center gap-2">
             <button class="text-indigo-400/60 hover:text-indigo-400 text-[10px]" @click="startEdit(ds.id)">编辑</button>
@@ -282,7 +392,7 @@ function tabClass(id: TabId) {
       </div>
 
       <!-- === COLOR DICT TAB === -->
-      <div v-if="tab === 'colorDict'" class="space-y-3 pb-2">
+      <div v-if="tab === 'colorDict'" class="space-y-3">
         <div class="flex items-center justify-between mb-2">
           <span :class="PROP_LABEL">颜色字典</span>
           <button class="text-[11px] text-indigo-400 hover:text-indigo-300"
@@ -290,27 +400,48 @@ function tabClass(id: TabId) {
           >+ 添加</button>
         </div>
         <p v-if="colorDict.length === 0" :class="PROP_HINT">暂无颜色字典条目</p>
-        <div v-if="colorDict.length > 0" class="flex flex-col gap-1.5">
-          <div v-for="entry in colorDict" :key="entry.id" class="flex h-7 items-center gap-1.5">
-            <input
-              class="h-7 flex-1 min-w-0 box-border rounded border border-white/15 bg-white/[0.08] px-2 py-0 text-xs text-slate-100"
-              placeholder="KEY"
-              :value="entry.key"
-              @change="store.updateColorDictEntry(entry.id, { ...entry, key: ($event.target as HTMLInputElement).value })"
-            />
-            <ColorSwatch
-              :value="entry.matchColor"
-              @change="(hex: string) => store.updateColorDictEntry(entry.id, { ...entry, matchColor: hex })"
-            />
-            <input
-              class="h-7 w-14 min-w-0 box-border rounded border border-white/10 bg-white/5 px-1.5 py-0 font-mono text-[9px] text-slate-400"
-              :value="entry.matchColor"
-              @change="store.updateColorDictEntry(entry.id, { ...entry, matchColor: ($event.target as HTMLInputElement).value })"
-            />
-            <button type="button"
-              class="flex h-7 w-7 shrink-0 items-center justify-center p-0 text-base leading-none text-red-400/60 hover:text-red-400"
-              @click="store.removeColorDictEntry(entry.id)"
-            >×</button>
+        <div
+          v-if="colorDict.length > 0"
+          class="editor-scrollbar min-h-[360px] max-h-[calc(100vh-13rem)] overflow-y-auto overflow-x-hidden scroll-pb-4 pr-1"
+        >
+          <div class="flex flex-col gap-2 pb-4">
+            <div
+              v-for="(entry, rowIndex) in colorDict"
+              :key="entry.id"
+              class="relative isolate flex h-7 max-h-7 min-h-7 shrink-0 items-center gap-1 overflow-hidden rounded-sm bg-[#0f1824]/80"
+              :style="{ zIndex: rowIndex + 1 }"
+            >
+              <input
+                class="h-7 min-w-0 flex-1 box-border rounded border border-white/15 bg-white/[0.08] px-2 py-0 text-xs text-slate-100"
+                placeholder="KEY"
+                :value="entry.key"
+                @change="store.updateColorDictEntry(entry.id, { ...entry, key: ($event.target as HTMLInputElement).value })"
+              />
+              <ColorSwatch
+                swatch-class="h-7 w-7 shrink-0"
+                :value="entry.matchColor"
+                @change="(hex: string) => store.updateColorDictEntry(entry.id, { ...entry, matchColor: hex })"
+              />
+              <button
+                type="button"
+                class="h-7 shrink-0 cursor-pointer px-1 text-[10px] text-indigo-400 hover:text-indigo-300"
+                title="打开取色对话框"
+                @click.stop="openEntryColorPicker(entry)"
+              >
+                选色
+              </button>
+              <input
+                class="h-7 w-[3.25rem] min-w-0 box-border rounded border border-white/10 bg-white/5 px-1 py-0 font-mono text-[9px] text-slate-400"
+                :value="entry.matchColor"
+                title="也可直接输入 #RRGGBB"
+                @change="store.updateColorDictEntry(entry.id, { ...entry, matchColor: ($event.target as HTMLInputElement).value })"
+              />
+              <button
+                type="button"
+                class="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center p-0 text-base leading-none text-red-400/60 hover:text-red-400"
+                @click="store.removeColorDictEntry(entry.id)"
+              >×</button>
+            </div>
           </div>
         </div>
       </div>
@@ -336,18 +467,12 @@ function tabClass(id: TabId) {
               class="h-7 w-20 min-w-0 box-border rounded border border-white/10 bg-white/5 px-1.5 py-0 text-[9px] text-slate-400 hover:text-slate-200 hover:border-white/20 truncate text-left"
               @click="openIconPicker(entry.id)"
             >
-              {{ entry.iconType === 'preset' ? (entry.iconName ?? '选择...') : '自定义 SVG' }}
+              {{ iconEntryPickerLabel(entry, entry.iconType === 'saved' && entry.savedIconId != null ? savedIconMap.get(entry.savedIconId)?.name : undefined) }}
             </button>
             <div
               class="h-7 w-7 flex shrink-0 items-center justify-center overflow-hidden rounded border border-white/10 bg-white/5 text-slate-300 [&_svg]:max-h-[18px] [&_svg]:max-w-[18px]"
             >
-              <template v-if="entry.iconType === 'preset' && entry.iconName">
-                <Icon :icon="entry.iconName" :width="18" :height="18" />
-              </template>
-              <template v-else-if="entry.iconType === 'custom' && entry.iconSvg">
-                <span class="inline-flex items-center justify-center" v-html="entry.iconSvg" />
-              </template>
-              <span v-else class="text-[9px] text-slate-500">—</span>
+              <IconDictEntryPreview :entry="entry" :saved-icons="savedIcons" :size="18" />
             </div>
             <button type="button"
               class="flex h-7 w-7 shrink-0 items-center justify-center p-0 text-base leading-none text-red-400/60 hover:text-red-400"
@@ -390,30 +515,32 @@ function tabClass(id: TabId) {
       </div>
     </div>
 
-    <IconPickerModal
-      v-if="iconPickerEntryId"
-      :entry="iconDict.find((e) => e.id === iconPickerEntryId)!"
-      :search="iconSearch"
-      :picker-tab="iconPickerTab"
-      :custom-svg-input="customSvgInput"
-      @update:search="iconSearch = $event"
-      @update:picker-tab="iconPickerTab = $event"
-      @update:custom-svg-input="customSvgInput = $event"
-      @confirm="(updated: IconDictEntry) => { store.updateIconDictEntry(iconPickerEntryId!, updated); closeIconPicker() }"
-      @cancel="closeIconPicker"
-    />
-    <JsonExportDialog
-      :open="pageConfigExportOpen"
-      title="导出页面配置"
-      :data="pageConfigExportData"
-      hint="包含 dataSources、colorDict、iconDict 与 abbrevDict，已自动全选，可直接 Ctrl+C 复制到其他页面。"
-      @close="pageConfigExportOpen = false"
-    />
-    <DictJsonImportDialog
-      :open="pageConfigImportOpen"
-      title="导入页面配置"
-      @close="pageConfigImportOpen = false"
-      @import="store.importPageConfig($event as any); pageConfigImportOpen = false"
-    />
+    <Teleport to="body">
+      <IconPickerModal
+        v-if="iconPickerEntryId"
+        :entry="iconDict.find((e) => e.id === iconPickerEntryId)!"
+        :search="iconSearch"
+        :picker-tab="iconPickerTab"
+        :custom-svg-input="customSvgInput"
+        @update:search="iconSearch = $event"
+        @update:picker-tab="iconPickerTab = $event"
+        @update:custom-svg-input="customSvgInput = $event"
+        @confirm="(updated: IconDictEntry) => { store.updateIconDictEntry(iconPickerEntryId!, updated); closeIconPicker() }"
+        @cancel="closeIconPicker"
+      />
+      <JsonExportDialog
+        :open="pageConfigExportOpen"
+        title="导出页面配置"
+        :data="pageConfigExportData"
+        hint="包含 dataSources、colorDict、iconDict、savedIcons 与 abbrevDict，已自动全选，可直接 Ctrl+C 复制到其他页面。"
+        @close="pageConfigExportOpen = false"
+      />
+      <DictJsonImportDialog
+        :open="pageConfigImportOpen"
+        title="导入页面配置"
+        @close="pageConfigImportOpen = false"
+        @import="store.importPageConfig($event as any); pageConfigImportOpen = false"
+      />
+    </Teleport>
   </aside>
 </template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import type { PageComponent, ComponentType } from '@mvp-vue/schema'
 import { useEditorStore } from '../stores/editorStore'
 import { storeToRefs } from 'pinia'
@@ -30,6 +30,38 @@ const pointerDownPos = ref<{ x: number; y: number } | null>(null)
 function rectsIntersect(a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) {
   return !(a.x + a.w < b.x || b.x + b.w < a.x || a.y + a.h < b.y || b.y + b.h < a.y)
 }
+
+function pointInComp(c: PageComponent, x: number, y: number) {
+  return x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h
+}
+
+/** 画布坐标：重叠区优先命中已选组件（数组靠后者为上层） */
+function resolvePointerTarget(domComp: PageComponent, canvasX: number, canvasY: number): PageComponent {
+  const hit = components.value.filter((c) => pointInComp(c, canvasX, canvasY))
+  if (hit.length === 0) return domComp
+  const selectedHit = hit.filter((c) => selectedIds.value.includes(c.id))
+  if (selectedHit.length > 0) return selectedHit[selectedHit.length - 1]!
+  return hit[hit.length - 1]!
+}
+
+function clientToCanvas(e: PointerEvent) {
+  const rect = canvasRef.value?.getBoundingClientRect()
+  if (!rect) return null
+  const scale = canvasScale.value
+  return {
+    x: (e.clientX - rect.left) / scale,
+    y: (e.clientY - rect.top) / scale,
+    scale,
+  }
+}
+
+/** 未选中保持原序，选中项渲染在上层以便点选与手柄 */
+const displayComponents = computed(() => {
+  const selectedSet = new Set(selectedIds.value)
+  const unselected = components.value.filter((c) => !selectedSet.has(c.id))
+  const selected = components.value.filter((c) => selectedSet.has(c.id))
+  return [...unselected, ...selected]
+})
 
 function buildBgStyle(color: string, gradient: string): string {
   switch (gradient) {
@@ -65,6 +97,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
+  endDragSession()
 })
 
 watch([pageWidth, pageHeight], updateScale)
@@ -125,7 +158,7 @@ function handlePointerUp() {
   boxSelect.value = null
 }
 
-// canvas drag-to-move (single component)
+// canvas drag-to-move（transform 预览，pointerup 一次提交）
 interface DragState {
   compId: string
   startX: number
@@ -137,75 +170,104 @@ interface DragState {
 
 const dragState = ref<DragState | null>(null)
 
-function handleCompPointerDown(e: PointerEvent, comp: PageComponent) {
+type DragListenerBundle = {
+  onMove: (ev: PointerEvent) => void
+  onUp: (ev: PointerEvent) => void
+  onCancel: (ev: PointerEvent) => void
+}
+
+let dragListeners: DragListenerBundle | null = null
+
+function endDragSession() {
+  if (dragListeners) {
+    window.removeEventListener('pointermove', dragListeners.onMove)
+    window.removeEventListener('pointerup', dragListeners.onUp)
+    window.removeEventListener('pointercancel', dragListeners.onCancel)
+    dragListeners = null
+  }
+  dragState.value = null
+  store.setGroupDragOffset(null)
+  document.body.style.cursor = ''
+}
+
+function handleCompPointerDown(e: PointerEvent, domComp: PageComponent) {
   if (editingCompId.value) return
-  // 右键会先触发 pointerdown；忽略非主键，避免破坏多选或误开拖拽
   if (e.button !== 0) return
   e.stopPropagation()
 
+  endDragSession()
+
+  const pt = clientToCanvas(e)
+  if (!pt) return
+
+  const target = resolvePointerTarget(domComp, pt.x, pt.y)
+
   if (e.shiftKey) {
-    store.selectComponent(comp.id, true)
-  } else if (!isOnlySelected(comp.id)) {
-    // 普通点击组件时，收敛到单选，避免多选态下误触发群组拖拽
-    store.selectComponent(comp.id)
+    store.selectComponent(target.id, true)
+  } else if (!selectedIds.value.includes(target.id)) {
+    store.selectComponent(target.id)
   }
 
-  const scale = canvasScale.value
+  const isMultiDrag = selectedIds.value.includes(target.id) && selectedIds.value.length > 1
 
-  const multiIds = selectedIds.value.includes(comp.id) && selectedIds.value.length > 1
-  if (multiIds) {
-    dragState.value = {
-      compId: comp.id,
-      startX: e.clientX,
-      startY: e.clientY,
-      origX: 0,
-      origY: 0,
-      isMultiDrag: true,
-    }
-  } else {
-    dragState.value = {
-      compId: comp.id,
-      startX: e.clientX,
-      startY: e.clientY,
-      origX: comp.x,
-      origY: comp.y,
-      isMultiDrag: false,
-    }
+  dragState.value = {
+    compId: target.id,
+    startX: e.clientX,
+    startY: e.clientY,
+    origX: isMultiDrag ? 0 : target.x,
+    origY: isMultiDrag ? 0 : target.y,
+    isMultiDrag,
   }
+
+  store.setGroupDragOffset({ dx: 0, dy: 0 })
+  document.body.style.cursor = 'grabbing'
+
+  const captureEl = e.currentTarget as HTMLElement
+  captureEl.setPointerCapture?.(e.pointerId)
 
   function onMove(ev: PointerEvent) {
     if (!dragState.value) return
+    const scale = canvasScale.value
     const dx = (ev.clientX - dragState.value.startX) / scale
     const dy = (ev.clientY - dragState.value.startY) / scale
-    if (dragState.value.isMultiDrag) {
-      store.setGroupDragOffset({ dx, dy })
-    } else {
-      store.resizeComponent(
-        comp.id,
-        Math.round(dragState.value.origX + dx),
-        Math.round(dragState.value.origY + dy),
-        comp.w,
-        comp.h,
-      )
-    }
+    store.setGroupDragOffset({ dx, dy })
   }
 
-  function onUp() {
-    if (!dragState.value) return
-    if (dragState.value.isMultiDrag) {
-      const offset = groupDragOffset.value
-      if (offset) {
-        store.moveComponents([...selectedIds.value], offset.dx, offset.dy)
+  function onUp(ev: PointerEvent) {
+    if (!dragState.value) {
+      endDragSession()
+      return
+    }
+    const state = dragState.value
+    const scale = canvasScale.value
+    const dx = (ev.clientX - state.startX) / scale
+    const dy = (ev.clientY - state.startY) / scale
+
+    if (dx !== 0 || dy !== 0) {
+      if (state.isMultiDrag) {
+        store.moveComponents([...selectedIds.value], dx, dy)
+      } else {
+        store.moveComponent(
+          state.compId,
+          Math.round(state.origX + dx),
+          Math.round(state.origY + dy),
+        )
       }
-      store.setGroupDragOffset(null)
     }
-    dragState.value = null
-    window.removeEventListener('pointermove', onMove)
-    window.removeEventListener('pointerup', onUp)
+
+    captureEl.releasePointerCapture?.(ev.pointerId)
+    endDragSession()
   }
 
+  function onCancel(ev: PointerEvent) {
+    captureEl.releasePointerCapture?.(ev.pointerId)
+    endDragSession()
+  }
+
+  dragListeners = { onMove, onUp, onCancel }
   window.addEventListener('pointermove', onMove)
   window.addEventListener('pointerup', onUp)
+  window.addEventListener('pointercancel', onCancel)
 }
 
 function handleCompContextMenu(e: MouseEvent, compId: string) {
@@ -218,13 +280,20 @@ function handleCompContextMenu(e: MouseEvent, compId: string) {
 }
 
 // Panel → Canvas drop (HTML5 DnD)
-function handleDragOver(e: DragEvent) {
+// dragover/dragenter 阶段 getData() 为空（浏览器限制），只能用 types 判断
+const PANEL_DRAG_MIME = 'application/x-mvp-component-type'
+
+function dataTransferHasType(dt: DataTransfer, type: string): boolean {
+  return Array.from(dt.types).includes(type)
+}
+
+function isPanelComponentDrag(dt: DataTransfer): boolean {
+  return dataTransferHasType(dt, PANEL_DRAG_MIME) || dataTransferHasType(dt, 'text/plain')
+}
+
+function handlePanelDragEnterOrOver(e: DragEvent) {
   const dt = e.dataTransfer
-  if (!dt) return
-  const customType = dt.getData('application/x-mvp-component-type')
-  const plainType = dt.getData('text/plain')
-  const dragType = customType || plainType
-  if (!dragType || !getEditorDef(dragType as ComponentType)) return
+  if (!dt || !isPanelComponentDrag(dt)) return
   e.preventDefault()
   dt.dropEffect = 'copy'
 }
@@ -247,7 +316,13 @@ function handleDrop(e: DragEvent) {
 </script>
 
 <template>
-  <div ref="containerRef" class="relative min-w-0 flex-1 flex items-center justify-center overflow-hidden p-4" @dragover="handleDragOver" @drop="handleDrop">
+  <div
+    ref="containerRef"
+    class="relative min-w-0 flex-1 flex items-center justify-center overflow-hidden p-4"
+    @dragenter="handlePanelDragEnterOrOver"
+    @dragover="handlePanelDragEnterOrOver"
+    @drop="handleDrop"
+  >
     <div ref="wrapperRef" class="relative shrink-0 overflow-visible">
       <div
         ref="canvasRef"
@@ -292,7 +367,7 @@ function handleDrop(e: DragEvent) {
 
         <!-- components -->
         <div
-          v-for="comp in components"
+          v-for="comp in displayComponents"
           :key="`${comp.id}-${comp.type}`"
           :style="{
             position: 'absolute',

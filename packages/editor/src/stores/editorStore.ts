@@ -1,7 +1,14 @@
 import { defineStore } from 'pinia'
 import { shallowRef, ref, computed, triggerRef } from 'vue'
-import type { PageComponent, ComponentType, PageSchema, DataSource, ColorDictEntry, IconDictEntry, AbbrevDictEntry, BgGradient } from '@mvp-vue/schema'
-import { DEFAULT_PAGE_WIDTH, DEFAULT_PAGE_HEIGHT } from '@mvp-vue/schema'
+import type {
+  PageComponent, ComponentType, PageSchema, DataSource, ColorDictEntry,
+  IconDictEntry, AbbrevDictEntry, BgGradient, CustomIconRecord,
+} from '@mvp-vue/schema'
+import {
+  DEFAULT_PAGE_WIDTH, DEFAULT_PAGE_HEIGHT,
+  buildSavedIconsSnapshot, collectReferencedSavedIconIds, collectSavedIconsFromSchema,
+  mergeSavedIconIntoPool,
+} from '@mvp-vue/schema'
 import { clampPageSize } from '../pageSizePresets'
 import { getDefaultProps, getDefaultSize } from '../components/registry/registry'
 
@@ -61,6 +68,7 @@ export const useEditorStore = defineStore('editor', () => {
   const dataSources = ref<DataSource[]>([])
   const colorDict = ref<ColorDictEntry[]>([])
   const iconDict = ref<IconDictEntry[]>([])
+  const savedIcons = ref<CustomIconRecord[]>([])
   const abbrevDict = ref<AbbrevDictEntry[]>([])
 
   const past = ref<Snapshot[]>([])
@@ -440,10 +448,15 @@ export const useEditorStore = defineStore('editor', () => {
     abbrevDict.value = abbrevDict.value.filter((e) => e.id !== id)
   }
 
+  function mergeSavedIcon(record: CustomIconRecord) {
+    savedIcons.value = mergeSavedIconIntoPool(savedIcons.value, record)
+  }
+
   function importPageConfig(config: {
     dataSources?: DataSource[]
     colorDict?: ColorDictEntry[]
     iconDict?: IconDictEntry[]
+    savedIcons?: CustomIconRecord[]
     abbrevDict?: AbbrevDictEntry[]
   }) {
     pushHistory()
@@ -455,6 +468,9 @@ export const useEditorStore = defineStore('editor', () => {
     }
     if (config.iconDict !== undefined) {
       iconDict.value = config.iconDict.map((entry) => ({ ...entry, id: `id-${nextIconDictId++}` }))
+    }
+    if (config.savedIcons !== undefined) {
+      savedIcons.value = config.savedIcons.map((icon) => ({ ...icon }))
     }
     if (config.abbrevDict !== undefined) {
       abbrevDict.value = config.abbrevDict.map((entry) => ({ ...entry, id: `ad-${nextAbbrevDictId++}` }))
@@ -520,6 +536,7 @@ export const useEditorStore = defineStore('editor', () => {
     dataSources.value = schema.dataSources ?? []
     colorDict.value = migrated
     iconDict.value = migratedIcon
+    savedIcons.value = collectSavedIconsFromSchema(schema)
     abbrevDict.value = migratedAbbrev
     components.value = comps
     selectedIds.value = []
@@ -529,6 +546,8 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function toSchema(): PageSchema {
+    const referenced = collectReferencedSavedIconIds(iconDict.value, components.value)
+    const snapshot = buildSavedIconsSnapshot(savedIcons.value, referenced)
     return {
       width: pageWidth.value,
       height: pageHeight.value,
@@ -539,6 +558,7 @@ export const useEditorStore = defineStore('editor', () => {
       dataSources: dataSources.value,
       colorDict: colorDict.value.length > 0 ? colorDict.value : undefined,
       iconDict: iconDict.value.length > 0 ? iconDict.value : undefined,
+      savedIcons: snapshot,
       abbrevDict: abbrevDict.value.length > 0 ? abbrevDict.value : undefined,
       components: components.value,
     }
@@ -548,7 +568,7 @@ export const useEditorStore = defineStore('editor', () => {
     // state
     components, selectedIds, pageId, pageName, pageWidth, pageHeight,
     bgColor, bgGradient, bgImage, bgOpacity,
-    dataSources, colorDict, iconDict, abbrevDict,
+    dataSources, colorDict, iconDict, savedIcons, abbrevDict,
     past, future, groupDragOffset, clipboard,
     // computed
     firstSelectedId, canUndo, canRedo, canCopy, canPaste, canMoveUp, canMoveDown, canAlign,
@@ -566,6 +586,7 @@ export const useEditorStore = defineStore('editor', () => {
     addDataSource, updateDataSource, removeDataSource, setComponentDataSource,
     addColorDictEntry, updateColorDictEntry, removeColorDictEntry,
     addIconDictEntry, updateIconDictEntry, removeIconDictEntry,
+    mergeSavedIcon,
     addAbbrevDictEntry, updateAbbrevDictEntry, removeAbbrevDictEntry,
     importPageConfig,
     loadPage, toSchema,
