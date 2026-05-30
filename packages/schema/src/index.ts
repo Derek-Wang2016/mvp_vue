@@ -380,6 +380,10 @@ export interface DataSource {
   method?: 'GET' | 'POST'
   headers?: Record<string, string>
   dataPath?: string
+  /** 页面 URL 查询参数名；有值时拼接到 REST URL 同名 query 参数 */
+  urlQueryParam?: string
+  /** 页面 URL 无该参数时的默认值；未配置且无 URL 值时不追加 */
+  urlQueryParamDefault?: string
 
   // SQL
   query?: string
@@ -407,6 +411,12 @@ export interface PageComponent {
   h: number
   props: Record<string, unknown>
   dataSourceId?: string
+  /** 编辑器锁定：不可选中、拖动、改属性 */
+  locked?: boolean
+}
+
+export function isComponentLocked(c: PageComponent): boolean {
+  return !!c.locked
 }
 
 // ===== 页面默认尺寸 =====
@@ -423,6 +433,9 @@ export {
   parseImportFieldWhitelist,
   resolveImportFieldNames,
   resolveCombinedImportFieldNames,
+  resolveUrlQueryParamValue,
+  appendQueryParamToUrl,
+  resolveRestDataSourceUrl,
 } from './dataSource'
 export {
   type CardArrayFilterOperator,
@@ -433,6 +446,11 @@ export {
   matchCardArrayItem,
   getActiveCardArrayFilters,
 } from './cardComponent'
+export {
+  parseChartFilterValues,
+  asChartRowArray,
+  filterChartArrayRows,
+} from './chartComponent'
 
 // ===== 页面 Schema =====
 export type BgGradient = 'none' | 'linear-top' | 'linear-left' | 'linear-diagonal' | 'radial'
@@ -452,6 +470,12 @@ export interface PageSchema {
   abbrevDict?: AbbrevDictEntry[]
   components: PageComponent[]
 }
+
+export {
+  SYSTEM_PAGE_ID_MAX,
+  MIN_USER_PAGE_ID,
+  isSystemPageId,
+} from './pagePolicy'
 
 // ===== API 响应 =====
 export interface PageRecord {

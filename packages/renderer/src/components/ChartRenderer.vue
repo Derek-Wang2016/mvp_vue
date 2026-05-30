@@ -2,7 +2,12 @@
 import { ref, watch, onMounted, onBeforeUnmount, shallowRef } from 'vue'
 import * as echarts from 'echarts'
 import type { PageComponent } from '@mvp-vue/schema'
-import { DEFAULT_CHART_TEXT_FONT_SIZE, DEFAULT_CHART_TEXT_COLOR, buildPieSeriesLayout } from '@mvp-vue/schema'
+import {
+  DEFAULT_CHART_TEXT_FONT_SIZE,
+  DEFAULT_CHART_TEXT_COLOR,
+  buildPieSeriesLayout,
+  filterChartArrayRows,
+} from '@mvp-vue/schema'
 import { useData } from '../composables/useData'
 
 const props = defineProps<{ comp: PageComponent }>()
@@ -35,7 +40,7 @@ function pickKey(obj: Record<string, unknown>, preferred: string | undefined, fa
 
 function mapChartData(raw: unknown, compType: string, categoryField?: string, valueField?: string) {
   if (!raw) return null
-  const arr = raw as any[]
+  const arr = raw as unknown[]
   if (!Array.isArray(arr) || arr.length === 0) return null
 
   if (compType === 'pie-chart') {
@@ -83,8 +88,16 @@ function buildOption(comp: PageComponent, data: unknown, loading: boolean): echa
   const valueField = comp.props.valueField as string | undefined
   const textFontSize = (comp.props.textFontSize as number) ?? DEFAULT_CHART_TEXT_FONT_SIZE
   const textColor = (comp.props.textColor as string) ?? DEFAULT_CHART_TEXT_COLOR
+  const showValue = comp.props.showValue === true
+  const showLegend = comp.props.showLegend === true
   const textStyle = { color: textColor, fontSize: textFontSize }
-  const mapped = mapChartData(data, comp.type, categoryField, valueField)
+  const valueLabel = {
+    show: showValue,
+    color: textColor,
+    fontSize: textFontSize,
+  }
+  const filtered = filterChartArrayRows(data, comp.props.filterField, comp.props.filterValues)
+  const mapped = mapChartData(filtered, comp.type, categoryField, valueField)
 
   const option: echarts.EChartsOption = {
     title: {
@@ -92,11 +105,20 @@ function buildOption(comp: PageComponent, data: unknown, loading: boolean): echa
       left: 'center',
       textStyle: { ...textStyle, fontWeight: 400 },
     },
-    grid: { top: title ? 40 : 10, right: 20, bottom: 32, left: 48 },
+    legend: {
+      show: showLegend,
+      bottom: 0,
+      textStyle,
+    },
+    grid: { top: title ? 40 : 10, right: 20, bottom: showLegend ? 36 : 32, left: 48 },
   }
 
   if (comp.type === 'pie-chart') {
+    const pieData = (mapped as { name: string; value: number }[]) ?? FALLBACK_PIE
     const pieLayout = buildPieSeriesLayout(comp.w, comp.h, textFontSize, Boolean(title))
+    if (showLegend) {
+      option.legend = { show: true, bottom: 0, textStyle, data: pieData.map((d) => d.name) }
+    }
     option.series = [{
       type: 'pie',
       radius: pieLayout.radius,
@@ -107,16 +129,21 @@ function buildOption(comp: PageComponent, data: unknown, loading: boolean): echa
         fontSize: textFontSize,
         overflow: 'truncate',
         width: pieLayout.labelMaxWidth,
+        formatter: showValue ? '{b}: {c} ({d}%)' : '{b}',
       },
       labelLine: {
         ...pieLayout.labelLine,
         lineStyle: { color: textColor },
       },
-      data: (mapped as any[]) ?? FALLBACK_PIE,
+      data: pieData,
     }]
   } else {
     const catData = mapped ? (mapped as { categories: string[] }).categories : FALLBACK_CAT
     const valData = mapped ? (mapped as { values: number[] }).values : (comp.type === 'bar-chart' ? FALLBACK_BAR : FALLBACK_LINE)
+    const seriesName = title || '数据'
+    if (showLegend) {
+      option.legend = { show: true, bottom: 0, textStyle, data: [seriesName] }
+    }
     option.xAxis = {
       type: 'category',
       data: catData,
@@ -131,18 +158,22 @@ function buildOption(comp: PageComponent, data: unknown, loading: boolean): echa
     if (comp.type === 'bar-chart') {
       option.series = [{
         type: 'bar',
+        name: seriesName,
         data: valData,
         itemStyle: { color: (comp.props.color as string) || '#818cf8', borderRadius: [4, 4, 0, 0] },
+        label: { ...valueLabel, position: 'top' },
       }]
     } else {
       option.series = [{
         type: 'line',
+        name: seriesName,
         data: valData,
         smooth: true,
         lineStyle: { color: '#34d399', width: 2 },
         itemStyle: { color: '#34d399' },
         symbol: 'circle',
         symbolSize: 6,
+        label: { ...valueLabel, position: 'top' },
       }]
     }
   }

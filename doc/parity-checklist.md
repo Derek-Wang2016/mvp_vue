@@ -53,6 +53,7 @@
 | C1 | P0 | `editorRegistry` 14 类型注册完整（含 `card`） | [x] |
 | C2 | P0 | 页面属性：尺寸预设、底图、透明度 | [x] |
 | C3 | P1 | 页面级数据源 CRUD（REST/SQL/静态 JSON） | [x] |
+| C3a | P1 | REST 数据源 URL 参数绑定（页面 query → API query + default） | [x] |
 | C4 | P1 | 颜色/图标/缩略语字典 | [x] |
 | C5 | P1 | 组件数据 Tab、数据源绑定角标 | [x] |
 | C6 | P2 | JSON 查看/导出、组件 props JSON 对话框 | [x] |
@@ -119,6 +120,7 @@
 | G1 | POST 新建页面、PUT 更新、GET 列表/详情 | [~] |
 | G2 | React 版保存的页面在 Vue 渲染器正常显示 | [~] |
 | G3 | Vue 版保存的页面在 React 渲染器正常显示（回归） | [~] |
+| G4 | `PAGE_POLICY` / `VITE_PAGE_POLICY=strict`：双表 draft 只读 + publish CRUD + promote | [x] |
 
 ---
 

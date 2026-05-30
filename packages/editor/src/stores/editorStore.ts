@@ -7,10 +7,11 @@ import type {
 import {
   DEFAULT_PAGE_WIDTH, DEFAULT_PAGE_HEIGHT,
   buildSavedIconsSnapshot, collectReferencedSavedIconIds, collectSavedIconsFromSchema,
-  mergeSavedIconIntoPool,
+  mergeSavedIconIntoPool, isComponentLocked,
 } from '@mvp-vue/schema'
 import { clampPageSize } from '../pageSizePresets'
 import { getDefaultProps, getDefaultSize } from '../components/registry/registry'
+import { isCurrentPageReadOnly, type PageScope } from '../pagePolicy'
 
 const MAX_HISTORY = 50
 const PASTE_OFFSET = 20
@@ -58,6 +59,7 @@ export const useEditorStore = defineStore('editor', () => {
   const components = shallowRef<PageComponent[]>([])
   const selectedIds = ref<string[]>([])
   const pageId = ref<number | null>(null)
+  const pageScope = ref<PageScope>('draft')
   const pageName = ref('未命名大屏')
   const pageWidth = ref(DEFAULT_PAGE_WIDTH)
   const pageHeight = ref(DEFAULT_PAGE_HEIGHT)
@@ -77,24 +79,47 @@ export const useEditorStore = defineStore('editor', () => {
   const clipboard = ref<PageComponent[] | null>(null)
 
   // === computed ===
+  const pageReadOnly = computed(() => isCurrentPageReadOnly(pageScope.value))
+
   const firstSelectedId = computed(() => selectedIds.value[0] ?? null)
-  const canUndo = computed(() => past.value.length > 0)
-  const canRedo = computed(() => future.value.length > 0)
+  const canUndo = computed(() => !pageReadOnly.value && past.value.length > 0)
+  const canRedo = computed(() => !pageReadOnly.value && future.value.length > 0)
   const canCopy = computed(() => selectedIds.value.length > 0)
-  const canPaste = computed(() => !!(clipboard.value && clipboard.value.length > 0))
+  const canPaste = computed(() =>
+    !pageReadOnly.value && !!(clipboard.value && clipboard.value.length > 0),
+  )
   const canMoveUp = computed(() => {
+    if (pageReadOnly.value) return false
     const id = firstSelectedId.value
     if (!id) return false
+    const comp = components.value.find((c) => c.id === id)
+    if (!comp || isComponentLocked(comp)) return false
     const idx = components.value.findIndex((c) => c.id === id)
     return idx >= 0 && idx < components.value.length - 1
   })
   const canMoveDown = computed(() => {
+    if (pageReadOnly.value) return false
     const id = firstSelectedId.value
     if (!id) return false
+    const comp = components.value.find((c) => c.id === id)
+    if (!comp || isComponentLocked(comp)) return false
     const idx = components.value.findIndex((c) => c.id === id)
     return idx > 0
   })
-  const canAlign = computed(() => selectedIds.value.length >= 2)
+  const canAlign = computed(() => {
+    if (pageReadOnly.value) return false
+    if (selectedIds.value.length < 2) return false
+    return !hasLockedInSelection(selectedIds.value)
+  })
+  const canCut = computed(() => {
+    if (pageReadOnly.value) return false
+    if (selectedIds.value.length === 0) return false
+    return selectedIds.value.some((id) => {
+      const c = components.value.find((x) => x.id === id)
+      return c && !isComponentLocked(c)
+    })
+  })
+  const canDelete = computed(() => canCut.value)
 
   // === helpers ===
   /** 避免 HMR 后模块级 nextId 重置导致粘贴出重复 id（Vue v-for 重复 key 不渲染新节点） */
@@ -108,13 +133,57 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function pushHistory() {
+    if (pageReadOnly.value) return
     past.value = [...past.value, { components: cloneComponentsList(components.value), nextId }].slice(-MAX_HISTORY)
     future.value = []
   }
 
+  function getComponentById(id: string): PageComponent | undefined {
+    return components.value.find((c) => c.id === id)
+  }
+
+  function hasLockedInSelection(ids: string[] = selectedIds.value): boolean {
+    return ids.some((id) => {
+      const c = getComponentById(id)
+      return c != null && isComponentLocked(c)
+    })
+  }
+
+  function filterUnlockedIds(ids: string[]): string[] {
+    return ids.filter((id) => {
+      const c = getComponentById(id)
+      return c != null && !isComponentLocked(c)
+    })
+  }
+
+  function setComponentLocked(id: string, locked: boolean) {
+    const comp = getComponentById(id)
+    if (!comp || !!comp.locked === locked) return
+    pushHistory()
+    components.value = components.value.map((c) =>
+      c.id === id ? { ...c, locked: locked || undefined } : c,
+    )
+    if (locked) {
+      selectedIds.value = selectedIds.value.filter((x) => x !== id)
+    }
+  }
+
+  function setComponentsLocked(ids: string[], locked: boolean) {
+    const idSet = new Set(ids)
+    const hasChange = components.value.some((c) => idSet.has(c.id) && !!c.locked !== locked)
+    if (!hasChange) return
+    pushHistory()
+    components.value = components.value.map((c) =>
+      idSet.has(c.id) ? { ...c, locked: locked || undefined } : c,
+    )
+    if (locked) {
+      selectedIds.value = selectedIds.value.filter((x) => !idSet.has(x))
+    }
+  }
+
   // === actions ===
   function undo() {
-    if (past.value.length === 0) return
+    if (pageReadOnly.value || past.value.length === 0) return
     const prev = past.value[past.value.length - 1]!
     future.value = [...future.value, { components: cloneComponentsList(components.value), nextId }]
     past.value = past.value.slice(0, -1)
@@ -124,7 +193,7 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function redo() {
-    if (future.value.length === 0) return
+    if (pageReadOnly.value || future.value.length === 0) return
     const nxt = future.value[future.value.length - 1]!
     past.value = [...past.value, { components: cloneComponentsList(components.value), nextId }]
     future.value = future.value.slice(0, -1)
@@ -172,6 +241,8 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function updateComponentProps(id: string, props: Record<string, unknown>) {
+    const comp = getComponentById(id)
+    if (!comp || isComponentLocked(comp)) return
     pushHistory()
     components.value = components.value.map((c) =>
       c.id === id ? { ...c, props: { ...c.props, ...props } } : c,
@@ -179,6 +250,8 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function replaceComponentProps(id: string, props: Record<string, unknown>) {
+    const comp = getComponentById(id)
+    if (!comp || isComponentLocked(comp)) return
     pushHistory()
     components.value = components.value.map((c) =>
       c.id === id ? { ...c, props: { ...props } } : c,
@@ -186,20 +259,25 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function moveComponent(id: string, x: number, y: number) {
+    const comp = getComponentById(id)
+    if (!comp || isComponentLocked(comp)) return
     pushHistory()
     components.value = components.value.map((c) => (c.id === id ? { ...c, x, y } : c))
   }
 
   function moveComponents(ids: string[], dx: number, dy: number) {
+    const movable = filterUnlockedIds(ids)
+    if (movable.length === 0) return
     pushHistory()
+    const movableSet = new Set(movable)
     components.value = components.value.map((c) =>
-      ids.includes(c.id) ? { ...c, x: Math.round(c.x + dx), y: Math.round(c.y + dy) } : c,
+      movableSet.has(c.id) ? { ...c, x: Math.round(c.x + dx), y: Math.round(c.y + dy) } : c,
     )
   }
 
   function alignSelectedComponents(mode: AlignMode) {
     const ids = selectedIds.value
-    if (ids.length < 2) return
+    if (ids.length < 2 || hasLockedInSelection(ids)) return
 
     const selected = components.value.filter((c) => ids.includes(c.id))
     if (selected.length < 2) return
@@ -239,7 +317,7 @@ export const useEditorStore = defineStore('editor', () => {
 
   function equalizeSelectedWidth() {
     const ids = selectedIds.value
-    if (ids.length < 2) return
+    if (ids.length < 2 || hasLockedInSelection(ids)) return
     const ref = components.value.find((c) => c.id === ids[0])
     if (!ref) return
 
@@ -252,7 +330,7 @@ export const useEditorStore = defineStore('editor', () => {
 
   function equalizeSelectedHeight() {
     const ids = selectedIds.value
-    if (ids.length < 2) return
+    if (ids.length < 2 || hasLockedInSelection(ids)) return
     const ref = components.value.find((c) => c.id === ids[0])
     if (!ref) return
 
@@ -264,6 +342,8 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function resizeComponent(id: string, x: number, y: number, w: number, h: number) {
+    const comp = getComponentById(id)
+    if (!comp || isComponentLocked(comp)) return
     pushHistory()
     components.value = components.value.map((c) =>
       c.id === id ? { ...c, x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) } : c,
@@ -271,18 +351,25 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function removeComponent(id: string) {
+    const comp = getComponentById(id)
+    if (!comp || isComponentLocked(comp)) return
     pushHistory()
     components.value = components.value.filter((c) => c.id !== id)
     selectedIds.value = selectedIds.value.filter((x) => x !== id)
   }
 
   function removeComponents(ids: string[]) {
+    const removable = filterUnlockedIds(ids)
+    if (removable.length === 0) return
+    const removableSet = new Set(removable)
     pushHistory()
-    components.value = components.value.filter((c) => !ids.includes(c.id))
-    selectedIds.value = selectedIds.value.filter((x) => !ids.includes(x))
+    components.value = components.value.filter((c) => !removableSet.has(c.id))
+    selectedIds.value = selectedIds.value.filter((x) => !removableSet.has(x))
   }
 
   function bringToFront(id: string) {
+    const comp = getComponentById(id)
+    if (!comp || isComponentLocked(comp)) return
     const idx = components.value.findIndex((c) => c.id === id)
     if (idx < 0) return
     const arr = [...components.value]
@@ -293,6 +380,8 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function sendToBack(id: string) {
+    const comp = getComponentById(id)
+    if (!comp || isComponentLocked(comp)) return
     const idx = components.value.findIndex((c) => c.id === id)
     if (idx < 0) return
     const arr = [...components.value]
@@ -303,6 +392,8 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function bringForward(id: string) {
+    const comp = getComponentById(id)
+    if (!comp || isComponentLocked(comp)) return
     const idx = components.value.findIndex((c) => c.id === id)
     if (idx < 0 || idx >= components.value.length - 1) return
     const arr = [...components.value]
@@ -312,6 +403,8 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function sendBackward(id: string) {
+    const comp = getComponentById(id)
+    if (!comp || isComponentLocked(comp)) return
     const idx = components.value.findIndex((c) => c.id === id)
     if (idx <= 0) return
     const arr = [...components.value]
@@ -326,14 +419,18 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function cutSelectedComponents() {
-    if (selectedIds.value.length === 0) return
-    clipboard.value = cloneComponentsByIds(components.value, selectedIds.value)
+    if (pageReadOnly.value || selectedIds.value.length === 0) return
+    const unlocked = filterUnlockedIds(selectedIds.value)
+    if (unlocked.length === 0) return
+    clipboard.value = cloneComponentsByIds(components.value, unlocked)
     pushHistory()
-    components.value = components.value.filter((c) => !selectedIds.value.includes(c.id))
-    selectedIds.value = []
+    const unlockedSet = new Set(unlocked)
+    components.value = components.value.filter((c) => !unlockedSet.has(c.id))
+    selectedIds.value = selectedIds.value.filter((x) => !unlockedSet.has(x))
   }
 
   function pasteComponents() {
+    if (pageReadOnly.value) return
     const source = clipboard.value
     if (!source || source.length === 0) return
 
@@ -348,6 +445,7 @@ export const useEditorStore = defineStore('editor', () => {
         id: `comp-${nextId++}`,
         x: Math.round(Number(cloned.x) + PASTE_OFFSET) || 0,
         y: Math.round(Number(cloned.y) + PASTE_OFFSET) || 0,
+        locked: undefined,
       })
     }
 
@@ -371,16 +469,32 @@ export const useEditorStore = defineStore('editor', () => {
     groupDragOffset.value = offset
   }
 
-  function setPageName(name: string) { pageName.value = name }
+  function setPageName(name: string) {
+    if (pageReadOnly.value) return
+    pageName.value = name
+  }
   function setPageSize(width: number, height: number) {
+    if (pageReadOnly.value) return
     const s = clampPageSize(width, height)
     pageWidth.value = s.width
     pageHeight.value = s.height
   }
-  function setBgColor(color: string) { bgColor.value = color }
-  function setBgGradient(gradient: BgGradient) { bgGradient.value = gradient }
-  function setBgImage(url: string) { bgImage.value = url }
-  function setBgOpacity(opacity: number) { bgOpacity.value = opacity }
+  function setBgColor(color: string) {
+    if (pageReadOnly.value) return
+    bgColor.value = color
+  }
+  function setBgGradient(gradient: BgGradient) {
+    if (pageReadOnly.value) return
+    bgGradient.value = gradient
+  }
+  function setBgImage(url: string) {
+    if (pageReadOnly.value) return
+    bgImage.value = url
+  }
+  function setBgOpacity(opacity: number) {
+    if (pageReadOnly.value) return
+    bgOpacity.value = opacity
+  }
 
   function addDataSource(ds: DataSource) {
     pushHistory()
@@ -400,6 +514,8 @@ export const useEditorStore = defineStore('editor', () => {
     )
   }
   function setComponentDataSource(compId: string, dsId: string | undefined) {
+    const comp = getComponentById(compId)
+    if (!comp || isComponentLocked(comp)) return
     pushHistory()
     components.value = components.value.map((c) =>
       c.id === compId ? { ...c, dataSourceId: dsId } : c,
@@ -449,6 +565,7 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function mergeSavedIcon(record: CustomIconRecord) {
+    if (pageReadOnly.value) return
     savedIcons.value = mergeSavedIconIntoPool(savedIcons.value, record)
   }
 
@@ -477,7 +594,7 @@ export const useEditorStore = defineStore('editor', () => {
     }
   }
 
-  function loadPage(pId: number, name: string, schema: PageSchema) {
+  function loadPage(pId: number, name: string, schema: PageSchema, scope: PageScope = 'draft') {
     const comps = Array.isArray(schema.components) ? schema.components : []
     let maxNum = 0
     for (const c of comps) {
@@ -526,6 +643,7 @@ export const useEditorStore = defineStore('editor', () => {
     )
 
     pageId.value = pId
+    pageScope.value = scope
     pageName.value = name
     pageWidth.value = w
     pageHeight.value = h
@@ -566,12 +684,14 @@ export const useEditorStore = defineStore('editor', () => {
 
   return {
     // state
-    components, selectedIds, pageId, pageName, pageWidth, pageHeight,
+    components, selectedIds, pageId, pageScope, pageName, pageWidth, pageHeight,
     bgColor, bgGradient, bgImage, bgOpacity,
     dataSources, colorDict, iconDict, savedIcons, abbrevDict,
     past, future, groupDragOffset, clipboard,
     // computed
-    firstSelectedId, canUndo, canRedo, canCopy, canPaste, canMoveUp, canMoveDown, canAlign,
+    pageReadOnly,
+    firstSelectedId, canUndo, canRedo, canCopy, canPaste, canCut, canDelete,
+    canMoveUp, canMoveDown, canAlign,
     // actions
     undo, redo,
     selectComponent, selectComponents,
@@ -579,6 +699,7 @@ export const useEditorStore = defineStore('editor', () => {
     moveComponent, moveComponents, alignSelectedComponents,
     equalizeSelectedWidth, equalizeSelectedHeight, resizeComponent,
     removeComponent, removeComponents,
+    setComponentLocked, setComponentsLocked, hasLockedInSelection,
     bringToFront, sendToBack, bringForward, sendBackward,
     copySelectedComponents, cutSelectedComponents, pasteComponents,
     setGroupDragOffset,

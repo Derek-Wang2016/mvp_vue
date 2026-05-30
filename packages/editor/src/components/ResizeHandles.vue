@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { PageComponent } from '@mvp-vue/schema'
+import { isComponentLocked } from '@mvp-vue/schema'
 import { useEditorStore } from '../stores/editorStore'
 
 type Dir = 'nw' | 'n' | 'ne' | 'w' | 'e' | 'sw' | 's' | 'se'
@@ -52,6 +53,7 @@ function calcRect(
 }
 
 function handlePointerDown(dir: Dir, e: PointerEvent) {
+  if (isComponentLocked(props.comp)) return
   e.stopPropagation()
   e.preventDefault()
   ;(e.target as HTMLElement).setPointerCapture?.(e.pointerId)

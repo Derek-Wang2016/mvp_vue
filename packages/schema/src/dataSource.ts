@@ -36,3 +36,53 @@ export function resolveCombinedImportFieldNames(
   const intersected = compAllow.filter((k) => dsSet.has(k))
   return intersected.length > 0 ? intersected : compAllow
 }
+
+/** 从页面 URL 查询参数解析值；无 URL 值时使用 default（trim 后非空才返回） */
+export function resolveUrlQueryParamValue(
+  name: string,
+  searchParams: URLSearchParams,
+  defaultValue?: string,
+): string | undefined {
+  const trimmedName = name.trim()
+  if (!trimmedName) return undefined
+
+  const fromUrl = searchParams.get(trimmedName)
+  if (fromUrl != null && fromUrl.trim().length > 0) return fromUrl
+
+  const fallback = defaultValue?.trim()
+  return fallback && fallback.length > 0 ? fallback : undefined
+}
+
+/** 向 URL 追加单个 query 参数（自动选择 ? 或 &） */
+export function appendQueryParamToUrl(baseUrl: string, name: string, value: string): string {
+  const params = new URLSearchParams()
+  params.set(name, value)
+  const qs = params.toString()
+  return baseUrl + (baseUrl.includes('?') ? '&' : '?') + qs
+}
+
+/**
+ * 解析 REST 数据源实际请求 URL：
+ * - 无 url 返回 undefined
+ * - 配置了 urlQueryParam 且解析出值时拼接到 REST URL
+ * - 否则返回原始 url
+ */
+export function resolveRestDataSourceUrl(
+  ds: {
+    url?: string
+    urlQueryParam?: string
+    urlQueryParamDefault?: string
+  },
+  searchParams: URLSearchParams,
+): string | undefined {
+  const baseUrl = ds.url?.trim()
+  if (!baseUrl) return undefined
+
+  const paramName = ds.urlQueryParam?.trim()
+  if (!paramName) return baseUrl
+
+  const value = resolveUrlQueryParamValue(paramName, searchParams, ds.urlQueryParamDefault)
+  if (value == null) return baseUrl
+
+  return appendQueryParamToUrl(baseUrl, paramName, value)
+}

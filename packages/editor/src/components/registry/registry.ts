@@ -34,6 +34,7 @@ import PageNavButtonPropertyFields from './page-nav-button/PageNavButtonProperty
 import PageNavButtonCanvasPreview from './page-nav-button/PageNavButtonCanvasPreview.vue'
 import ChartPropertyFields from './chart/ChartPropertyFields.vue'
 import ChartCanvasPreview from './chart/ChartCanvasPreview.vue'
+import ChartDataFields from './chart/ChartDataFields.vue'
 import TablePropertyFields from './table/TablePropertyFields.vue'
 import TableCanvasPreview from './table/TableCanvasPreview.vue'
 import MapPropertyFields from './map/MapPropertyFields.vue'
@@ -59,6 +60,7 @@ const chartDef = {
   defaultSize: chartDefaultSize,
   PropertyFields: ChartPropertyFields,
   CanvasPreview: ChartCanvasPreview,
+  DataFields: ChartDataFields,
 }
 
 export const editorRegistry: EditorRegistry = {

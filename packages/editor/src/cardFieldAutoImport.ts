@@ -3,6 +3,7 @@ import {
   resolveByPath,
   resolveCardItem,
   resolveCombinedImportFieldNames,
+  resolveRestDataSourceUrl,
 } from '@mvp-vue/schema'
 
 export interface ImportFieldWhitelistOptions {
@@ -127,11 +128,12 @@ export async function fetchPageDataSourcePayload(ds: DataSource): Promise<unknow
   }
 
   if (!ds.url?.trim()) throw new Error('REST 数据源未配置 URL')
+  const requestUrl = resolveRestDataSourceUrl(ds, new URLSearchParams(window.location.search)) ?? ds.url
   const res = await fetch(`${getApiBase()}/api/data-proxy`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      url: ds.url,
+      url: requestUrl,
       method: ds.method ?? 'GET',
       headers: ds.headers,
       dataPath: ds.dataPath,

@@ -1,5 +1,6 @@
-import { ref, computed, provide, inject, onBeforeUnmount, watch, type Ref, type InjectionKey, type ComputedRef } from 'vue'
+import { ref, computed, provide, inject, onBeforeUnmount, onMounted, watch, type Ref, type InjectionKey, type ComputedRef } from 'vue'
 import type { DataSource } from '@mvp-vue/schema'
+import { resolveRestDataSourceUrl } from '@mvp-vue/schema'
 import { getApiBase } from '../config'
 
 export interface DataState {
@@ -53,7 +54,10 @@ function buildInitialMap(dataSources: DataSource[]): DataMap {
 }
 
 /** 在 DataProvider 内调用：注册 dataMap、拉取数据源，并返回 dispose */
-export function useProvideDataSources(getDataSources: () => DataSource[]) {
+export function useProvideDataSources(
+  getDataSources: () => DataSource[],
+  getPageSearchParams: () => URLSearchParams = () => new URLSearchParams(window.location.search),
+) {
   const dataMap = ref<DataMap>(buildInitialMap(getDataSources()))
   let generation = 0
   const timers = new Map<string, ReturnType<typeof setInterval>>()
@@ -91,11 +95,12 @@ export function useProvideDataSources(getDataSources: () => DataSource[]) {
         const json = await res.json()
         result = json.data
       } else {
+        const requestUrl = resolveRestDataSourceUrl(ds, getPageSearchParams()) ?? ds.url
         const res = await fetch(`${getApiBase()}/api/data-proxy`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            url: ds.url,
+            url: requestUrl,
             method: ds.method,
             headers: ds.headers,
             dataPath: ds.dataPath,
@@ -140,7 +145,18 @@ export function useProvideDataSources(getDataSources: () => DataSource[]) {
 
   watch(getDataSources, (sources) => load(sources), { deep: true })
 
-  onBeforeUnmount(() => dispose())
+  function onPopState() {
+    load(getDataSources())
+  }
+
+  onMounted(() => {
+    window.addEventListener('popstate', onPopState)
+  })
+
+  onBeforeUnmount(() => {
+    window.removeEventListener('popstate', onPopState)
+    dispose()
+  })
 
   load(getDataSources())
 

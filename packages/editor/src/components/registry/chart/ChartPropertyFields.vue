@@ -32,6 +32,24 @@ const props = defineProps<ComponentPropertyFieldsProps>()
     :value="(comp.props.textColor as string) ?? DEFAULT_CHART_TEXT_COLOR"
     @change="(v: string) => props.updateProps({ textColor: v })"
   />
+  <label class="flex items-center gap-2 cursor-pointer">
+    <input
+      type="checkbox"
+      class="rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-indigo-400/40"
+      :checked="comp.props.showValue === true"
+      @change="props.updateProps({ showValue: ($event.target as HTMLInputElement).checked })"
+    />
+    <span :class="PROP_LABEL">显示数值</span>
+  </label>
+  <label class="flex items-center gap-2 cursor-pointer">
+    <input
+      type="checkbox"
+      class="rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-indigo-400/40"
+      :checked="comp.props.showLegend === true"
+      @change="props.updateProps({ showLegend: ($event.target as HTMLInputElement).checked })"
+    />
+    <span :class="PROP_LABEL">显示图例</span>
+  </label>
   <label class="block">
     <span :class="PROP_LABEL">分类字段</span>
     <input

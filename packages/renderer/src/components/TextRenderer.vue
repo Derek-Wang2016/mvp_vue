@@ -44,6 +44,7 @@ const displayContent = computed(() => {
     :style="{
       fontSize: ((comp.props.fontSize as number) ?? 20) + 'px',
       fontFamily: (comp.props.fontFamily as string) ?? 'sans-serif',
+      fontWeight: (comp.props.fontWeight as string) ?? 'normal',
       color: (comp.props.color as string) ?? '#fff',
       whiteSpace: 'pre-wrap',
     }"

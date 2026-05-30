@@ -2,7 +2,7 @@
 import { ref, watch } from 'vue'
 import ColorSwatch from '../../ColorSwatch.vue'
 import EditorNumberInput from '../../EditorNumberInput.vue'
-import { PROP_LABEL, PROP_INPUT, PROP_NUMBER_WRAP, PROP_NUMBER_INNER } from '../../propertyPanel/shared'
+import { PROP_LABEL, PROP_INPUT, PROP_NUMBER_WRAP, PROP_NUMBER_INNER, PROP_SELECT_COMPACT } from '../../propertyPanel/shared'
 import type { ComponentPropertyFieldsProps } from '../types'
 
 const props = defineProps<ComponentPropertyFieldsProps>()
@@ -51,6 +51,17 @@ function saveContent() {
       :model-value="(comp.props.fontSize as number) ?? 20"
       @update:model-value="props.updateProps({ fontSize: Number($event) })"
     />
+  </label>
+  <label class="block">
+    <span :class="PROP_LABEL">字重</span>
+    <select
+      :class="PROP_SELECT_COMPACT"
+      :value="(comp.props.fontWeight as string) ?? 'normal'"
+      @change="props.updateProps({ fontWeight: ($event.target as HTMLSelectElement).value as 'normal' | 'bold' })"
+    >
+      <option value="normal">正常</option>
+      <option value="bold">加粗</option>
+    </select>
   </label>
   <label class="block">
     <span :class="PROP_LABEL">颜色</span>

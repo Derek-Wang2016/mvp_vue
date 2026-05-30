@@ -99,6 +99,11 @@ pnpm dev:server       # → http://localhost:3002
 环境变量（editor/renderer）：
 
 - `VITE_API_BASE` — 默认 `http://localhost:3002`
+- `VITE_PAGE_POLICY=strict` — 发布态双表策略（与后端 `PAGE_POLICY=strict` 成对）：调试表只读，编辑/保存发布表；Renderer 始终读发布表
+
+后端（`../mvp`，`@mvp/server`）：
+
+- `PAGE_POLICY=strict` — 同上；未设置则调试行为（自增 id、可改删任意页）
 
 ---
 

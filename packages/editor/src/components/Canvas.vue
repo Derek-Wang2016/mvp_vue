@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import type { PageComponent, ComponentType } from '@mvp-vue/schema'
+import { isComponentLocked } from '@mvp-vue/schema'
 import { useEditorStore } from '../stores/editorStore'
 import { storeToRefs } from 'pinia'
 import ResizeHandles from './ResizeHandles.vue'
@@ -12,7 +13,7 @@ const emit = defineEmits<{
 }>()
 
 const store = useEditorStore()
-const { components, pageWidth, pageHeight, bgColor, bgGradient, bgImage, bgOpacity, selectedIds, groupDragOffset } = storeToRefs(store)
+const { components, pageWidth, pageHeight, bgColor, bgGradient, bgImage, bgOpacity, selectedIds, groupDragOffset, pageReadOnly } = storeToRefs(store)
 
 const props = defineProps<{ showGrid: boolean }>()
 
@@ -35,9 +36,9 @@ function pointInComp(c: PageComponent, x: number, y: number) {
   return x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h
 }
 
-/** 画布坐标：重叠区优先命中已选组件（数组靠后者为上层） */
+/** 画布坐标：重叠区优先命中已选组件（数组靠后者为上层）；锁定组件不参与命中 */
 function resolvePointerTarget(domComp: PageComponent, canvasX: number, canvasY: number): PageComponent {
-  const hit = components.value.filter((c) => pointInComp(c, canvasX, canvasY))
+  const hit = components.value.filter((c) => !isComponentLocked(c) && pointInComp(c, canvasX, canvasY))
   if (hit.length === 0) return domComp
   const selectedHit = hit.filter((c) => selectedIds.value.includes(c.id))
   if (selectedHit.length > 0) return selectedHit[selectedHit.length - 1]!
@@ -148,7 +149,7 @@ function handlePointerUp() {
 
   if (selRect.w > 3 || selRect.h > 3) {
     const ids = components.value
-      .filter((c) => rectsIntersect({ x: c.x, y: c.y, w: c.w, h: c.h }, selRect))
+      .filter((c) => !isComponentLocked(c) && rectsIntersect({ x: c.x, y: c.y, w: c.w, h: c.h }, selRect))
       .map((c) => c.id)
     store.selectComponents(ids)
   } else {
@@ -191,8 +192,10 @@ function endDragSession() {
 }
 
 function handleCompPointerDown(e: PointerEvent, domComp: PageComponent) {
+  if (pageReadOnly.value) return
   if (editingCompId.value) return
   if (e.button !== 0) return
+  if (isComponentLocked(domComp)) return
   e.stopPropagation()
 
   endDragSession()
@@ -201,6 +204,7 @@ function handleCompPointerDown(e: PointerEvent, domComp: PageComponent) {
   if (!pt) return
 
   const target = resolvePointerTarget(domComp, pt.x, pt.y)
+  if (isComponentLocked(target)) return
 
   if (e.shiftKey) {
     store.selectComponent(target.id, true)
@@ -271,12 +275,20 @@ function handleCompPointerDown(e: PointerEvent, domComp: PageComponent) {
 }
 
 function handleCompContextMenu(e: MouseEvent, compId: string) {
+  const comp = components.value.find((c) => c.id === compId)
+  if (!comp || isComponentLocked(comp)) return
   e.preventDefault()
   e.stopPropagation()
   if (!selectedIds.value.includes(compId)) {
     store.selectComponent(compId)
   }
   emit('contextmenu', e, compId)
+}
+
+function handleUnlockClick(e: MouseEvent, compId: string) {
+  e.stopPropagation()
+  store.setComponentLocked(compId, false)
+  store.selectComponent(compId)
 }
 
 // Panel → Canvas drop (HTML5 DnD)
@@ -292,6 +304,7 @@ function isPanelComponentDrag(dt: DataTransfer): boolean {
 }
 
 function handlePanelDragEnterOrOver(e: DragEvent) {
+  if (pageReadOnly.value) return
   const dt = e.dataTransfer
   if (!dt || !isPanelComponentDrag(dt)) return
   e.preventDefault()
@@ -299,6 +312,7 @@ function handlePanelDragEnterOrOver(e: DragEvent) {
 }
 
 function handleDrop(e: DragEvent) {
+  if (pageReadOnly.value) return
   e.preventDefault()
   const dt = e.dataTransfer
   if (!dt) return
@@ -369,13 +383,14 @@ function handleDrop(e: DragEvent) {
         <div
           v-for="comp in displayComponents"
           :key="`${comp.id}-${comp.type}`"
+          :class="{ 'pointer-events-none': comp.locked }"
           :style="{
             position: 'absolute',
             left: `${comp.x}px`,
             top: `${comp.y}px`,
             width: `${comp.w}px`,
             height: `${comp.h}px`,
-            cursor: editingCompId === comp.id ? 'text' : 'grab',
+            cursor: comp.locked ? 'default' : (editingCompId === comp.id ? 'text' : 'grab'),
             overflow: 'visible',
             ...(groupDragOffset && isSelected(comp.id)
               ? { transform: `translate3d(${groupDragOffset.dx}px, ${groupDragOffset.dy}px, 0)` }
@@ -403,13 +418,30 @@ function handleDrop(e: DragEvent) {
           <!-- component boundary (always visible) -->
           <div
             class="absolute inset-0 pointer-events-none"
-            :class="isSelected(comp.id)
-              ? (isOnlySelected(comp.id)
-                ? 'border-[4px] border-blue-400 ring-[3px] ring-blue-500/30 shadow-[0_0_20px_rgba(96,165,250,0.55),0_0_6px_rgba(59,130,246,0.7)]'
-                : 'border-[4px] border-cyan-400 ring-[3px] ring-cyan-500/25 shadow-[0_0_15px_rgba(34,211,238,0.4)]')
-              : 'border-[2px] border-dashed border-slate-400/45'"
+            :class="comp.locked
+              ? 'border-[2px] border-dashed border-amber-400/60'
+              : (isSelected(comp.id)
+                ? (isOnlySelected(comp.id)
+                  ? 'border-[4px] border-blue-400 ring-[3px] ring-blue-500/30 shadow-[0_0_20px_rgba(96,165,250,0.55),0_0_6px_rgba(59,130,246,0.7)]'
+                  : 'border-[4px] border-cyan-400 ring-[3px] ring-cyan-500/25 shadow-[0_0_15px_rgba(34,211,238,0.4)]')
+                : 'border-[2px] border-dashed border-slate-400/45')"
           />
-          <ResizeHandles v-if="isSelected(comp.id) && isOnlySelected(comp.id)" :comp="comp" :canvas-scale="canvasScale" />
+          <ResizeHandles v-if="!pageReadOnly && isSelected(comp.id) && isOnlySelected(comp.id) && !comp.locked" :comp="comp" :canvas-scale="canvasScale" />
+
+          <!-- lock badge -->
+          <div
+            v-if="comp.locked"
+            class="absolute top-0 left-0 z-30 pointer-events-auto select-none -translate-x-1/3 -translate-y-1/3"
+            title="点击解锁"
+            @click="(e) => handleUnlockClick(e, comp.id)"
+          >
+            <div class="flex items-center justify-center w-[22px] h-[22px] rounded-full bg-slate-950/92 border-2 border-amber-400 shadow-[0_1px_6px_rgba(0,0,0,0.65),0_0_10px_rgba(251,191,36,0.4)] cursor-pointer hover:border-amber-300">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+            </div>
+          </div>
 
           <!-- data source badge -->
           <div

@@ -16,6 +16,8 @@ import { Icon } from '@iconify/vue'
 import { PROP_LABEL, PROP_HINT, PROP_SECTION, PROP_SELECT_COMPACT, parseColor } from './shared'
 import { useColorPicker } from '../../composables/useColorPicker'
 
+defineProps<{ readOnly?: boolean }>()
+
 const store = useEditorStore()
 const { openColorPicker } = useColorPicker()
 const {
@@ -35,6 +37,8 @@ const newDsType = ref<DataSourceType>('static')
 const newDsId = ref('')
 const newDsUrl = ref('')
 const newDsDataPath = ref('')
+const newDsUrlQueryParam = ref('')
+const newDsUrlQueryParamDefault = ref('')
 const newDsRefresh = ref(0)
 const newDsQuery = ref('')
 const newDsStaticData = ref('')
@@ -59,6 +63,11 @@ function updateImportWhitelistField(idx: number, value: string) {
 
 function buildImportFieldWhitelist(): string[] {
   return newDsImportWhitelist.value.map((s) => s.trim()).filter((s) => s.length > 0)
+}
+
+function applyRestUrlQueryParams(target: Partial<DataSource>) {
+  target.urlQueryParam = newDsUrlQueryParam.value.trim() || undefined
+  target.urlQueryParamDefault = newDsUrlQueryParamDefault.value.trim() || undefined
 }
 
 // Icon picker state
@@ -89,6 +98,7 @@ function handleSubmit() {
       partial.url = newDsUrl.value
       partial.dataPath = newDsDataPath.value || undefined
       partial.refreshInterval = newDsRefresh.value || undefined
+      applyRestUrlQueryParams(partial)
     } else if (newDsType.value === 'sql') {
       partial.query = newDsQuery.value
       partial.refreshInterval = newDsRefresh.value || undefined
@@ -107,6 +117,7 @@ function handleSubmit() {
       ds.url = newDsUrl.value
       ds.dataPath = newDsDataPath.value || undefined
       ds.refreshInterval = newDsRefresh.value || undefined
+      applyRestUrlQueryParams(ds)
     } else if (newDsType.value === 'sql') {
       ds.query = newDsQuery.value
       ds.refreshInterval = newDsRefresh.value || undefined
@@ -126,6 +137,8 @@ function startEdit(dsId: string) {
   newDsId.value = ds.id
   newDsUrl.value = ds.url ?? ''
   newDsDataPath.value = ds.dataPath ?? ''
+  newDsUrlQueryParam.value = ds.urlQueryParam ?? ''
+  newDsUrlQueryParamDefault.value = ds.urlQueryParamDefault ?? ''
   newDsRefresh.value = ds.refreshInterval ?? 0
   newDsQuery.value = ds.query ?? ''
   newDsStaticData.value = ds.staticData ? JSON.stringify(ds.staticData, null, 2) : ''
@@ -141,6 +154,8 @@ function resetForm() {
   newDsId.value = ''
   newDsUrl.value = ''
   newDsDataPath.value = ''
+  newDsUrlQueryParam.value = ''
+  newDsUrlQueryParamDefault.value = ''
   newDsRefresh.value = 0
   newDsQuery.value = ''
   newDsStaticData.value = ''
@@ -188,7 +203,10 @@ function tabClass(id: TabId) {
 </script>
 
 <template>
-  <aside class="relative z-30 flex h-full min-h-0 w-[320px] shrink-0 flex-col border-l border-white/10 bg-[#0f1824] p-3">
+  <aside
+    class="relative z-30 flex h-full min-h-0 w-[320px] shrink-0 flex-col border-l border-white/10 bg-[#0f1824] p-3"
+    :class="readOnly ? 'pointer-events-none opacity-60' : ''"
+  >
     <h2 :class="[PROP_SECTION, 'mb-3 flex shrink-0 items-center gap-1.5']">
       <span class="text-indigo-400 text-[8px]">◆</span>
       页面属性
@@ -301,6 +319,22 @@ function tabClass(id: TabId) {
                 placeholder="https://api.example.com/data" v-model="newDsUrl" />
             </label>
             <label class="block">
+              <span class="text-[9px] text-slate-500">URL 参数名</span>
+              <input class="w-full mt-0.5 bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-slate-200 font-mono"
+                placeholder="deviceId" v-model="newDsUrlQueryParam" />
+              <p :class="[PROP_HINT, 'mt-0.5 leading-snug']">
+                从页面地址读取同名 query 参数，拼接到 REST URL；Renderer 如 ?deviceId=abc
+              </p>
+            </label>
+            <label class="block">
+              <span class="text-[9px] text-slate-500">URL 参数默认值</span>
+              <input class="w-full mt-0.5 bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-slate-200 font-mono"
+                placeholder="default-001" v-model="newDsUrlQueryParamDefault" />
+              <p :class="[PROP_HINT, 'mt-0.5 leading-snug']">
+                页面 URL 无该参数时使用；未填写且无 URL 值时不追加
+              </p>
+            </label>
+            <label class="block">
               <span class="text-[9px] text-slate-500">数据路径 (JSONPath)</span>
               <input class="w-full mt-0.5 bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-slate-200"
                 placeholder="$.data.items" v-model="newDsDataPath" />
@@ -382,6 +416,13 @@ function tabClass(id: TabId) {
               :title="ds.importFieldWhitelist.join(', ')"
             >
               · 白名单 {{ ds.importFieldWhitelist.length }} 项
+            </span>
+            <span
+              v-if="ds.urlQueryParam"
+              class="text-slate-500 ml-1"
+              :title="ds.urlQueryParamDefault ? `默认: ${ds.urlQueryParamDefault}` : undefined"
+            >
+              · URL 参数 {{ ds.urlQueryParam }}
             </span>
           </div>
           <div class="flex items-center gap-2">

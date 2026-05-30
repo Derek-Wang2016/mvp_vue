@@ -4,6 +4,7 @@ import { useEditorStore } from './stores/editorStore'
 import { storeToRefs } from 'pinia'
 import { savePage, updatePage, getPage, listPages } from './api'
 import type { PageListItem } from './api'
+import { defaultEditorPageScope, parsePageScope } from './pagePolicy'
 import ComponentPanel from './components/ComponentPanel.vue'
 import Canvas from './components/Canvas.vue'
 import PropertyPanel from './components/PropertyPanel.vue'
@@ -13,8 +14,8 @@ import ColorPickerDialog from './components/ColorPickerDialog.vue'
 
 const store = useEditorStore()
 const {
-  pageName, pageId, canUndo, canRedo, canCopy, canPaste,
-  canMoveUp, canMoveDown, canAlign, firstSelectedId,
+  pageName, pageId, pageScope, pageReadOnly, canUndo, canRedo, canCopy, canPaste, canCut, canDelete,
+  canMoveUp, canMoveDown, canAlign, firstSelectedId, components, selectedIds,
 } = storeToRefs(store)
 
 const saving = ref(false)
@@ -32,6 +33,17 @@ const currentPageId = computed<number | null>(() => (
 ))
 const hasUnsavedChanges = computed(() => makeFingerprint() !== savedFingerprint.value)
 
+const contextMenuComp = computed(() => {
+  if (!contextMenu.value) return undefined
+  return components.value.find((c) => c.id === contextMenu.value!.compId)
+})
+
+const contextMenuCompLocked = computed(() => !!contextMenuComp.value?.locked)
+
+const contextMenuCanLayer = computed(() => !pageReadOnly.value && !contextMenuCompLocked.value)
+
+const contextMenuCanDelete = computed(() => canDelete.value)
+
 // Shift key tracking
 const shiftRef = ref(false)
 
@@ -43,13 +55,15 @@ const contextMenu = ref<ContextMenuState | null>(null)
 
 // URL ?id= loading + global shortcuts（须挂 window，否则画布选中后根节点无焦点快捷键失效）
 onMounted(() => {
-  fetchPageOptions()
   const params = new URLSearchParams(window.location.search)
+  const scopeParam = params.get('scope')
+  store.pageScope = scopeParam ? parsePageScope(scopeParam) : defaultEditorPageScope()
+  fetchPageOptions()
   const id = params.get('id')
   if (id) {
-    getPage(Number(id))
+    getPage(store.pageScope, Number(id))
       .then((data) => {
-        store.loadPage(data.id, data.name, data.schemaJson)
+        store.loadPage(data.id, data.name, data.schemaJson, store.pageScope)
         markSaved()
       })
       .catch(() => { saveMsg.value = '加载失败' })
@@ -68,7 +82,7 @@ onBeforeUnmount(() => {
 })
 
 function makeFingerprint() {
-  return JSON.stringify({ name: store.pageName, schema: store.toSchema() })
+  return JSON.stringify({ scope: store.pageScope, name: store.pageName, schema: store.toSchema() })
 }
 
 function markSaved() {
@@ -78,7 +92,7 @@ function markSaved() {
 async function fetchPageOptions() {
   pageOptionsLoading.value = true
   try {
-    pageOptions.value = await listPages()
+    pageOptions.value = await listPages(pageScope.value)
   } catch {
     // keep existing options if refresh fails
   } finally {
@@ -90,33 +104,39 @@ const editorRootRef = ref<HTMLElement | null>(null)
 
 // Save
 async function handleSave() {
+  if (pageReadOnly.value) {
+    saveMsg.value = '当前调试页在发布环境下不可保存'
+    return
+  }
   saving.value = true
   saveMsg.value = ''
   try {
     const schema = store.toSchema()
     const name = store.pageName
     const id = store.pageId
+    const scope = pageScope.value
     if (id) {
-      await updatePage(id, name, schema)
+      await updatePage(scope, id, name, schema)
       saveMsg.value = '已更新'
     } else {
-      const result = await savePage(name, schema)
+      const result = await savePage(scope, name, schema)
       store.pageId = result.id
       saveMsg.value = '已保存'
     }
     markSaved()
     await fetchPageOptions()
     lastSavedAt.value = new Date().toLocaleString('zh-CN', { hour12: false })
-  } catch {
-    saveMsg.value = '保存失败'
+  } catch (e) {
+    saveMsg.value = e instanceof Error ? e.message : '保存失败'
   } finally {
     saving.value = false
   }
 }
 
 async function switchPageById(id: number) {
-  const data = await getPage(id)
-  store.loadPage(data.id, data.name, data.schemaJson)
+  const scope = pageScope.value
+  const data = await getPage(scope, id)
+  store.loadPage(data.id, data.name, data.schemaJson, scope)
   markSaved()
 }
 
@@ -145,6 +165,10 @@ function handleOpenDialogClose() {
   fetchPageOptions()
 }
 
+watch(pageScope, () => {
+  fetchPageOptions()
+})
+
 watch(pageId, (next, prev) => {
   if (next !== prev) markSaved()
 })
@@ -157,6 +181,22 @@ function handleCanvasContextMenu(e: MouseEvent, compId: string) {
 
 function closeContextMenu() {
   contextMenu.value = null
+}
+
+function contextMenuToggleLock() {
+  if (!contextMenu.value) return
+  if (selectedIds.value.length > 1) {
+    const anyUnlocked = selectedIds.value.some((id) => {
+      const c = components.value.find((x) => x.id === id)
+      return c && !c.locked
+    })
+    store.setComponentsLocked([...selectedIds.value], anyUnlocked)
+  } else {
+    const comp = contextMenuComp.value
+    if (!comp) return
+    store.setComponentLocked(comp.id, !comp.locked)
+  }
+  closeContextMenu()
 }
 
 let disarmContextMenuClose: (() => void) | null = null
@@ -221,7 +261,9 @@ function handleKeyDown(e: KeyboardEvent) {
     e.preventDefault(); store.redo(); return
   }
   if (mod && key === 's') {
-    e.preventDefault(); handleSave(); return
+    e.preventDefault()
+    if (!pageReadOnly.value) handleSave()
+    return
   }
   if (mod && key === 'c' && !editable) {
     if (store.selectedIds.length > 0) {
@@ -230,7 +272,7 @@ function handleKeyDown(e: KeyboardEvent) {
     return
   }
   if (mod && key === 'x' && !editable) {
-    if (store.selectedIds.length > 0) {
+    if (canCut.value) {
       e.preventDefault(); store.cutSelectedComponents()
     }
     return
@@ -242,7 +284,7 @@ function handleKeyDown(e: KeyboardEvent) {
     return
   }
   if ((e.key === 'Delete' || e.key === 'Backspace') && !editable && !mod) {
-    if (store.selectedIds.length > 0) {
+    if (canDelete.value) {
       e.preventDefault()
       store.removeComponents([...store.selectedIds])
     }
@@ -319,12 +361,20 @@ const alignBtnClass = (enabled: boolean) =>
         <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z" clip-rule="evenodd" />
       </svg>
 
-      <!-- page id -->
       <span
         class="text-[10px] tabular-nums px-2 py-1 rounded-md border border-white/10 bg-white/5 text-slate-400"
-        :title="currentPageId ? `当前页面 ID：${currentPageId}` : '当前页面尚未保存（无 ID）'"
+        :title="currentPageId ? `当前页面 ID：${currentPageId}（${pageScope === 'draft' ? '调试' : '发布'}）` : '当前页面尚未保存（无 ID）'"
       >
-        ID: <span class="text-slate-200">{{ currentPageId ?? '未保存' }}</span>
+        {{ pageScope === 'draft' ? '调试' : '发布' }}
+        · ID: <span class="text-slate-200">{{ currentPageId ?? '未保存' }}</span>
+      </span>
+
+      <span
+        v-if="pageReadOnly"
+        class="text-[10px] px-2 py-1 rounded-md border border-amber-400/30 bg-amber-500/10 text-amber-300"
+        title="发布环境下调试表仅可查看"
+      >
+        只读
       </span>
 
       <!-- undo/redo -->
@@ -352,8 +402,8 @@ const alignBtnClass = (enabled: boolean) =>
       />
       <button
         class="px-2 py-1 rounded-md border transition-colors"
-        :class="canCopy ? 'text-slate-400 border-white/10 bg-white/5 hover:text-slate-200 hover:bg-white/10 hover:border-white/15' : 'text-slate-700 border-white/5 bg-white/[0.02] cursor-not-allowed'"
-        :disabled="!canCopy" @click="store.cutSelectedComponents()" title="剪切 (Ctrl+X)"
+        :class="canCut ? 'text-slate-400 border-white/10 bg-white/5 hover:text-slate-200 hover:bg-white/10 hover:border-white/15' : 'text-slate-700 border-white/5 bg-white/[0.02] cursor-not-allowed'"
+        :disabled="!canCut" @click="store.cutSelectedComponents()" title="剪切 (Ctrl+X)"
         v-html="CutIcon"
       />
       <button
@@ -471,7 +521,7 @@ const alignBtnClass = (enabled: boolean) =>
 
       <button
         class="bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-400 hover:to-violet-500 text-white text-xs px-4 py-1.5 rounded-md font-medium shadow-sm shadow-indigo-500/25 disabled:opacity-50 transition-all"
-        :disabled="saving" @click="handleSave"
+        :disabled="saving || pageReadOnly" @click="handleSave"
       >
         {{ saving ? '保存中...' : '保存' }}
       </button>
@@ -503,7 +553,7 @@ const alignBtnClass = (enabled: boolean) =>
       <button class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed" :disabled="!canCopy" @click="store.copySelectedComponents(); closeContextMenu()">
         拷贝 <span class="float-right text-slate-500 text-xs">Ctrl+C</span>
       </button>
-      <button class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed" :disabled="!canCopy" @click="store.cutSelectedComponents(); closeContextMenu()">
+      <button class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed" :disabled="!canCut" @click="store.cutSelectedComponents(); closeContextMenu()">
         剪切 <span class="float-right text-slate-500 text-xs">Ctrl+X</span>
       </button>
       <button class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed" :disabled="!canPaste" @click="store.pasteComponents(); closeContextMenu()">
@@ -553,12 +603,41 @@ const alignBtnClass = (enabled: boolean) =>
         等高
       </button>
       <div class="border-t border-white/10 my-1" />
-      <button class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors" @click="contextMenu && store.bringToFront(contextMenu.compId); closeContextMenu()">置顶</button>
-      <button class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors" @click="contextMenu && store.bringForward(contextMenu.compId); closeContextMenu()">上一层</button>
-      <button class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors" @click="contextMenu && store.sendBackward(contextMenu.compId); closeContextMenu()">下一层</button>
-      <button class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors" @click="contextMenu && store.sendToBack(contextMenu.compId); closeContextMenu()">置底</button>
+      <button
+        class="w-full text-left px-3 py-1.5 text-sm text-amber-300 hover:bg-amber-500/10 transition-colors"
+        @click="contextMenuToggleLock()"
+      >
+        {{ selectedIds.length > 1
+          ? (selectedIds.some(id => !components.find(c => c.id === id)?.locked) ? '锁定选中' : '解锁选中')
+          : (contextMenuCompLocked ? '解锁组件' : '锁定组件') }}
+      </button>
       <div class="border-t border-white/10 my-1" />
-      <button class="w-full text-left px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors" @click="contextMenu && store.removeComponent(contextMenu.compId); closeContextMenu()">删除组件</button>
+      <button
+        class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        :disabled="!contextMenuCanLayer"
+        @click="contextMenu && store.bringToFront(contextMenu.compId); closeContextMenu()"
+      >置顶</button>
+      <button
+        class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        :disabled="!contextMenuCanLayer"
+        @click="contextMenu && store.bringForward(contextMenu.compId); closeContextMenu()"
+      >上一层</button>
+      <button
+        class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        :disabled="!contextMenuCanLayer"
+        @click="contextMenu && store.sendBackward(contextMenu.compId); closeContextMenu()"
+      >下一层</button>
+      <button
+        class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        :disabled="!contextMenuCanLayer"
+        @click="contextMenu && store.sendToBack(contextMenu.compId); closeContextMenu()"
+      >置底</button>
+      <div class="border-t border-white/10 my-1" />
+      <button
+        class="w-full text-left px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        :disabled="!contextMenuCanDelete"
+        @click="contextMenu && store.removeComponent(contextMenu.compId); closeContextMenu()"
+      >删除组件</button>
     </div>
   </div>
 </template>

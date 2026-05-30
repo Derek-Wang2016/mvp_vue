@@ -29,6 +29,8 @@ Editor (Vue)  →  JSON Schema  →  Server (Fastify)  →  Renderer (Vue)
 
 环境变量见根目录 [.env.example](.env.example)（`VITE_API_BASE`，默认 `http://<hostname>:3002`）。
 
+**发布态双表策略**（可选）：编辑器 `VITE_PAGE_POLICY=strict` 与后端 `PAGE_POLICY=strict` 成对启用后，调试表（`/api/draft/pages`）只读，发布表（`/api/publish/pages`）可编辑；Renderer 只读发布表。
+
 ## 克隆后启动
 
 ```bash

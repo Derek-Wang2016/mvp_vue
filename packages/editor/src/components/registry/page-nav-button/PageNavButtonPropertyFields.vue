@@ -2,20 +2,18 @@
 import { ref, onMounted } from 'vue'
 import { PAGE_NAV_ICON_PRESETS, DEFAULT_PAGE_NAV_BUTTON_COLORS } from '@mvp-vue/schema'
 import { listPages, type PageListItem } from '../../../api'
-import { useEditorStore } from '../../../stores/editorStore'
 import EditorNumberInput from '../../EditorNumberInput.vue'
 import ColorField from '../../ColorField.vue'
 import { PROP_LABEL, PROP_INPUT, PROP_NUMBER_WRAP, PROP_NUMBER_INNER, PAGE_NAV_ICON_LABELS } from '../../propertyPanel/shared'
 import type { ComponentPropertyFieldsProps } from '../types'
 
 const props = defineProps<ComponentPropertyFieldsProps>()
-const store = useEditorStore()
 
 const pageList = ref<PageListItem[]>([])
 
 onMounted(async () => {
   try {
-    pageList.value = await listPages()
+    pageList.value = await listPages('publish')
   } catch {
     pageList.value = []
   }
@@ -98,8 +96,8 @@ onMounted(async () => {
       }"
     >
       <option value="">未选择</option>
-      <option v-for="p in pageList" :key="p.id" :value="p.id">{{ p.name }} (#{{ p.id }}){{ store.pageId === p.id ? ' · 当前页' : '' }}</option>
+      <option v-for="p in pageList" :key="p.id" :value="p.id">{{ p.name }} (#{{ p.id }})</option>
     </select>
-    <p class="text-[11px] text-slate-400 mt-1">渲染器中点击将跳转到对应页面（?id=）</p>
+    <p class="text-[11px] text-slate-400 mt-1">跳转目标为发布表页面（Renderer ?id=）</p>
   </label>
 </template>
