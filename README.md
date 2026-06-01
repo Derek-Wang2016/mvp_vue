@@ -25,7 +25,7 @@ Editor (Vue)  →  JSON Schema  →  Server (Fastify)  →  Renderer (Vue)
 |------|------|------|
 | 编辑器 | 5000 | `@mvp-vue/editor` |
 | 渲染器 | 5001 | `@mvp-vue/renderer` |
-| 后端 | 3002 | 初期共用 `../mvp` 的 `@mvp/server` |
+| 后端 | 3002 | `@mvp-vue/server` |
 
 环境变量见根目录 [.env.example](.env.example)（`VITE_API_BASE`，默认 `http://<hostname>:3002`）。
 
@@ -37,16 +37,12 @@ Editor (Vue)  →  JSON Schema  →  Server (Fastify)  →  Renderer (Vue)
 git clone https://github.com/Derek-Wang2016/mvp_vue.git
 cd mvp_vue
 pnpm install
+pnpm -F @mvp-vue/server exec prisma generate   # 首次或 schema 变更后
+pnpm dev:server                                  # → http://localhost:3002
 
-# 另开终端：在 React 版 mvp 仓库启动后端（单实例）
-cd ../mvp
-pnpm install
-pnpm -F @mvp/server exec prisma db push   # 首次
-pnpm dev:server                           # → http://localhost:3002
-
-# 回到 mvp_vue
+# 另开终端
 pnpm dev:editor    # http://localhost:5000
-pnpm dev:renderer  # http://localhost:5001?id=<页面ID>
+pnpm dev:renderer  # http://localhost:5001?id=<发布页ID>
 ```
 
 构建：
@@ -57,5 +53,5 @@ pnpm build
 
 ## 与 React 版的关系
 
-- 本仓库 **独立 Git 仓库**；`mvp`（React）另仓维护。
-- Phase 0–3 可共用 `../mvp/packages/server`，勿重复启动多个 3002 实例。
+- 本仓库 **独立 Git 仓库**；`mvp`（React）另仓维护，Schema 与 API 契约保持兼容。
+- 后端已迁入 `packages/server`（含 `prisma/dev.db`）；勿与 React 版 `@mvp/server` 同时占用 3002 端口。

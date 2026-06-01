@@ -1,0 +1,37 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+/// 调试 / 草稿页（原 Page 表迁移而来）
+model PageDraft {
+  id         Int      @id @default(autoincrement())
+  name       String
+  schemaJson String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+/// 线上 / 发布页（Renderer 消费此表）
+model PagePublished {
+  id            Int      @id @default(autoincrement())
+  name          String
+  schemaJson    String
+  sourceDraftId Int?
+  publishedAt   DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+}
+
+/// 用户保存的自定义 SVG 图标库（与 Tabler 预设图标库分离，跨页面复用）
+model CustomIcon {
+  id         Int      @id @default(autoincrement())
+  name       String
+  svgContent String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
