@@ -1,0 +1,602 @@
+# Linux + Nginx 构建与部署指南
+
+本文描述在 **已安装 Nginx** 的 Linux 服务器上部署 mvp_vue 全套服务（Editor、Renderer、Fastify API + SQLite）。
+
+---
+
+## 1. 架构概览
+
+```
+                    ┌─────────────────────────────────────┐
+  浏览器 ──HTTPS──► │ Nginx                               │
+                    │  editor.example.com  → 静态 (Editor) │
+                    │  screen.example.com  → 静态 (Renderer)│
+                    │  api.example.com/api → 反代 :3002     │
+                    └──────────────┬──────────────────────┘
+                                   │ 127.0.0.1:3002
+                    ┌──────────────▼──────────────────────┐
+                    │ systemd: @mvp-vue/server             │
+                    │ packages/server/prisma/dev.db       │
+                    └─────────────────────────────────────┘
+```
+
+
+| 组件       | 产物                        | 运行时                 |
+| -------- | ------------------------- | ------------------- |
+| Editor   | `packages/editor/dist/`   | Nginx 静态文件          |
+| Renderer | `packages/renderer/dist/` | Nginx 静态文件          |
+| API      | `packages/server/dist/`   | Node.js（systemd 守护） |
+
+
+**推荐**：Editor / Renderer 用**独立子域名**挂载在站点根路径 `/`（无需改 Vite `base`）。API 用单独域名或同一域名的 `/api/` 反代，构建时通过 `VITE_API_BASE` 指向该 API 根地址。
+
+> **内网无域名**：见下文 [§1.1 内网 IP 访问](#11-内网-ip-访问无域名)。
+
+### 1.1 内网 IP 访问（无域名）
+
+内网场景通常 **不用 HTTPS、不用域名**，用服务器内网 IP（示例 `192.168.1.100`）访问。有两种常见做法：
+
+
+| 方案                   | 访问示例                                  | 改 Vite `base` | 推荐度       |
+| -------------------- | ------------------------------------- | ------------- | --------- |
+| **A. 同 IP 不同端口**     | `:8080` 编辑 / `:8081` 渲染 / `:8082` API | 否             | ⭐ 内网首选    |
+| **B. 同 IP 同端口 + 路径** | `:80/editor/`、`/screen/`、`/api/`      | 是             | 路径更短、配置稍繁 |
+
+
+无论哪种方案，**构建时必须设置 `VITE_API_BASE`**。若未设置，前端会回退为 `http://<当前IP>:3002`，而 3002 仅本机监听，浏览器会连不上。
+
+---
+
+#### 方案 A：同 IP 不同端口（推荐）
+
+假设服务器内网 IP 为 `**192.168.1.100**`：
+
+
+| 服务       | 地址                                                      |
+| -------- | ------------------------------------------------------- |
+| Editor   | `http://192.168.1.100:8080`                             |
+| Renderer | `http://192.168.1.100:8081/?id=<发布页ID>`                 |
+| API      | `http://192.168.1.100:8082`（Nginx 反代到 `127.0.0.1:3002`） |
+
+
+**构建环境变量**（`packages/editor/.env.production` 与 `packages/renderer/.env.production`）：
+
+```env
+VITE_API_BASE=http://192.168.1.100:8082
+```
+
+Editor 额外可加（与后端 `PAGE_POLICY=strict` 成对）：
+
+```env
+VITE_PAGE_POLICY=strict
+```
+
+**Nginx**（`/etc/nginx/sites-available/mvp-ip`）：
+
+```nginx
+# Editor — 8080
+server {
+    listen 8080;
+    server_name 192.168.1.100;   # 也可写 _ 表示任意 Host
+
+    root /opt/mvp_vue/packages/editor/dist;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+
+# Renderer — 8081
+server {
+    listen 8081;
+    server_name 192.168.1.100;
+
+    root /opt/mvp_vue/packages/renderer/dist;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+
+# API — 8082 → 本机 3002
+server {
+    listen 8082;
+    server_name 192.168.1.100;
+
+    client_max_body_size 20m;
+
+    location / {
+        proxy_pass http://127.0.0.1:3002;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+```bash
+sudo ln -s /etc/nginx/sites-available/mvp-ip /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+防火墙放行端口（示例 firewalld）：
+
+```bash
+sudo firewall-cmd --permanent --add-port=8080/tcp --add-port=8081/tcp --add-port=8082/tcp
+sudo firewall-cmd --reload
+```
+
+**systemd / API 进程不变**：仍只监听 `127.0.0.1:3002`，不要对局域网直接暴露 3002。
+
+---
+
+#### 方案 B：同 IP 单端口 + 路径前缀
+
+只占用 **80 端口**，URL 形如：
+
+
+| 服务       | 地址                                        |
+| -------- | ----------------------------------------- |
+| Editor   | `http://192.168.1.100/editor/`            |
+| Renderer | `http://192.168.1.100/screen/?id=<发布页ID>` |
+| API      | `http://192.168.1.100/api/...`            |
+
+
+**1. 修改 Vite 公共路径**（构建前，各包 `vite.config.ts`）：
+
+```ts
+export default defineConfig({
+  base: '/editor/',   // renderer 包改为 base: '/screen/'
+  // ...
+})
+```
+
+**2. 构建环境变量**：
+
+```env
+VITE_API_BASE=http://192.168.1.100
+```
+
+**3. Nginx**：
+
+```nginx
+server {
+    listen 80;
+    server_name 192.168.1.100;   # 或 default_server
+
+    client_max_body_size 20m;
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:3002/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location /editor/ {
+        alias /opt/mvp_vue/packages/editor/dist/;
+        try_files $uri $uri/ /editor/index.html;
+    }
+
+    location /screen/ {
+        alias /opt/mvp_vue/packages/renderer/dist/;
+        try_files $uri $uri/ /screen/index.html;
+    }
+}
+```
+
+> 路径方案需改源码中的 `base` 并重新构建；若希望少改代码，请用 **方案 A**。
+
+---
+
+#### IP 变更时
+
+`VITE_API_BASE` 在构建时写入静态包。**服务器 IP 变了必须重新构建前端** 并同步 `dist/`，仅改 Nginx 不够。
+
+#### 内网检查命令
+
+```bash
+curl -s http://192.168.1.100:8082/api/publish/pages | head -c 200
+curl -I http://192.168.1.100:8080
+curl -I "http://192.168.1.100:8081/?id=103"
+```
+
+---
+
+## 2. 服务器前置条件
+
+
+| 项       | 要求                                                                    |
+| ------- | --------------------------------------------------------------------- |
+| OS      | Linux（Ubuntu 22.04+ / Debian 12+ 等）                                   |
+| Node.js | **≥ 20.12**（`node -v`）                                                |
+| pnpm    | **≥ 9**（`corepack enable && corepack prepare pnpm@latest --activate`） |
+| Nginx   | 已安装并运行                                                                |
+| 防火墙     | 开放对外端口（域名方案 80/443；内网 IP 方案见 §1.1，如 8080–8082）；**不要**对局域网暴露 3002      |
+| 域名      | 公网部署时使用；**内网可仅用 IP**（§1.1）                                            |
+
+
+---
+
+## 3. 目录与部署用户（示例）
+
+```bash
+sudo useradd -r -m -d /opt/mvp_vue -s /usr/sbin/nologin mvp
+sudo mkdir -p /opt/mvp_vue
+sudo chown mvp:mvp /opt/mvp_vue
+```
+
+后续应用代码、数据库、`node` 进程均以用户 `mvp` 运行；Nginx 只读静态目录。
+
+---
+
+## 4. 构建（本地或 CI）
+
+### 4.1 生产环境变量（构建前必设）
+
+在项目根目录创建 **构建用** 环境文件（勿提交密钥）：
+
+`**packages/editor/.env.production`**
+
+```env
+# API 根地址（无末尾斜杠）；须与 Nginx 反代对外地址一致
+VITE_API_BASE=https://api.example.com
+
+# 生产建议启用：调试表只读，编辑/保存走发布表
+VITE_PAGE_POLICY=strict
+```
+
+`**packages/renderer/.env.production**`
+
+```env
+VITE_API_BASE=https://api.example.com
+```
+
+> `VITE_*` 在 `**pnpm build` 时打入静态包**，部署后改 Nginx 不会自动生效，需重新构建。
+
+若 API 与前端同域（例如 `https://mvp.example.com/api/` 反代），可设：
+
+```env
+VITE_API_BASE=https://mvp.example.com
+```
+
+### 4.2 构建命令
+
+在开发机或 CI 中：
+
+```bash
+git clone https://github.com/Derek-Wang2016/mvp_vue.git
+cd mvp_vue
+pnpm install --frozen-lockfile
+
+# 前端静态包
+pnpm build
+
+# 后端 TypeScript 编译
+pnpm -F @mvp-vue/server exec prisma generate
+pnpm -F @mvp-vue/server build
+```
+
+产物：
+
+
+| 路径                        | 说明               |
+| ------------------------- | ---------------- |
+| `packages/editor/dist/`   | 编辑器静态站           |
+| `packages/renderer/dist/` | 渲染器静态站           |
+| `packages/server/dist/`   | API `index.js` 等 |
+
+
+### 4.3 上传到服务器
+
+**方式 A — 整仓部署（推荐，便于升级与 prisma）**
+
+```bash
+rsync -avz --exclude node_modules --exclude .git \
+  ./ mvp@your-server:/opt/mvp_vue/
+```
+
+**方式 B — 仅产物 + 运行所需包**
+
+至少上传：
+
+```
+/opt/mvp_vue/
+├── package.json
+├── pnpm-lock.yaml
+├── pnpm-workspace.yaml
+├── packages/schema/
+├── packages/server/          # 含 dist/、prisma/dev.db、prisma/schema.prisma
+└── packages/editor/dist/     # 或单独放到 /var/www/...
+    packages/renderer/dist/
+```
+
+---
+
+## 5. 服务器安装与初始化
+
+SSH 登录后以 `mvp` 用户执行：
+
+```bash
+cd /opt/mvp_vue
+pnpm install --frozen-lockfile --prod=false
+pnpm -F @mvp-vue/server exec prisma generate
+```
+
+### 5.1 数据库
+
+- 文件位置：`packages/server/prisma/dev.db`
+- 从开发机拷贝时 **停掉 API 进程** 再复制，避免损坏
+- 权限示例：
+
+```bash
+chmod 640 /opt/mvp_vue/packages/server/prisma/dev.db
+chown mvp:mvp /opt/mvp_vue/packages/server/prisma/dev.db
+```
+
+首次空库（无 dev.db）时：
+
+```bash
+pnpm -F @mvp-vue/server exec prisma db push
+# 可选 Mock 数据（不删页面表）
+pnpm -F @mvp-vue/server db:seed
+```
+
+### 5.2 验证 API 本地启动
+
+```bash
+cd /opt/mvp_vue
+PAGE_POLICY=strict pnpm -F @mvp-vue/server start
+# 另开终端
+curl -s http://127.0.0.1:3002/api/publish/pages | head -c 200
+```
+
+确认无误后 Ctrl+C，改用 systemd（下一节）。
+
+---
+
+## 6. systemd 守护 API
+
+创建 `/etc/systemd/system/mvp-server.service`：
+
+```ini
+[Unit]
+Description=mvp_vue Fastify API
+After=network.target
+
+[Service]
+Type=simple
+User=mvp
+Group=mvp
+WorkingDirectory=/opt/mvp_vue/packages/server
+Environment=NODE_ENV=production
+Environment=PAGE_POLICY=strict
+ExecStart=/usr/bin/node dist/index.js
+Restart=on-failure
+RestartSec=5
+
+# 可选：限制内存
+# MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable mvp-server
+sudo systemctl start mvp-server
+sudo systemctl status mvp-server
+```
+
+日志：`journalctl -u mvp-server -f`
+
+---
+
+## 7. Nginx 配置
+
+以下示例域名请替换为你的实际域名。静态文件路径按实际上传位置调整。
+
+### 7.1 API 反代 — `api.example.com`
+
+```nginx
+# /etc/nginx/sites-available/mvp-api
+server {
+    listen 80;
+    server_name api.example.com;
+
+    # 若已配置 HTTPS，改为 listen 443 ssl; 并加载证书
+
+    client_max_body_size 20m;
+
+    location / {
+        proxy_pass http://127.0.0.1:3002;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Fastify 已启用 CORS；生产环境 API 仅经 Nginx 对内网 `:3002` 转发即可。
+
+### 7.2 Editor — `editor.example.com`
+
+```nginx
+# /etc/nginx/sites-available/mvp-editor
+server {
+    listen 80;
+    server_name editor.example.com;
+
+    root /opt/mvp_vue/packages/editor/dist;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff2?)$ {
+        expires 7d;
+        add_header Cache-Control "public, immutable";
+    }
+}
+```
+
+### 7.3 Renderer — `screen.example.com`
+
+渲染器通过 `?id=<发布页ID>` 加载页面，同样是 SPA：
+
+```nginx
+# /etc/nginx/sites-available/mvp-screen
+server {
+    listen 80;
+    server_name screen.example.com;
+
+    root /opt/mvp_vue/packages/renderer/dist;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff2?)$ {
+        expires 7d;
+        add_header Cache-Control "public, immutable";
+    }
+}
+```
+
+### 7.4 启用站点与 HTTPS
+
+```bash
+sudo ln -s /etc/nginx/sites-available/mvp-api /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/mvp-editor /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/mvp-screen /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+
+# 推荐：Let's Encrypt（certbot）
+# sudo certbot --nginx -d api.example.com -d editor.example.com -d screen.example.com
+```
+
+启用 HTTPS 后，确认构建时 `VITE_API_BASE` 使用 `https://` 地址并 **重新构建** 前端。
+
+### 7.5 单域名 + `/api/` 反代（可选）
+
+若希望 `https://mvp.example.com/api/` 转发后端，可增加：
+
+```nginx
+location /api/ {
+    proxy_pass http://127.0.0.1:3002/api/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+构建时设 `VITE_API_BASE=https://mvp.example.com`（前端请求形如 `https://mvp.example.com/api/publish/pages/...`）。
+
+### 7.6 内网 IP
+
+无域名时完整示例见 [§1.1 内网 IP 访问](#11-内网-ip-访问无域名)（推荐 `8080/8081/8082` 三端口方案）。
+
+---
+
+## 8. 发布与升级流程
+
+### 8.1 日常升级（有代码变更）
+
+```bash
+# 1. 本地/CI 构建
+pnpm build
+pnpm -F @mvp-vue/server build
+
+# 2. 备份数据库
+ssh mvp@server 'cp /opt/mvp_vue/packages/server/prisma/dev.db \
+  /opt/mvp_vue/packages/server/prisma/dev.db.bak.$(date +%F)'
+
+# 3. 同步文件
+rsync -avz packages/editor/dist/ mvp@server:/opt/mvp_vue/packages/editor/dist/
+rsync -avz packages/renderer/dist/ mvp@server:/opt/mvp_vue/packages/renderer/dist/
+rsync -avz packages/server/dist/ mvp@server:/opt/mvp_vue/packages/server/dist/
+
+# 4. 若 prisma schema 有变
+ssh mvp@server 'cd /opt/mvp_vue && pnpm -F @mvp-vue/server exec prisma db push'
+
+# 5. 重启 API
+ssh mvp@server 'sudo systemctl restart mvp-server'
+```
+
+Nginx 静态目录更新后 **无需 reload**；仅 `nginx.conf` 变更时才 `nginx -t && systemctl reload nginx`。
+
+### 8.2 仅前端变更
+
+只 rsync `packages/editor/dist/` 与/或 `packages/renderer/dist/`，不必重启 API。
+
+### 8.3 页面发布（业务操作）
+
+1. 在 Editor 编辑并保存（strict 模式下写入 **发布表**）。
+2. 或从调试表 promote：`POST /api/publish/pages/from-draft/:draftId`。
+3. Renderer 访问：`https://screen.example.com/?id=<PagePublished.id>`
+  可选全屏：`&fullscreen=1`
+
+---
+
+## 9. 生产检查清单
+
+
+| 检查项       | 命令 / 说明                                                           |
+| --------- | ----------------------------------------------------------------- |
+| API 进程    | `systemctl is-active mvp-server`                                  |
+| 本地 API    | `curl -s http://127.0.0.1:3002/api/publish/pages`                 |
+| 公网 API    | `curl -s https://api.example.com/api/publish/pages`               |
+| Editor 打开 | 浏览器访问 `https://editor.example.com`，能列出页面                          |
+| Renderer  | `https://screen.example.com/?id=103`（换成真实发布 id）                   |
+| 3002 未暴露  | `ss -tlnp | grep 3002` 应仅 `127.0.0.1`                             |
+| strict 策略 | `systemctl show mvp-server -p Environment` 含 `PAGE_POLICY=strict` |
+| 数据库备份     | 定时任务拷贝 `dev.db`                                                   |
+
+
+---
+
+## 10. 常见问题
+
+**Q：Editor 报网络错误或 CORS**  
+A：检查 `VITE_API_BASE` 是否与浏览器实际请求的 API 域名一致；改后需重新 `pnpm build`。
+
+**Q：Renderer 404 / 加载失败**  
+A：确认 URL 用的是 **发布表 id**（`PagePublished`），不是 draft id。
+
+**Q：`prisma generate` 失败 / 找不到 Client**  
+A：在仓库根目录执行 `pnpm install` 后 `pnpm -F @mvp-vue/server exec prisma generate`；若 pnpm 拦截 postinstall，需手动 generate（与开发环境相同）。
+
+**Q：SQLite 数据库被锁**  
+A：确保只有一个 `mvp-server` 实例；不要 NFS 多机共写同一 `dev.db`。
+
+**Q：内网用 IP 访问要注意什么？**  
+A：构建时设 `VITE_API_BASE=http://<IP>:<API端口>`（方案 A）或 `http://<IP>`（方案 B + `/api/` 反代）；API 仍只在本机 `:3002` 运行，由 Nginx 转发。IP 变更须重新构建前端。
+
+**Q：子路径部署（如 `/editor/`）**  
+A：需在对应包的 `vite.config.ts` 设置 `base: '/editor/'`，并重新构建；默认文档按子域名根路径方案编写。
+
+---
+
+## 11. 相关文件
+
+
+| 文件                                                        | 用途       |
+| --------------------------------------------------------- | -------- |
+| [.env.example](../.env.example)                           | 开发环境变量说明 |
+| [packages/server/README.md](../packages/server/README.md) | 后端命令与迁移  |
+| [README.md](../README.md)                                 | 本地开发快速开始 |
+
+

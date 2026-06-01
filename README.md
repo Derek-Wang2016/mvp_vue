@@ -6,6 +6,7 @@
 
 | 文档 | 说明 |
 |------|------|
+| [doc/deploy-linux-nginx.md](doc/deploy-linux-nginx.md) | **Linux + Nginx 构建、发布、部署** |
 | [doc/tech-stack.md](doc/tech-stack.md) | 技术选型说明（版本、对比、约束） |
 | [doc/dev-plan.md](doc/dev-plan.md) | 分阶段开发计划与进度跟踪 |
 | [doc/parity-checklist.md](doc/parity-checklist.md) | 与 React 版功能对等验收清单 |
@@ -49,7 +50,10 @@ pnpm dev:renderer  # http://localhost:5001?id=<发布页ID>
 
 ```bash
 pnpm build
+pnpm -F @mvp-vue/server build   # API 编译（部署时需要）
 ```
+
+生产部署见 [doc/deploy-linux-nginx.md](doc/deploy-linux-nginx.md)；构建前参考 [.env.production.example](.env.production.example) 配置 `VITE_API_BASE`。
 
 ## 与 React 版的关系
 
