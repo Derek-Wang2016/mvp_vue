@@ -13,6 +13,9 @@ vitest.config.ts.timestamp-*
 .env
 .env.*
 !.env.example
+!.env.production.example
+!packages/editor/.env.production.example
+!packages/renderer/.env.production.example
 
 # 日志与覆盖率
 *.log

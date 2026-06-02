@@ -182,7 +182,7 @@ function updateHiddenKey(idx: number, value: string) {
             <span class="text-[10px] text-slate-500 shrink-0 w-14">KEY 列宽</span>
             <EditorNumberInput
               :min="0" :max="800" :step="1"
-              :class="[PROP_NUMBER_WRAP, 'w-20']"
+              :class="`${PROP_NUMBER_WRAP} w-20`"
               :input-class="PROP_NUMBER_INNER"
               :model-value="keyWidthFor(key)"
               @update:model-value="(v: string) => updateKeyWidth(key, Number(v) || 0)"

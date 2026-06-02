@@ -4,19 +4,25 @@ import type { PageComponent } from '@mvp-vue/schema'
 
 const props = defineProps<{ comp: PageComponent }>()
 
-const THEMES: Record<string, {
+type ClockTheme = {
   face: string; tick: string; number: string
   hour: string; minute: string; second: string; center: string
-}> = {
+}
+const THEMES = {
   dark:       { face: '#0f172a', tick: '#64748b', number: '#e2e8f0', hour: '#f1f5f9', minute: '#cbd5e1', second: '#f59e0b', center: '#e2e8f0' },
   light:      { face: '#f8fafc', tick: '#94a3b8', number: '#1e293b', hour: '#0f172a', minute: '#334155', second: '#ef4444', center: '#0f172a' },
   'tech-blue':{ face: '#0b1121', tick: '#1e40af', number: '#60a5fa', hour: '#bfdbfe', minute: '#60a5fa', second: '#f59e0b', center: '#93c5fd' },
-}
+} satisfies Record<string, ClockTheme>
 
 const theme = computed(() => (props.comp.props.theme as string) || 'dark')
 const showSeconds = computed(() => props.comp.props.showSeconds !== false)
 const brandName = computed(() => (props.comp.props.brandName as string) || '飞星科技')
-const colors = computed(() => THEMES[theme.value] || THEMES.dark)
+function resolveThemeColors(name: string): ClockTheme {
+  if (name === 'light') return THEMES.light
+  if (name === 'tech-blue') return THEMES['tech-blue']
+  return THEMES.dark
+}
+const colors = computed(() => resolveThemeColors(theme.value))
 const diameter = computed(() => Math.min(props.comp.w, props.comp.h))
 
 const now = ref(new Date())

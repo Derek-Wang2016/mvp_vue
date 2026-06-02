@@ -162,7 +162,7 @@ const itemBoxStyle = computed(() => {
   if (itemEqualWidth.value) {
     style.flex = '1 1 0'
     style.minWidth = '0'
-    style.width = isHorizontal.value ? undefined : '100%'
+    if (!isHorizontal.value) style.width = '100%'
   }
   if (itemEqualHeight.value) {
     style.height = `${itemHeight.value}px`

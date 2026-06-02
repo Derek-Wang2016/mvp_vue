@@ -303,7 +303,7 @@ function openEmptyIconPicker() {
         :class="PROP_NUMBER_WRAP"
 		:input-class="PROP_NUMBER_INNER"
         :model-value="(comp.props.pageSize as number) ?? 10"
-        @update:model-value="(v: number) => props.updateProps({ pageSize: v })"
+        @update:model-value="(v: string) => props.updateProps({ pageSize: Number(v) })"
       />
     </label>
     <label class="block">
@@ -316,7 +316,7 @@ function openEmptyIconPicker() {
         :class="PROP_NUMBER_WRAP"
 		:input-class="PROP_NUMBER_INNER"
         :model-value="(comp.props.pageFlipInterval as number) ?? 10"
-        @update:model-value="(v: number) => props.updateProps({ pageFlipInterval: v })"
+        @update:model-value="(v: string) => props.updateProps({ pageFlipInterval: Number(v) })"
       />
     </label>
     <label class="block">
@@ -326,7 +326,7 @@ function openEmptyIconPicker() {
         :class="PROP_NUMBER_WRAP"
 		:input-class="PROP_NUMBER_INNER"
         :model-value="(comp.props.refreshInterval as number) ?? 0"
-        @update:model-value="(v: number) => props.updateProps({ refreshInterval: v })"
+        @update:model-value="(v: string) => props.updateProps({ refreshInterval: Number(v) })"
       />
     </label>
 
@@ -361,7 +361,7 @@ function openEmptyIconPicker() {
           :class="PROP_NUMBER_WRAP"
 		:input-class="PROP_NUMBER_INNER"
           :model-value="(comp.props.cols as number) ?? 5"
-          @update:model-value="(v: number) => props.updateProps({ cols: v })"
+          @update:model-value="(v: string) => props.updateProps({ cols: Number(v) })"
         />
       </label>
       <label class="block flex-1">
@@ -371,7 +371,7 @@ function openEmptyIconPicker() {
           :class="PROP_NUMBER_WRAP"
 		:input-class="PROP_NUMBER_INNER"
           :model-value="(comp.props.rows as number) ?? 2"
-          @update:model-value="(v: number) => props.updateProps({ rows: v })"
+          @update:model-value="(v: string) => props.updateProps({ rows: Number(v) })"
         />
       </label>
     </div>
@@ -383,7 +383,7 @@ function openEmptyIconPicker() {
           :class="PROP_NUMBER_WRAP"
 		:input-class="PROP_NUMBER_INNER"
           :model-value="(comp.props.gap as number) ?? 12"
-          @update:model-value="(v: number) => props.updateProps({ gap: v })"
+          @update:model-value="(v: string) => props.updateProps({ gap: Number(v) })"
         />
       </label>
       <div class="flex-1" />
@@ -400,7 +400,7 @@ function openEmptyIconPicker() {
           :class="PROP_NUMBER_WRAP_COMPACT"
 		:input-class="PROP_NUMBER_INNER_COMPACT"
           :model-value="(comp.props.cardGridCols as number) ?? 1"
-          @update:model-value="(v: number) => props.updateProps({ cardGridCols: v })"
+          @update:model-value="(v: string) => props.updateProps({ cardGridCols: Number(v) })"
         />
       </label>
       <label class="block flex-1">
@@ -423,7 +423,7 @@ function openEmptyIconPicker() {
           :class="PROP_NUMBER_WRAP_COMPACT"
 		:input-class="PROP_NUMBER_INNER_COMPACT"
           :model-value="(comp.props.cardGridColumnGap as number) ?? (comp.props.cardGridGap as number) ?? 8"
-          @update:model-value="(v: number) => props.updateProps({ cardGridColumnGap: v })"
+          @update:model-value="(v: string) => props.updateProps({ cardGridColumnGap: Number(v) })"
         />
       </label>
       <label class="block flex-1">
@@ -433,7 +433,7 @@ function openEmptyIconPicker() {
           :class="PROP_NUMBER_WRAP_COMPACT"
 		:input-class="PROP_NUMBER_INNER_COMPACT"
           :model-value="(comp.props.cardGridRowGap as number) ?? (comp.props.cardGridGap as number) ?? 8"
-          @update:model-value="(v: number) => props.updateProps({ cardGridRowGap: v })"
+          @update:model-value="(v: string) => props.updateProps({ cardGridRowGap: Number(v) })"
         />
       </label>
     </div>
@@ -457,7 +457,7 @@ function openEmptyIconPicker() {
         :class="PROP_NUMBER_WRAP"
 		:input-class="PROP_NUMBER_INNER"
         :model-value="(comp.props.cardBorderRadius as number) ?? 8"
-        @update:model-value="(v: number) => props.updateProps({ cardBorderRadius: v })"
+        @update:model-value="(v: string) => props.updateProps({ cardBorderRadius: Number(v) })"
       />
     </label>
 

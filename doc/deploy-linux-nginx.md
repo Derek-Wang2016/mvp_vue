@@ -316,6 +316,101 @@ rsync -avz --exclude node_modules --exclude .git \
     packages/renderer/dist/
 ```
 
+### 4.4 无 Nginx 试运行（内网验收）
+
+不配 Nginx 时，在 Linux 服务器上用 **Node 跑 API** + **Vite preview（或 serve）托管静态 `dist/`**，内网浏览器即可验收。正式上线仍按下文 §6 systemd + §7 Nginx。
+
+```mermaid
+flowchart LR
+  browser[浏览器_内网]
+  editorPrev["preview :8080"]
+  rendererPrev["preview :8081"]
+  api["node :3002"]
+  db["dev.db"]
+  browser --> editorPrev
+  browser --> rendererPrev
+  browser --> api
+  editorPrev --> api
+  rendererPrev --> api
+  api --> db
+```
+
+| 服务 | 试运行端口 | 命令 |
+|------|------------|------|
+| API | 3002 | `PAGE_POLICY=strict pnpm -F @mvp-vue/server start` |
+| Editor | 8080 | `pnpm preview:editor` 或包内 `pnpm preview` |
+| Renderer | 8081 | `pnpm preview:renderer` |
+
+#### 4.4.1 开发机：按服务器 IP 构建
+
+**勿**在 `.env.production` 中保留 `VITE_API_BASE=http://localhost:3002`，否则内网其它电脑访问静态站时 API 会指向各自本机的 localhost。
+
+```bash
+# 将 192.168.1.100 换成你的 Linux 服务器内网 IP
+export MVP_SERVER_IP=192.168.1.100
+pnpm build:trial
+# 等价于：prepare-trial-env → pnpm build → prisma:generate → build:server
+```
+
+也可手动复制示例后编辑再构建：
+
+- [packages/editor/.env.production.example](../packages/editor/.env.production.example)
+- [packages/renderer/.env.production.example](../packages/renderer/.env.production.example)
+
+未设置 `VITE_API_BASE` 时，前端回退为 `http://<浏览器当前主机名>:3002`；用 preview 在 `8080/8081` 打开且 API 暴露在同一 IP 的 `3002` 时，可不写死 env 再构建（仍建议显式设置以免歧义）。
+
+#### 4.4.2 上传到服务器
+
+```bash
+export MVP_DEPLOY_HOST=mvp@192.168.1.100
+export MVP_DEPLOY_PATH=/opt/mvp_vue
+chmod +x scripts/rsync-to-server.sh
+./scripts/rsync-to-server.sh
+```
+
+#### 4.4.3 服务器：安装与启动
+
+```bash
+ssh mvp@192.168.1.100
+cd /opt/mvp_vue
+chmod +x scripts/server-trial-*.sh
+./scripts/server-trial-setup.sh
+```
+
+启动（有 **tmux** 时一键三进程；否则脚本会打印三条手动命令）：
+
+```bash
+./scripts/server-trial-start.sh
+```
+
+或分终端：
+
+```bash
+PAGE_POLICY=strict pnpm -F @mvp-vue/server start
+pnpm preview:editor    # 在仓库根目录
+pnpm preview:renderer
+```
+
+验证：
+
+```bash
+export MVP_SERVER_IP=192.168.1.100   # 或 127.0.0.1 仅在服务器本机测
+./scripts/server-trial-verify.sh
+```
+
+防火墙（firewalld，需 root）：
+
+```bash
+sudo ./scripts/server-trial-firewall.sh
+```
+
+浏览器：`http://<服务器IP>:8080`（编辑）、`http://<服务器IP>:8081/?id=<发布页ID>`（渲染）。发布页 ID：`curl http://<IP>:3002/api/publish/pages`。
+
+#### 4.4.4 试运行后
+
+- 停掉 preview / 前台 API，改用 §6 systemd + §7 Nginx
+- 若改用 Nginx 8082 反代 API，须改 `VITE_API_BASE` 为 `http://<IP>:8082` 并 **重新 `pnpm build`**
+
 ---
 
 ## 5. 服务器安装与初始化

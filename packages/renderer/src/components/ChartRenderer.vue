@@ -46,11 +46,12 @@ function mapChartData(raw: unknown, compType: string, categoryField?: string, va
   if (compType === 'pie-chart') {
     return arr.map((item, i) => {
       if (typeof item === 'object' && item !== null) {
-        const vk = pickKey(item, valueField, VALUE_KEYS)
-        const nk = pickKey(item, categoryField, CATEGORY_KEYS)
+        const row = item as Record<string, unknown>
+        const vk = pickKey(row, valueField, VALUE_KEYS)
+        const nk = pickKey(row, categoryField, CATEGORY_KEYS)
         return {
-          value: vk ? Number(item[vk]) : Number(item),
-          name: nk ? String(item[nk]) : String.fromCharCode(65 + i),
+          value: vk ? Number(row[vk]) : Number(item),
+          name: nk ? String(row[nk]) : String.fromCharCode(65 + i),
           itemStyle: { color: ['#818cf8', '#34d399', '#f472b6', '#fbbf24', '#fb923c'][i % 5] },
         }
       }
@@ -67,10 +68,11 @@ function mapChartData(raw: unknown, compType: string, categoryField?: string, va
     const values: number[] = []
     arr.forEach((item, i) => {
       if (typeof item === 'object' && item !== null) {
-        const ck = pickKey(item, categoryField, CATEGORY_KEYS)
-        const vk = pickKey(item, valueField, VALUE_KEYS)
-        categories.push(ck ? String(item[ck]) : String.fromCharCode(65 + i))
-        values.push(vk ? Number(item[vk]) : 0)
+        const row = item as Record<string, unknown>
+        const ck = pickKey(row, categoryField, CATEGORY_KEYS)
+        const vk = pickKey(row, valueField, VALUE_KEYS)
+        categories.push(ck ? String(row[ck]) : String.fromCharCode(65 + i))
+        values.push(vk ? Number(row[vk]) : 0)
       } else {
         categories.push(String.fromCharCode(65 + i))
         values.push(Number(item))

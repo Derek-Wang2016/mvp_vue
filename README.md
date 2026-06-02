@@ -6,7 +6,7 @@
 
 | 文档 | 说明 |
 |------|------|
-| [doc/deploy-linux-nginx.md](doc/deploy-linux-nginx.md) | **Linux + Nginx 构建、发布、部署** |
+| [doc/deploy-linux-nginx.md](doc/deploy-linux-nginx.md) | **Linux + Nginx 构建、发布、部署**（含 [§4.4 无 Nginx 试运行](doc/deploy-linux-nginx.md#44-无-nginx-试运行内网验收)） |
 | [doc/tech-stack.md](doc/tech-stack.md) | 技术选型说明（版本、对比、约束） |
 | [doc/dev-plan.md](doc/dev-plan.md) | 分阶段开发计划与进度跟踪 |
 | [doc/parity-checklist.md](doc/parity-checklist.md) | 与 React 版功能对等验收清单 |
@@ -49,11 +49,18 @@ pnpm dev:renderer  # http://localhost:5001?id=<发布页ID>
 构建：
 
 ```bash
-pnpm build
-pnpm -F @mvp-vue/server build   # API 编译（部署时需要）
+pnpm build              # editor + renderer（Vite，含 vue-tsc）
+
+# 后端：首次或 prisma/schema 变更后先生成 Client，再编译
+pnpm prisma:generate    # 须先停掉 pnpm dev:server（Windows 否则会 EPERM）
+pnpm build:server       # tsc → packages/server/dist/
 ```
 
-生产部署见 [doc/deploy-linux-nginx.md](doc/deploy-linux-nginx.md)；构建前参考 [.env.production.example](.env.production.example) 配置 `VITE_API_BASE`。
+生产启动 API：`pnpm -F @mvp-vue/server start`（需先 `build:server`）。详见 [packages/server/README.md](packages/server/README.md)。
+
+**Linux 内网试运行（不配 Nginx）**：`MVP_SERVER_IP=<服务器IP> pnpm build:trial` → `scripts/rsync-to-server.sh` → 服务器上 `scripts/server-trial-setup.sh` / `server-trial-start.sh`。详见 [doc/deploy-linux-nginx.md §4.4](doc/deploy-linux-nginx.md#44-无-nginx-试运行内网验收)。
+
+生产部署见 [doc/deploy-linux-nginx.md](doc/deploy-linux-nginx.md)；构建前参考各包 `packages/*/env.production.example` 配置 `VITE_API_BASE`。
 
 ## 与 React 版的关系
 
