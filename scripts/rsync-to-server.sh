@@ -13,6 +13,8 @@ rsync -avz --delete \
   --exclude dist-ssr \
   --exclude .cursor \
   --exclude .claude \
+  --exclude 'packages/server/prisma/*.db' \
+  --exclude 'packages/server/prisma/*.db-journal' \
   "$ROOT/" "$HOST:$DEST/"
 
 echo "Synced to $HOST:$DEST"

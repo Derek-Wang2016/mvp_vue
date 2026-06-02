@@ -13,9 +13,10 @@ if ! command -v firewall-cmd >/dev/null 2>&1; then
   exit 0
 fi
 
+# 内网标准部署：8080/8081 静态 + 3002 API 直连（与 doc/deploy-linux-nginx.md §0 一致）
 for port in 3002 8080 8081; do
   firewall-cmd --permanent --add-port="${port}/tcp"
 done
 firewall-cmd --reload
 firewall-cmd --list-ports
-echo "Opened 3002, 8080, 8081"
+echo "Opened 3002 (API), 8080 (editor), 8081 (renderer)"

@@ -14,15 +14,17 @@ pnpm dev:server                                  # → http://localhost:3002
 ## 构建与生产运行
 
 ```bash
-# 根目录；Client 已生成且未改 schema 时，可只跑 build:server
+# 根目录（build:server 会先编译 @mvp-vue/schema → dist/*.js，再编译 server）
 pnpm prisma:generate   # 首次 / schema 变更后；Windows 上须先停 dev:server，否则 EPERM
-pnpm build:server      # tsc → dist/
+pnpm build:server      # schema build + server tsc → packages/server/dist/
 pnpm -F @mvp-vue/server start   # node dist/index.js，默认 :3002
 ```
 
+若 `start` 报 `Unknown file extension ".ts"`，说明未编译 schema，在服务器执行：`pnpm -F @mvp-vue/schema build` 后再 `start`。
+
 `prisma generate` 会替换 `node_modules` 里的查询引擎 DLL；**`pnpm dev:server` 运行时该文件被占用**，在 Windows 上常见 `EPERM: operation not permitted, rename ...query_engine-windows.dll.node`。
 
-部署流程见 [doc/deploy-linux-nginx.md](../../doc/deploy-linux-nginx.md)。**无 Nginx 内网试运行**见该文档 §4.4（`scripts/server-trial-*.sh`、`pnpm build:trial`）。
+部署流程见 [doc/deploy-linux-nginx.md](../../doc/deploy-linux-nginx.md)（**§0 速查**：Nginx 静态 `8080/8081` + API 直连 `3002`）。试运行见 §4.4。
 
 数据库文件：`prisma/dev.db`（自 React 版 `@mvp/server` 迁入，含 draft / publish 双表数据）。
 

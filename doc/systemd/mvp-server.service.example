@@ -1,0 +1,21 @@
+# API 守护进程示例
+#   sudo cp doc/systemd/mvp-server.service.example /etc/systemd/system/mvp-server.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now mvp-server
+
+[Unit]
+Description=mvp_vue Fastify API
+After=network.target
+
+[Service]
+Type=simple
+User=CE530H
+Group=CE530H
+WorkingDirectory=/home/CE530H/prj/mvp_vue/packages/server
+Environment=NODE_ENV=production
+Environment=PAGE_POLICY=strict
+ExecStart=/usr/bin/node dist/index.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
