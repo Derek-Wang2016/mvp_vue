@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import type { PageComponent, ComponentType } from '@mvp-vue/schema'
-import { isComponentLocked } from '@mvp-vue/schema'
+import { isComponentLocked, buildGradientBackground } from '@mvp-vue/schema'
 import { useEditorStore } from '../stores/editorStore'
 import { storeToRefs } from 'pinia'
 import ResizeHandles from './ResizeHandles.vue'
@@ -13,7 +13,7 @@ const emit = defineEmits<{
 }>()
 
 const store = useEditorStore()
-const { components, pageWidth, pageHeight, bgColor, bgGradient, bgImage, bgOpacity, selectedIds, groupDragOffset, pageReadOnly } = storeToRefs(store)
+const { components, pageWidth, pageHeight, bgColor, bgColorTo, bgGradient, bgImage, bgOpacity, selectedIds, groupDragOffset, pageReadOnly } = storeToRefs(store)
 
 const props = defineProps<{ showGrid: boolean }>()
 
@@ -63,16 +63,6 @@ const displayComponents = computed(() => {
   const selected = components.value.filter((c) => selectedSet.has(c.id))
   return [...unselected, ...selected]
 })
-
-function buildBgStyle(color: string, gradient: string): string {
-  switch (gradient) {
-    case 'linear-top': return `linear-gradient(180deg, ${color}, rgba(0,0,0,0.35))`
-    case 'linear-left': return `linear-gradient(90deg, ${color}, rgba(0,0,0,0.35))`
-    case 'linear-diagonal': return `linear-gradient(135deg, ${color}, rgba(0,0,0,0.4))`
-    case 'radial': return `radial-gradient(circle at 50% 50%, ${color}, rgba(0,0,0,0.45))`
-    default: return color
-  }
-}
 
 function updateScale() {
   const container = containerRef.value
@@ -159,6 +149,9 @@ function handlePointerUp() {
   boxSelect.value = null
 }
 
+// 与 React 版 dnd-kit PointerSensor activationConstraint.distance 对齐，避免 pointer capture 吞掉 dblclick（文本框内联编辑）
+const DRAG_ACTIVATION_PX = 5
+
 // canvas drag-to-move（transform 预览，pointerup 一次提交）
 interface DragState {
   compId: string
@@ -169,6 +162,12 @@ interface DragState {
   isMultiDrag: boolean
 }
 
+interface PendingDrag extends DragState {
+  pointerId: number
+  captureEl: HTMLElement
+}
+
+const pendingDrag = ref<PendingDrag | null>(null)
 const dragState = ref<DragState | null>(null)
 
 type DragListenerBundle = {
@@ -186,9 +185,32 @@ function endDragSession() {
     window.removeEventListener('pointercancel', dragListeners.onCancel)
     dragListeners = null
   }
+  pendingDrag.value = null
   dragState.value = null
   store.setGroupDragOffset(null)
   document.body.style.cursor = ''
+}
+
+function tryActivateDrag(ev: PointerEvent): boolean {
+  const pending = pendingDrag.value
+  if (!pending || dragState.value) return !!dragState.value
+  const dx = ev.clientX - pending.startX
+  const dy = ev.clientY - pending.startY
+  if (Math.hypot(dx, dy) < DRAG_ACTIVATION_PX) return false
+
+  dragState.value = {
+    compId: pending.compId,
+    startX: pending.startX,
+    startY: pending.startY,
+    origX: pending.origX,
+    origY: pending.origY,
+    isMultiDrag: pending.isMultiDrag,
+  }
+  pendingDrag.value = null
+  store.setGroupDragOffset({ dx: 0, dy: 0 })
+  document.body.style.cursor = 'grabbing'
+  pending.captureEl.setPointerCapture?.(pending.pointerId)
+  return true
 }
 
 function handleCompPointerDown(e: PointerEvent, domComp: PageComponent) {
@@ -206,7 +228,7 @@ function handleCompPointerDown(e: PointerEvent, domComp: PageComponent) {
   const target = resolvePointerTarget(domComp, pt.x, pt.y)
   if (isComponentLocked(target)) return
 
-  if (e.shiftKey) {
+  if (e.shiftKey || e.ctrlKey || e.metaKey) {
     store.selectComponent(target.id, true)
   } else if (!selectedIds.value.includes(target.id)) {
     store.selectComponent(target.id)
@@ -214,22 +236,20 @@ function handleCompPointerDown(e: PointerEvent, domComp: PageComponent) {
 
   const isMultiDrag = selectedIds.value.includes(target.id) && selectedIds.value.length > 1
 
-  dragState.value = {
+  const captureEl = e.currentTarget as HTMLElement
+  pendingDrag.value = {
     compId: target.id,
     startX: e.clientX,
     startY: e.clientY,
     origX: isMultiDrag ? 0 : target.x,
     origY: isMultiDrag ? 0 : target.y,
     isMultiDrag,
+    pointerId: e.pointerId,
+    captureEl,
   }
 
-  store.setGroupDragOffset({ dx: 0, dy: 0 })
-  document.body.style.cursor = 'grabbing'
-
-  const captureEl = e.currentTarget as HTMLElement
-  captureEl.setPointerCapture?.(e.pointerId)
-
   function onMove(ev: PointerEvent) {
+    tryActivateDrag(ev)
     if (!dragState.value) return
     const scale = canvasScale.value
     const dx = (ev.clientX - dragState.value.startX) / scale
@@ -264,7 +284,9 @@ function handleCompPointerDown(e: PointerEvent, domComp: PageComponent) {
   }
 
   function onCancel(ev: PointerEvent) {
-    captureEl.releasePointerCapture?.(ev.pointerId)
+    if (dragState.value) {
+      captureEl.releasePointerCapture?.(ev.pointerId)
+    }
     endDragSession()
   }
 
@@ -350,7 +372,7 @@ function handleDrop(e: DragEvent) {
           top: 0,
           left: 0,
           overflow: 'hidden',
-          background: buildBgStyle(bgColor, bgGradient),
+          background: buildGradientBackground(bgColor, bgGradient, bgColorTo),
           touchAction: 'none',
         }"
         @pointerdown="handlePointerDown"

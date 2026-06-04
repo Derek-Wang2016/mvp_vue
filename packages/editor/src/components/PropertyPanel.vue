@@ -7,7 +7,7 @@ import PagePropertyPanel from './propertyPanel/PagePropertyPanel.vue'
 import CompPropertyPanel from './propertyPanel/CompPropertyPanel.vue'
 
 const store = useEditorStore()
-const { selectedIds, components, pageReadOnly } = storeToRefs(store)
+const { selectedIds, anchorComponentId, components, pageReadOnly } = storeToRefs(store)
 
 const selectedComp = computed(() =>
   selectedIds.value.length === 1
@@ -37,6 +37,9 @@ function unlockSelected() {
     </h2>
     <div class="bg-indigo-500/10 border border-indigo-500/20 rounded-md px-3 py-2 text-xs text-indigo-300 mb-3">
       已选中 {{ selectedIds.length }} 个组件
+      <div v-if="anchorComponentId" class="mt-1 text-[10px] text-indigo-400/90">
+        对齐基准：{{ anchorComponentId }}
+      </div>
     </div>
     <div class="flex gap-2">
       <button

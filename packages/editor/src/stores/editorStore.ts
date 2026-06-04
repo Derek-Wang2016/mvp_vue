@@ -6,6 +6,7 @@ import type {
 } from '@mvp-vue/schema'
 import {
   DEFAULT_PAGE_WIDTH, DEFAULT_PAGE_HEIGHT,
+  DEFAULT_GRADIENT_COLOR_TO,
   buildSavedIconsSnapshot, collectReferencedSavedIconIds, collectSavedIconsFromSchema,
   mergeSavedIconIntoPool, isComponentLocked,
 } from '@mvp-vue/schema'
@@ -58,12 +59,15 @@ export const useEditorStore = defineStore('editor', () => {
   // === state ===
   const components = shallowRef<PageComponent[]>([])
   const selectedIds = ref<string[]>([])
+  /** 多选时首个点选的组件 id（Shift 追加不改变；框选取 ids[0]） */
+  const anchorComponentId = ref<string | null>(null)
   const pageId = ref<number | null>(null)
   const pageScope = ref<PageScope>('draft')
   const pageName = ref('未命名大屏')
   const pageWidth = ref(DEFAULT_PAGE_WIDTH)
   const pageHeight = ref(DEFAULT_PAGE_HEIGHT)
   const bgColor = ref('#0d1520')
+  const bgColorTo = ref(DEFAULT_GRADIENT_COLOR_TO)
   const bgGradient = ref<BgGradient>('none')
   const bgImage = ref('')
   const bgOpacity = ref(1)
@@ -109,7 +113,10 @@ export const useEditorStore = defineStore('editor', () => {
   const canAlign = computed(() => {
     if (pageReadOnly.value) return false
     if (selectedIds.value.length < 2) return false
-    return !hasLockedInSelection(selectedIds.value)
+    const ids = selectedIds.value
+    if (!hasLockedInSelection(ids)) return true
+    const refId = anchorComponentId.value ?? ids[0]!
+    return filterUnlockedIds(ids.filter((id) => id !== refId)).length > 0
   })
   const canCut = computed(() => {
     if (pageReadOnly.value) return false
@@ -165,6 +172,9 @@ export const useEditorStore = defineStore('editor', () => {
     )
     if (locked) {
       selectedIds.value = selectedIds.value.filter((x) => x !== id)
+      if (anchorComponentId.value === id) {
+        anchorComponentId.value = selectedIds.value[0] ?? null
+      }
     }
   }
 
@@ -178,6 +188,9 @@ export const useEditorStore = defineStore('editor', () => {
     )
     if (locked) {
       selectedIds.value = selectedIds.value.filter((x) => !idSet.has(x))
+      if (anchorComponentId.value && idSet.has(anchorComponentId.value)) {
+        anchorComponentId.value = selectedIds.value[0] ?? null
+      }
     }
   }
 
@@ -189,6 +202,7 @@ export const useEditorStore = defineStore('editor', () => {
     past.value = past.value.slice(0, -1)
     components.value = cloneComponentsList(prev.components)
     selectedIds.value = []
+    anchorComponentId.value = null
     nextId = prev.nextId
   }
 
@@ -199,28 +213,38 @@ export const useEditorStore = defineStore('editor', () => {
     future.value = future.value.slice(0, -1)
     components.value = cloneComponentsList(nxt.components)
     selectedIds.value = []
+    anchorComponentId.value = null
     nextId = nxt.nextId
   }
 
   function selectComponent(id: string | null, multi = false) {
     if (!id) {
       selectedIds.value = []
+      anchorComponentId.value = null
       return
     }
     if (multi) {
       const idx = selectedIds.value.indexOf(id)
       if (idx >= 0) {
         selectedIds.value = selectedIds.value.filter((x) => x !== id)
+        if (anchorComponentId.value === id) {
+          anchorComponentId.value = selectedIds.value[0] ?? null
+        }
       } else {
+        if (selectedIds.value.length === 0) {
+          anchorComponentId.value = id
+        }
         selectedIds.value = [...selectedIds.value, id]
       }
     } else {
       selectedIds.value = [id]
+      anchorComponentId.value = id
     }
   }
 
   function selectComponents(ids: string[]) {
     selectedIds.value = ids
+    anchorComponentId.value = ids[0] ?? null
   }
 
   function addComponent(type: ComponentType, x: number, y: number) {
@@ -238,6 +262,7 @@ export const useEditorStore = defineStore('editor', () => {
     pushHistory()
     components.value = [...components.value, component]
     selectedIds.value = [component.id]
+    anchorComponentId.value = component.id
   }
 
   function updateComponentProps(id: string, props: Record<string, unknown>) {
@@ -275,6 +300,68 @@ export const useEditorStore = defineStore('editor', () => {
     )
   }
 
+  function applyComponentPositions(posById: Map<string, { x: number; y: number }>) {
+    if (pageReadOnly.value || posById.size === 0) return
+    pushHistory()
+    components.value = components.value.map((c) => {
+      const pos = posById.get(c.id)
+      if (!pos) return c
+      return { ...c, x: pos.x, y: pos.y }
+    })
+    triggerRef(components)
+  }
+
+  function resolveAnchorComponent(selected: PageComponent[], ids: string[]): PageComponent | undefined {
+    let refId = anchorComponentId.value ?? ids[0]
+    if (!refId || !ids.includes(refId)) refId = ids[0]
+    if (!refId) return undefined
+    return selected.find((c) => c.id === refId) ?? selected[0]
+  }
+
+  /** 垂直居中：其余组件 X 中心与基准组件垂直中线对齐 */
+  function alignSelectedToFirstVerticalCenter() {
+    alignSelectedToAnchorMidline('x')
+  }
+
+  /** 水平居中：其余组件 Y 中心与基准组件水平中线对齐 */
+  function alignSelectedToFirstHorizontalCenter() {
+    alignSelectedToAnchorMidline('y')
+  }
+
+  function alignSelectedToAnchorMidline(axis: 'x' | 'y') {
+    if (pageReadOnly.value) return
+
+    const ids = [...selectedIds.value]
+    if (ids.length < 2) return
+
+    const selected = components.value.filter((c) => ids.includes(c.id))
+    if (selected.length < 2) return
+
+    const ref = resolveAnchorComponent(selected, ids)
+    if (!ref) return
+
+    const refCenterX = Number(ref.x) + Number(ref.w) / 2
+    const refCenterY = Number(ref.y) + Number(ref.h) / 2
+
+    const posById = new Map<string, { x: number; y: number }>()
+    for (const c of selected) {
+      if (c.id === ref.id || isComponentLocked(c)) continue
+      if (axis === 'x') {
+        posById.set(c.id, {
+          x: Math.round(refCenterX - Number(c.w) / 2),
+          y: Number(c.y),
+        })
+      } else {
+        posById.set(c.id, {
+          x: Number(c.x),
+          y: Math.round(refCenterY - Number(c.h) / 2),
+        })
+      }
+    }
+
+    applyComponentPositions(posById)
+  }
+
   function alignSelectedComponents(mode: AlignMode) {
     const ids = selectedIds.value
     if (ids.length < 2 || hasLockedInSelection(ids)) return
@@ -282,9 +369,8 @@ export const useEditorStore = defineStore('editor', () => {
     const selected = components.value.filter((c) => ids.includes(c.id))
     if (selected.length < 2) return
 
-    pushHistory()
-
     const posById = new Map<string, { x: number; y: number }>()
+
     switch (mode) {
       case 'left': {
         const minX = Math.min(...selected.map((c) => c.x))
@@ -308,11 +394,7 @@ export const useEditorStore = defineStore('editor', () => {
       }
     }
 
-    components.value = components.value.map((c) => {
-      const pos = posById.get(c.id)
-      if (!pos) return c
-      return { ...c, x: Math.round(pos.x), y: Math.round(pos.y) }
-    })
+    applyComponentPositions(posById)
   }
 
   function equalizeSelectedWidth() {
@@ -339,6 +421,80 @@ export const useEditorStore = defineStore('editor', () => {
     components.value = components.value.map((c) =>
       ids.includes(c.id) ? { ...c, h: targetH } : c,
     )
+  }
+
+  /** 水平等距：在选区外框内按相邻组件外缘相等间距重排（左缘 min(x)，右缘 max(x+w)） */
+  function distributeSelectedComponentsHorizontal() {
+    const ids = selectedIds.value
+    if (ids.length < 2 || hasLockedInSelection(ids)) return
+
+    const selected = components.value.filter((c) => ids.includes(c.id))
+    if (selected.length < 2) return
+
+    const sorted = [...selected].sort((a, b) => a.x - b.x)
+    const leftBound = Math.min(...selected.map((c) => c.x))
+    const rightBound = Math.max(...selected.map((c) => c.x + c.w))
+    const totalWidth = sorted.reduce((s, c) => s + c.w, 0)
+    const gap = (rightBound - leftBound - totalWidth) / (sorted.length - 1)
+    if (!Number.isFinite(gap)) return
+
+    const posById = new Map<string, { x: number; y: number }>()
+    const step = Math.max(0, gap)
+    let cursor = leftBound
+    for (const c of sorted) {
+      posById.set(c.id, { x: Math.round(cursor), y: c.y })
+      cursor += c.w + step
+    }
+
+    const changed = sorted.some((c) => {
+      const pos = posById.get(c.id)!
+      return pos.x !== c.x || pos.y !== c.y
+    })
+    if (!changed) return
+
+    pushHistory()
+    components.value = components.value.map((c) => {
+      const pos = posById.get(c.id)
+      if (!pos) return c
+      return { ...c, x: pos.x, y: pos.y }
+    })
+  }
+
+  /** 垂直等距：在选区外框内按相邻组件外缘相等间距重排（上缘 min(y)，下缘 max(y+h)） */
+  function distributeSelectedComponentsVertical() {
+    const ids = selectedIds.value
+    if (ids.length < 2 || hasLockedInSelection(ids)) return
+
+    const selected = components.value.filter((c) => ids.includes(c.id))
+    if (selected.length < 2) return
+
+    const sorted = [...selected].sort((a, b) => a.y - b.y)
+    const topBound = Math.min(...selected.map((c) => c.y))
+    const bottomBound = Math.max(...selected.map((c) => c.y + c.h))
+    const totalHeight = sorted.reduce((s, c) => s + c.h, 0)
+    const gap = (bottomBound - topBound - totalHeight) / (sorted.length - 1)
+    if (!Number.isFinite(gap)) return
+
+    const posById = new Map<string, { x: number; y: number }>()
+    const step = Math.max(0, gap)
+    let cursor = topBound
+    for (const c of sorted) {
+      posById.set(c.id, { x: c.x, y: Math.round(cursor) })
+      cursor += c.h + step
+    }
+
+    const changed = sorted.some((c) => {
+      const pos = posById.get(c.id)!
+      return pos.x !== c.x || pos.y !== c.y
+    })
+    if (!changed) return
+
+    pushHistory()
+    components.value = components.value.map((c) => {
+      const pos = posById.get(c.id)
+      if (!pos) return c
+      return { ...c, x: pos.x, y: pos.y }
+    })
   }
 
   function resizeComponent(id: string, x: number, y: number, w: number, h: number) {
@@ -462,6 +618,7 @@ export const useEditorStore = defineStore('editor', () => {
     components.value = [...components.value, ...newComps]
     triggerRef(components)
     selectedIds.value = newComps.map((c) => c.id)
+    anchorComponentId.value = newComps[0]?.id ?? null
     clipboard.value = newComps.map((c) => clonePageComponent(c))
   }
 
@@ -482,6 +639,10 @@ export const useEditorStore = defineStore('editor', () => {
   function setBgColor(color: string) {
     if (pageReadOnly.value) return
     bgColor.value = color
+  }
+  function setBgColorTo(color: string) {
+    if (pageReadOnly.value) return
+    bgColorTo.value = color
   }
   function setBgGradient(gradient: BgGradient) {
     if (pageReadOnly.value) return
@@ -648,6 +809,7 @@ export const useEditorStore = defineStore('editor', () => {
     pageWidth.value = w
     pageHeight.value = h
     bgColor.value = schema.bgColor ?? '#0d1520'
+    bgColorTo.value = schema.bgColorTo ?? DEFAULT_GRADIENT_COLOR_TO
     bgGradient.value = schema.bgGradient ?? 'none'
     bgImage.value = schema.bgImage ?? ''
     bgOpacity.value = schema.bgOpacity ?? 1
@@ -658,6 +820,7 @@ export const useEditorStore = defineStore('editor', () => {
     abbrevDict.value = migratedAbbrev
     components.value = comps
     selectedIds.value = []
+    anchorComponentId.value = null
     clipboard.value = null
     past.value = []
     future.value = []
@@ -670,6 +833,7 @@ export const useEditorStore = defineStore('editor', () => {
       width: pageWidth.value,
       height: pageHeight.value,
       bgColor: bgColor.value,
+      bgColorTo: bgGradient.value !== 'none' ? bgColorTo.value : undefined,
       bgGradient: bgGradient.value,
       bgImage: bgImage.value || undefined,
       bgOpacity: bgOpacity.value,
@@ -684,8 +848,8 @@ export const useEditorStore = defineStore('editor', () => {
 
   return {
     // state
-    components, selectedIds, pageId, pageScope, pageName, pageWidth, pageHeight,
-    bgColor, bgGradient, bgImage, bgOpacity,
+    components, selectedIds, anchorComponentId, pageId, pageScope, pageName, pageWidth, pageHeight,
+    bgColor, bgColorTo, bgGradient, bgImage, bgOpacity,
     dataSources, colorDict, iconDict, savedIcons, abbrevDict,
     past, future, groupDragOffset, clipboard,
     // computed
@@ -697,13 +861,16 @@ export const useEditorStore = defineStore('editor', () => {
     selectComponent, selectComponents,
     addComponent, updateComponentProps, replaceComponentProps,
     moveComponent, moveComponents, alignSelectedComponents,
-    equalizeSelectedWidth, equalizeSelectedHeight, resizeComponent,
+    alignSelectedToFirstVerticalCenter, alignSelectedToFirstHorizontalCenter,
+    equalizeSelectedWidth, equalizeSelectedHeight,
+    distributeSelectedComponentsHorizontal, distributeSelectedComponentsVertical,
+    resizeComponent,
     removeComponent, removeComponents,
     setComponentLocked, setComponentsLocked, hasLockedInSelection,
     bringToFront, sendToBack, bringForward, sendBackward,
     copySelectedComponents, cutSelectedComponents, pasteComponents,
     setGroupDragOffset,
-    setPageName, setPageSize, setBgColor, setBgGradient, setBgImage, setBgOpacity,
+    setPageName, setPageSize, setBgColor, setBgColorTo, setBgGradient, setBgImage, setBgOpacity,
     addDataSource, updateDataSource, removeDataSource, setComponentDataSource,
     addColorDictEntry, updateColorDictEntry, removeColorDictEntry,
     addIconDictEntry, updateIconDictEntry, removeIconDictEntry,

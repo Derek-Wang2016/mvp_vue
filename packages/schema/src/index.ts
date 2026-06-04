@@ -453,12 +453,21 @@ export {
 } from './chartComponent'
 
 // ===== 页面 Schema =====
-export type BgGradient = 'none' | 'linear-top' | 'linear-left' | 'linear-diagonal' | 'radial'
+import type { BgGradient } from './bgGradient'
+export {
+  type BgGradient,
+  BG_GRADIENTS,
+  pickBgGradient,
+  buildGradientBackground,
+  DEFAULT_GRADIENT_COLOR_TO,
+} from './bgGradient'
 
 export interface PageSchema {
   width: number
   height: number
   bgColor?: string
+  /** 页面渐变暗色（终点）；仅 bgGradient !== 'none' 时生效 */
+  bgColorTo?: string
   bgGradient?: BgGradient
   bgImage?: string
   bgOpacity?: number

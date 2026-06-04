@@ -325,8 +325,12 @@ const AlignLeftIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="non
 const AlignRightIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><line x1="13.5" y1="2" x2="13.5" y2="14"/><rect x="7" y="3.5" width="4" height="3" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/><rect x="3.5" y="9" width="6" height="3.5" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/></svg>`
 const AlignTopIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="2.5" x2="14" y2="2.5"/><rect x="3.5" y="5" width="3" height="4" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/><rect x="9" y="6.5" width="3.5" height="6" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/></svg>`
 const AlignBottomIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="13.5" x2="14" y2="13.5"/><rect x="3.5" y="7" width="3" height="4" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/><rect x="9" y="3.5" width="3.5" height="6" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/></svg>`
+const AlignVerticalCenterIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="2" x2="8" y2="14"/><rect x="5.5" y="5" width="5" height="6" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/></svg>`
+const AlignHorizontalCenterIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="8" x2="14" y2="8"/><rect x="5" y="5.5" width="6" height="5" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/></svg>`
 const EqualWidthIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="2.5" x2="4" y2="13.5"/><line x1="12" y1="2.5" x2="12" y2="13.5"/><rect x="5.5" y="4" width="5" height="3" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/><rect x="5.5" y="9.5" width="5" height="2.5" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/></svg>`
 const EqualHeightIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><line x1="2.5" y1="4" x2="13.5" y2="4"/><line x1="2.5" y1="12" x2="13.5" y2="12"/><rect x="4" y="5.5" width="3" height="5" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/><rect x="9.5" y="5.5" width="2.5" height="5" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/></svg>`
+const DistributeHIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><line x1="2.5" y1="8" x2="13.5" y2="8"/><rect x="3" y="5" width="2.5" height="6" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/><rect x="6.75" y="5" width="2.5" height="6" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/><rect x="10.5" y="5" width="2.5" height="6" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/></svg>`
+const DistributeVIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="2.5" x2="8" y2="13.5"/><rect x="5" y="3" width="6" height="2.5" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/><rect x="5" y="6.75" width="6" height="2.5" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/><rect x="5" y="10.5" width="6" height="2.5" rx="0.5" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/></svg>`
 
 const alignBtnClass = (enabled: boolean) =>
   enabled
@@ -452,6 +456,22 @@ const alignBtnClass = (enabled: boolean) =>
         class="px-2 py-1 rounded-md border transition-colors"
         :class="alignBtnClass(canAlign)"
         :disabled="!canAlign"
+        title="垂直居中（与首个选中组件垂直中线对齐，需选中 2 个及以上）"
+        v-html="AlignVerticalCenterIcon"
+        @click.stop="store.alignSelectedToFirstVerticalCenter()"
+      />
+      <button
+        class="px-2 py-1 rounded-md border transition-colors"
+        :class="alignBtnClass(canAlign)"
+        :disabled="!canAlign"
+        title="水平居中（与首个选中组件水平中线对齐，需选中 2 个及以上）"
+        v-html="AlignHorizontalCenterIcon"
+        @click.stop="store.alignSelectedToFirstHorizontalCenter()"
+      />
+      <button
+        class="px-2 py-1 rounded-md border transition-colors"
+        :class="alignBtnClass(canAlign)"
+        :disabled="!canAlign"
         title="等宽（以首个选中组件为基准，需选中 2 个及以上）"
         v-html="EqualWidthIcon"
         @click="store.equalizeSelectedWidth()"
@@ -463,6 +483,22 @@ const alignBtnClass = (enabled: boolean) =>
         title="等高（以首个选中组件为基准，需选中 2 个及以上）"
         v-html="EqualHeightIcon"
         @click="store.equalizeSelectedHeight()"
+      />
+      <button
+        class="px-2 py-1 rounded-md border transition-colors"
+        :class="alignBtnClass(canAlign)"
+        :disabled="!canAlign"
+        title="水平等距（保持最左/最右外缘，需选中 2 个及以上）"
+        v-html="DistributeHIcon"
+        @click="store.distributeSelectedComponentsHorizontal()"
+      />
+      <button
+        class="px-2 py-1 rounded-md border transition-colors"
+        :class="alignBtnClass(canAlign)"
+        :disabled="!canAlign"
+        title="垂直等距（保持最上/最下外缘，需选中 2 个及以上）"
+        v-html="DistributeVIcon"
+        @click="store.distributeSelectedComponentsVertical()"
       />
 
       <span class="w-px h-4 bg-white/10" />
@@ -591,6 +627,20 @@ const alignBtnClass = (enabled: boolean) =>
       <button
         class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         :disabled="!canAlign"
+        @click="store.alignSelectedToFirstVerticalCenter(); closeContextMenu()"
+      >
+        垂直居中
+      </button>
+      <button
+        class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        :disabled="!canAlign"
+        @click="store.alignSelectedToFirstHorizontalCenter(); closeContextMenu()"
+      >
+        水平居中
+      </button>
+      <button
+        class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        :disabled="!canAlign"
         @click="store.equalizeSelectedWidth(); closeContextMenu()"
       >
         等宽
@@ -601,6 +651,20 @@ const alignBtnClass = (enabled: boolean) =>
         @click="store.equalizeSelectedHeight(); closeContextMenu()"
       >
         等高
+      </button>
+      <button
+        class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        :disabled="!canAlign"
+        @click="store.distributeSelectedComponentsHorizontal(); closeContextMenu()"
+      >
+        水平等距
+      </button>
+      <button
+        class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        :disabled="!canAlign"
+        @click="store.distributeSelectedComponentsVertical(); closeContextMenu()"
+      >
+        垂直等距
       </button>
       <div class="border-t border-white/10 my-1" />
       <button

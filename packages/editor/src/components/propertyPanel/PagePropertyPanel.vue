@@ -21,7 +21,7 @@ defineProps<{ readOnly?: boolean }>()
 const store = useEditorStore()
 const { openColorPicker } = useColorPicker()
 const {
-  pageWidth, pageHeight, bgColor, bgGradient, bgImage, bgOpacity,
+  pageWidth, pageHeight, bgColor, bgColorTo, bgGradient, bgImage, bgOpacity,
   dataSources, colorDict, iconDict, savedIcons, abbrevDict,
 } = storeToRefs(store)
 
@@ -244,8 +244,6 @@ function tabClass(id: TabId) {
           @change="store.setPageSize"
         />
 
-        <ColorField label="背景颜色" :value="bgColor" @change="store.setBgColor($event)" />
-
         <label class="block">
           <span :class="PROP_LABEL">渐变模式</span>
           <select
@@ -253,13 +251,32 @@ function tabClass(id: TabId) {
             :value="bgGradient"
             @change="store.setBgGradient(($event.target as HTMLSelectElement).value as BgGradient)"
           >
-            <option value="none">无渐变</option>
+            <option value="none">无渐变（纯色）</option>
             <option value="linear-top">线性 — 上→下</option>
             <option value="linear-left">线性 — 左→右</option>
             <option value="linear-diagonal">线性 — 对角</option>
             <option value="radial">径向</option>
           </select>
         </label>
+
+        <ColorField
+          v-if="bgGradient === 'none'"
+          label="背景色"
+          :value="bgColor"
+          @change="store.setBgColor($event)"
+        />
+        <template v-else>
+          <ColorField
+            label="渐变（亮）"
+            :value="bgColor"
+            @change="store.setBgColor($event)"
+          />
+          <ColorField
+            label="渐变（暗）"
+            :value="bgColorTo"
+            @change="store.setBgColorTo($event)"
+          />
+        </template>
 
         <div class="border-t border-white/10 pt-3" />
 

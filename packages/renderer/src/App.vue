@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, provide } from 'vue'
-import type { PageSchema, BgGradient } from '@mvp-vue/schema'
-import { DEFAULT_PAGE_WIDTH, DEFAULT_PAGE_HEIGHT } from '@mvp-vue/schema'
+import type { PageSchema } from '@mvp-vue/schema'
+import {
+  DEFAULT_PAGE_WIDTH,
+  DEFAULT_PAGE_HEIGHT,
+  DEFAULT_GRADIENT_COLOR_TO,
+  buildGradientBackground,
+} from '@mvp-vue/schema'
 import { getPage } from './api'
 import { PAGE_NAV_KEY, type PageNavContextValue } from './composables/usePageNav'
 import { componentMap } from './components/componentMap'
@@ -52,22 +57,6 @@ const pageHeight = computed(() => {
   const s = schema.value as (PageSchema & { pageHeight?: number }) | null
   return s?.height ?? s?.pageHeight ?? DEFAULT_PAGE_HEIGHT
 })
-
-// ---- Background ----
-function buildBgStyle(color: string, gradient: BgGradient): string {
-  switch (gradient) {
-    case 'linear-top':
-      return `linear-gradient(180deg, ${color}, rgba(0,0,0,0.35))`
-    case 'linear-left':
-      return `linear-gradient(90deg, ${color}, rgba(0,0,0,0.35))`
-    case 'linear-diagonal':
-      return `linear-gradient(135deg, ${color}, rgba(0,0,0,0.4))`
-    case 'radial':
-      return `radial-gradient(circle at 50% 50%, ${color}, rgba(0,0,0,0.45))`
-    default:
-      return color
-  }
-}
 
 // ---- Page Navigation ----
 function navigateToPage(targetId: number) {
@@ -238,7 +227,11 @@ watch([schema, fullscreenMode, pageWidth, pageHeight], () => {
           transformOrigin: '0 0',
           transform: scale === 1 ? undefined : `scale(${scale})`,
           background: schema
-            ? buildBgStyle(schema.bgColor ?? '#0d1520', schema.bgGradient ?? 'none')
+            ? buildGradientBackground(
+                schema.bgColor ?? '#0d1520',
+                schema.bgGradient ?? 'none',
+                schema.bgColorTo ?? DEFAULT_GRADIENT_COLOR_TO,
+              )
             : '#0d1520',
         }"
       >
