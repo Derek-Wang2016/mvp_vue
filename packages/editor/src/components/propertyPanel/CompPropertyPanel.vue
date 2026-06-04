@@ -4,6 +4,7 @@ import type { PageComponent } from '@mvp-vue/schema'
 import { useEditorStore } from '../../stores/editorStore'
 import { getEditorDef } from '../registry/registry'
 import { PROP_LABEL, PROP_HINT, PROP_SECTION } from './shared'
+import ComponentLayoutFields from './ComponentLayoutFields.vue'
 
 const props = defineProps<{
   comp: PageComponent
@@ -84,8 +85,8 @@ function toggleLock() {
     <div v-if="tab === 'props'" class="space-y-3" :class="isLocked ? 'opacity-50 pointer-events-none' : ''">
       <div class="flex items-center gap-2 text-xs">
         <span class="text-slate-500 bg-white/5 border border-white/10 rounded px-1.5 py-0.5">{{ comp.type }}</span>
-        <span class="text-[11px] text-slate-400">x={{ comp.x }}, y={{ comp.y }} | {{ comp.w }}×{{ comp.h }}</span>
       </div>
+      <ComponentLayoutFields :comp="comp" :disabled="!!readOnly || isLocked" />
       <component
         v-if="def?.PropertyFields"
         :is="def.PropertyFields"

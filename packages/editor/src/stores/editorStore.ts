@@ -11,6 +11,7 @@ import {
   mergeSavedIconIntoPool, isComponentLocked,
 } from '@mvp-vue/schema'
 import { clampPageSize } from '../pageSizePresets'
+import { clampComponentLayout } from '../utils/componentLayout'
 import { getDefaultProps, getDefaultSize } from '../components/registry/registry'
 import { isCurrentPageReadOnly, type PageScope } from '../pagePolicy'
 
@@ -500,10 +501,37 @@ export const useEditorStore = defineStore('editor', () => {
   function resizeComponent(id: string, x: number, y: number, w: number, h: number) {
     const comp = getComponentById(id)
     if (!comp || isComponentLocked(comp)) return
+    const layout = clampComponentLayout(
+      { x, y, w, h },
+      pageWidth.value,
+      pageHeight.value,
+    )
     pushHistory()
     components.value = components.value.map((c) =>
-      c.id === id ? { ...c, x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) } : c,
+      c.id === id ? { ...c, ...layout } : c,
     )
+  }
+
+  /** 多选批量修改宽高（保留各自 x/y） */
+  function setComponentsSize(ids: Iterable<string>, patch: { w?: number; h?: number }) {
+    const idSet = new Set(ids)
+    if (idSet.size === 0 || (patch.w === undefined && patch.h === undefined)) return
+    const pw = pageWidth.value
+    const ph = pageHeight.value
+    let changed = false
+    const next = components.value.map((c) => {
+      if (!idSet.has(c.id) || isComponentLocked(c)) return c
+      const layout = clampComponentLayout(
+        { x: c.x, y: c.y, w: patch.w ?? c.w, h: patch.h ?? c.h },
+        pw,
+        ph,
+      )
+      if (layout.w !== c.w || layout.h !== c.h) changed = true
+      return { ...c, w: layout.w, h: layout.h }
+    })
+    if (!changed) return
+    pushHistory()
+    components.value = next
   }
 
   function removeComponent(id: string) {
@@ -865,6 +893,7 @@ export const useEditorStore = defineStore('editor', () => {
     equalizeSelectedWidth, equalizeSelectedHeight,
     distributeSelectedComponentsHorizontal, distributeSelectedComponentsVertical,
     resizeComponent,
+    setComponentsSize,
     removeComponent, removeComponents,
     setComponentLocked, setComponentsLocked, hasLockedInSelection,
     bringToFront, sendToBack, bringForward, sendBackward,

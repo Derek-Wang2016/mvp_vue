@@ -5,6 +5,7 @@ import { storeToRefs } from 'pinia'
 import { PROP_SECTION } from './propertyPanel/shared'
 import PagePropertyPanel from './propertyPanel/PagePropertyPanel.vue'
 import CompPropertyPanel from './propertyPanel/CompPropertyPanel.vue'
+import MultiSelectLayoutFields from './propertyPanel/MultiSelectLayoutFields.vue'
 
 const store = useEditorStore()
 const { selectedIds, anchorComponentId, components, pageReadOnly } = storeToRefs(store)
@@ -41,6 +42,8 @@ function unlockSelected() {
         对齐基准：{{ anchorComponentId }}
       </div>
     </div>
+    <MultiSelectLayoutFields :disabled="pageReadOnly" />
+
     <div class="flex gap-2">
       <button
         type="button"

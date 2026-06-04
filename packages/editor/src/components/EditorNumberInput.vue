@@ -7,6 +7,7 @@ const props = withDefaults(defineProps<{
   max?: number | string
   step?: number | string
   placeholder?: string
+  disabled?: boolean
   class?: string
   inputClass?: string
 }>(), {
@@ -27,6 +28,7 @@ function clamp(val: number, min?: number | string, max?: number | string): numbe
 }
 
 function applyStep(direction: 1 | -1, e: MouseEvent) {
+  if (props.disabled) return
   e.preventDefault()
   e.stopPropagation()
   const el = inputRef.value
@@ -55,6 +57,7 @@ function applyStep(direction: 1 | -1, e: MouseEvent) {
       :min="min"
       :max="max"
       :placeholder="placeholder"
+      :disabled="disabled"
       @change="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
     />
     <button
@@ -62,6 +65,7 @@ function applyStep(direction: 1 | -1, e: MouseEvent) {
       class="editor-number-step editor-number-step-up"
       tabindex="-1"
       aria-label="增加"
+      :disabled="disabled"
       @mousedown.prevent
       @click="(e: MouseEvent) => applyStep(1, e)"
     />
@@ -70,6 +74,7 @@ function applyStep(direction: 1 | -1, e: MouseEvent) {
       class="editor-number-step editor-number-step-down"
       tabindex="-1"
       aria-label="减少"
+      :disabled="disabled"
       @mousedown.prevent
       @click="(e: MouseEvent) => applyStep(-1, e)"
     />

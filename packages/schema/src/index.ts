@@ -47,6 +47,28 @@ export const PAGE_NAV_ICON_PRESETS: PageNavIconPreset[] = [
   'none',
 ]
 
+export {
+  type PageNavIconPosition,
+  type PageNavIconDisplay,
+  PAGE_NAV_ICON_POSITION_OPTIONS,
+  DEFAULT_PAGE_NAV_ICON_SIZE,
+  DEFAULT_PAGE_NAV_ICON_GAP,
+  isPageNavImageUrl,
+  pageNavPropsToIconEntry,
+  pageNavIconPickerToProps,
+  resolvePageNavBuiltinPreset,
+  resolvePageNavIconSize,
+  resolvePageNavIconGap,
+  resolvePageNavIconPosition,
+  resolvePageNavIconColor,
+  resolvePageNavIconDisplay,
+  pageNavContentFlexStyle,
+  type PageNavButtonAppearance,
+  DEFAULT_PAGE_NAV_BG_GRADIENT,
+  resolvePageNavButtonAppearance,
+  resolvePageNavButtonBackgroundStyle,
+} from './pageNavButtonComponent'
+
 // ===== 卡片字段布局 =====
 export type CardFieldLayoutId = 'default' | 'label-above' | 'value-only' | 'divider'
 
