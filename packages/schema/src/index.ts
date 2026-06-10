@@ -1,5 +1,5 @@
 // ===== 组件类型 =====
-export type ComponentType = 'text' | 'image' | 'icon' | 'rectangle' | 'line' | 'bar-chart' | 'line-chart' | 'pie-chart' | 'table' | 'iframe' | 'video' | 'datetime' | 'analog-clock' | 'page-nav-button' | 'card-list' | 'card' | 'key-value-tag' | 'map'
+export type ComponentType = 'text' | 'image' | 'icon' | 'rectangle' | 'ellipse' | 'line' | 'bar-chart' | 'line-chart' | 'pie-chart' | 'table' | 'iframe' | 'video' | 'datetime' | 'analog-clock' | 'page-nav-button' | 'card-list' | 'card' | 'key-value-tag' | 'map'
 
 export {
   type MapLevel,
@@ -349,11 +349,21 @@ export {
 export { iconPropsToDictEntry, iconPickerResultToProps, resolveIconLayoutSizes, type IconLayoutSizes } from './iconComponent'
 export {
   type RectangleComponentProps,
+  type RectangleCornerRadii,
   DEFAULT_RECTANGLE_PROPS,
   resolveRectangleProps,
+  resolveRectangleCornerRadii,
+  formatRectangleBorderRadius,
   resolveRectangleStyle,
   type RectangleInlineStyle,
 } from './rectangleComponent'
+export {
+  type EllipseComponentProps,
+  DEFAULT_ELLIPSE_PROPS,
+  resolveEllipseProps,
+  resolveEllipseStyle,
+  type EllipseInlineStyle,
+} from './ellipseComponent'
 export {
   type LineOrientation,
   type LineStrokeStyle,

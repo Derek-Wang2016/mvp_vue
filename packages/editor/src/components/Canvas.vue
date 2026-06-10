@@ -15,7 +15,10 @@ const emit = defineEmits<{
 const store = useEditorStore()
 const { components, pageWidth, pageHeight, bgColor, bgColorTo, bgGradient, bgImage, bgOpacity, selectedIds, groupDragOffset, pageReadOnly } = storeToRefs(store)
 
-const props = defineProps<{ showGrid: boolean }>()
+const props = defineProps<{
+  showGrid: boolean
+  showComponentPosition: boolean
+}>()
 
 const canvasScale = ref(0.5)
 const wrapperRef = ref<HTMLDivElement | null>(null)
@@ -429,8 +432,9 @@ function handleDrop(e: DragEvent) {
             :on-end-edit="() => editingCompId = null"
           />
 
-          <!-- debug coords -->
+          <!-- component position -->
           <span
+            v-if="props.showComponentPosition"
             class="absolute top-0 left-0 text-[10px] text-yellow-400 bg-black/60 px-1 rounded pointer-events-none select-none"
             style="transform: translateY(-100%)"
           >

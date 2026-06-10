@@ -7,6 +7,13 @@ import {
   type BgGradient,
 } from './bgGradient'
 
+export interface RectangleCornerRadii {
+  topLeft: number
+  topRight: number
+  bottomRight: number
+  bottomLeft: number
+}
+
 export interface RectangleComponentProps {
   /** 无渐变时为纯色；有渐变时为渐变亮色（起点） */
   backgroundColor: string
@@ -15,7 +22,12 @@ export interface RectangleComponentProps {
   backgroundGradient: BgGradient
   borderColor: string
   borderWidth: number
+  /** 统一圆角；四角未单独设置时作为回退值 */
   borderRadius: number
+  borderRadiusTopLeft: number
+  borderRadiusTopRight: number
+  borderRadiusBottomRight: number
+  borderRadiusBottomLeft: number
   /** 是否绘制边框；为 false 时忽略 borderWidth */
   borderEnabled: boolean
   /** 整体不透明度 0–1 */
@@ -29,6 +41,10 @@ export const DEFAULT_RECTANGLE_PROPS: RectangleComponentProps = {
   borderColor: 'rgba(129, 140, 248, 0.55)',
   borderWidth: 2,
   borderRadius: 8,
+  borderRadiusTopLeft: 8,
+  borderRadiusTopRight: 8,
+  borderRadiusBottomRight: 8,
+  borderRadiusBottomLeft: 8,
   borderEnabled: true,
   opacity: 1,
 }
@@ -55,8 +71,34 @@ function str(props: Record<string, unknown>, key: keyof RectangleComponentProps,
   return fallback
 }
 
+function cornerRadius(
+  props: Record<string, unknown>,
+  key: 'borderRadiusTopLeft' | 'borderRadiusTopRight' | 'borderRadiusBottomRight' | 'borderRadiusBottomLeft',
+  fallback: number,
+): number {
+  const v = props[key]
+  if (typeof v === 'number' && Number.isFinite(v)) return clamp(v, 0, 999)
+  return fallback
+}
+
+/** 解析四角圆角；未单独配置时回退到 borderRadius */
+export function resolveRectangleCornerRadii(props: Record<string, unknown>): RectangleCornerRadii {
+  const fallback = clamp(num(props, 'borderRadius', DEFAULT_RECTANGLE_PROPS.borderRadius), 0, 999)
+  return {
+    topLeft: cornerRadius(props, 'borderRadiusTopLeft', fallback),
+    topRight: cornerRadius(props, 'borderRadiusTopRight', fallback),
+    bottomRight: cornerRadius(props, 'borderRadiusBottomRight', fallback),
+    bottomLeft: cornerRadius(props, 'borderRadiusBottomLeft', fallback),
+  }
+}
+
+export function formatRectangleBorderRadius(corners: RectangleCornerRadii): string {
+  return `${corners.topLeft}px ${corners.topRight}px ${corners.bottomRight}px ${corners.bottomLeft}px`
+}
+
 /** 解析矩形 props，供编辑器预览与渲染器共用 */
 export function resolveRectangleProps(props: Record<string, unknown>): RectangleComponentProps {
+  const corners = resolveRectangleCornerRadii(props)
   return {
     backgroundColor: str(props, 'backgroundColor', DEFAULT_RECTANGLE_PROPS.backgroundColor),
     backgroundColorTo: str(props, 'backgroundColorTo', DEFAULT_RECTANGLE_PROPS.backgroundColorTo),
@@ -65,6 +107,10 @@ export function resolveRectangleProps(props: Record<string, unknown>): Rectangle
     borderColor: str(props, 'borderColor', DEFAULT_RECTANGLE_PROPS.borderColor),
     borderWidth: clamp(num(props, 'borderWidth', DEFAULT_RECTANGLE_PROPS.borderWidth), 0, 64),
     borderRadius: clamp(num(props, 'borderRadius', DEFAULT_RECTANGLE_PROPS.borderRadius), 0, 999),
+    borderRadiusTopLeft: corners.topLeft,
+    borderRadiusTopRight: corners.topRight,
+    borderRadiusBottomRight: corners.bottomRight,
+    borderRadiusBottomLeft: corners.bottomLeft,
     borderEnabled: bool(props, 'borderEnabled', DEFAULT_RECTANGLE_PROPS.borderEnabled),
     opacity: clamp(num(props, 'opacity', DEFAULT_RECTANGLE_PROPS.opacity), 0, 1),
   }
@@ -84,7 +130,12 @@ export function resolveRectangleStyle(props: Record<string, unknown>): Rectangle
     width: '100%',
     height: '100%',
     boxSizing: 'border-box',
-    borderRadius: `${r.borderRadius}px`,
+    borderRadius: formatRectangleBorderRadius({
+      topLeft: r.borderRadiusTopLeft,
+      topRight: r.borderRadiusTopRight,
+      bottomRight: r.borderRadiusBottomRight,
+      bottomLeft: r.borderRadiusBottomLeft,
+    }),
     border: borderWidth > 0 ? `${borderWidth}px solid ${r.borderColor}` : 'none',
     opacity: r.opacity,
   }

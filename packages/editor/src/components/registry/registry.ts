@@ -12,6 +12,7 @@ import { cardDefaultProps, cardDefaultSize } from './card/defaults'
 import { keyValueTagDefaultProps, keyValueTagDefaultSize } from './key-value-tag/defaults'
 import { iconDefaultProps, iconDefaultSize } from './icon/defaults'
 import { rectangleDefaultProps, rectangleDefaultSize } from './rectangle/defaults'
+import { ellipseDefaultProps, ellipseDefaultSize } from './ellipse/defaults'
 import { lineDefaultProps, lineDefaultSize } from './line/defaults'
 import { mapDefaultProps, mapDefaultSize } from './map/defaults'
 
@@ -52,6 +53,8 @@ import IconPropertyFields from './icon/IconPropertyFields.vue'
 import IconCanvasPreview from './icon/IconCanvasPreview.vue'
 import RectanglePropertyFields from './rectangle/RectanglePropertyFields.vue'
 import RectangleCanvasPreview from './rectangle/RectangleCanvasPreview.vue'
+import EllipsePropertyFields from './ellipse/EllipsePropertyFields.vue'
+import EllipseCanvasPreview from './ellipse/EllipseCanvasPreview.vue'
 import LinePropertyFields from './line/LinePropertyFields.vue'
 import LineCanvasPreview from './line/LineCanvasPreview.vue'
 
@@ -88,6 +91,12 @@ export const editorRegistry: EditorRegistry = {
     defaultSize: rectangleDefaultSize,
     PropertyFields: RectanglePropertyFields,
     CanvasPreview: RectangleCanvasPreview,
+  },
+  ellipse: {
+    defaultProps: ellipseDefaultProps,
+    defaultSize: ellipseDefaultSize,
+    PropertyFields: EllipsePropertyFields,
+    CanvasPreview: EllipseCanvasPreview,
   },
   line: {
     defaultProps: lineDefaultProps,

@@ -52,6 +52,56 @@ function calcRect(
   return rect
 }
 
+/** Shift 等比缩放：固定对角/对边，保持初始宽高比 */
+function calcRectProportional(
+  orig: { x: number; y: number; w: number; h: number },
+  dir: Dir,
+  dx: number,
+  dy: number,
+) {
+  const ratio = orig.w / orig.h
+
+  let newW = orig.w
+  let newH = orig.h
+
+  if (dir.includes('e')) newW = orig.w + dx
+  if (dir.includes('w')) newW = orig.w - dx
+  if (dir.includes('s')) newH = orig.h + dy
+  if (dir.includes('n')) newH = orig.h - dy
+
+  if (dir.length === 2) {
+    const scaleW = newW / orig.w
+    const scaleH = newH / orig.h
+    if (Math.abs(scaleW - 1) >= Math.abs(scaleH - 1)) {
+      newH = newW / ratio
+    } else {
+      newW = newH * ratio
+    }
+  } else if (dir === 'e' || dir === 'w') {
+    newH = newW / ratio
+  } else {
+    newW = newH * ratio
+  }
+
+  if (newW < MIN_W) {
+    newW = MIN_W
+    newH = newW / ratio
+  }
+  if (newH < MIN_H) {
+    newH = MIN_H
+    newW = newH * ratio
+  }
+  newW = Math.max(MIN_W, newW)
+  newH = Math.max(MIN_H, newH)
+
+  let x = orig.x
+  let y = orig.y
+  if (dir.includes('w')) x = orig.x + orig.w - newW
+  if (dir.includes('n')) y = orig.y + orig.h - newH
+
+  return { x, y, w: newW, h: newH }
+}
+
 function handlePointerDown(dir: Dir, e: PointerEvent) {
   if (isComponentLocked(props.comp)) return
   e.stopPropagation()
@@ -68,7 +118,9 @@ function handlePointerDown(dir: Dir, e: PointerEvent) {
   function onMove(ev: PointerEvent) {
     const dx = (ev.clientX - startX) / scale
     const dy = (ev.clientY - startY) / scale
-    const next = calcRect(orig, dir, dx, dy)
+    const next = ev.shiftKey
+      ? calcRectProportional(orig, dir, dx, dy)
+      : calcRect(orig, dir, dx, dy)
     useEditorStore().resizeComponent(props.comp.id, next.x, next.y, next.w, next.h)
   }
 

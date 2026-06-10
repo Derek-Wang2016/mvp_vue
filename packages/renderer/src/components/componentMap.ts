@@ -4,6 +4,7 @@ import TextRenderer from './TextRenderer.vue'
 import ImageRenderer from './ImageRenderer.vue'
 import IconRenderer from './IconRenderer.vue'
 import RectangleRenderer from './RectangleRenderer.vue'
+import EllipseRenderer from './EllipseRenderer.vue'
 import LineRenderer from './LineRenderer.vue'
 import DatetimeRenderer from './DatetimeRenderer.vue'
 import AnalogClockRenderer from './AnalogClockRenderer.vue'
@@ -28,6 +29,7 @@ export const componentMap: Record<ComponentType, Component<CompRendererProps> | 
   'image': ImageRenderer,
   'icon': IconRenderer,
   'rectangle': RectangleRenderer,
+  'ellipse': EllipseRenderer,
   'line': LineRenderer,
   'bar-chart': ChartRenderer,
   'line-chart': ChartRenderer,

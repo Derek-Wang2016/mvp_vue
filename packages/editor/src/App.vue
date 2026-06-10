@@ -24,6 +24,7 @@ const lastSavedAt = ref<string | null>(null)
 const dialogOpen = ref(false)
 const jsonDialogOpen = ref(false)
 const showGrid = ref(true)
+const showComponentPosition = ref(false)
 const pageOptions = ref<PageListItem[]>([])
 const pageOptionsLoading = ref(false)
 const savedFingerprint = ref('')
@@ -531,10 +532,21 @@ const alignBtnClass = (enabled: boolean) =>
 
       <div class="flex-1" />
 
+      <!-- component position toggle -->
+      <button
+        class="text-xs px-2.5 py-1 rounded-md border transition-colors"
+        :class="showComponentPosition ? 'bg-indigo-500/20 border-indigo-400/30 text-indigo-300 hover:bg-indigo-500/30 hover:border-indigo-400/50' : 'text-slate-400 border-white/10 bg-white/5 hover:text-slate-200 hover:bg-white/10'"
+        title="显示/隐藏组件左上角位置"
+        @click="showComponentPosition = !showComponentPosition"
+      >
+        位置
+      </button>
+
       <!-- grid toggle -->
       <button
         class="text-xs px-2.5 py-1 rounded-md border transition-colors"
         :class="showGrid ? 'bg-indigo-500/20 border-indigo-400/30 text-indigo-300 hover:bg-indigo-500/30 hover:border-indigo-400/50' : 'text-slate-400 border-white/10 bg-white/5 hover:text-slate-200 hover:bg-white/10'"
+        title="显示/隐藏画布网格"
         @click="showGrid = !showGrid"
       >
         网格
@@ -568,6 +580,7 @@ const alignBtnClass = (enabled: boolean) =>
       <ComponentPanel />
       <Canvas
         :show-grid="showGrid"
+        :show-component-position="showComponentPosition"
         @contextmenu="handleCanvasContextMenu"
       />
       <PropertyPanel />

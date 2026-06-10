@@ -11,6 +11,7 @@ const PANEL_ITEMS: { type: ComponentType; label: string }[] = [
   { type: 'image', label: '图片' },
   { type: 'icon', label: '图标' },
   { type: 'rectangle', label: '矩形' },
+  { type: 'ellipse', label: '圆形/椭圆' },
   { type: 'line', label: '线条' },
   { type: 'bar-chart', label: '柱状图' },
   { type: 'line-chart', label: '折线图' },
@@ -65,7 +66,14 @@ const ICONS: Record<string, string> = {
         :data-drag-type="item.type"
         @dragstart="(e: DragEvent) => { e.dataTransfer!.effectAllowed = 'copy'; e.dataTransfer!.setData('application/x-mvp-component-type', item.type); e.dataTransfer!.setData('text/plain', item.type); }"
       >
-        <span class="text-slate-500 text-xs w-4 text-center">{{ ICONS[item.type] }}</span>
+        <span
+          v-if="item.type === 'ellipse'"
+          class="w-4 h-4 flex items-center justify-center shrink-0"
+          aria-hidden="true"
+        >
+          <span class="w-3.5 h-3.5 rounded-full border-[1.5px] border-slate-400" />
+        </span>
+        <span v-else class="text-slate-500 text-xs w-4 text-center">{{ ICONS[item.type] }}</span>
         <span class="text-slate-400">{{ item.label }}</span>
       </div>
     </div>
