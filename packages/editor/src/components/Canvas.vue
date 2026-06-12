@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import type { PageComponent, ComponentType } from '@mvp-vue/schema'
 import { isComponentLocked, buildGradientBackground } from '@mvp-vue/schema'
 import { useEditorStore } from '../stores/editorStore'
@@ -13,14 +13,13 @@ const emit = defineEmits<{
 }>()
 
 const store = useEditorStore()
-const { components, pageWidth, pageHeight, bgColor, bgColorTo, bgGradient, bgImage, bgOpacity, selectedIds, groupDragOffset, pageReadOnly } = storeToRefs(store)
+const { components, pageWidth, pageHeight, bgColor, bgColorTo, bgGradient, bgImage, bgOpacity, selectedIds, groupDragOffset, pageReadOnly, canvasScale, hasUserZoomed, pageId, fitRequestCount } = storeToRefs(store)
 
 const props = defineProps<{
   showGrid: boolean
   showComponentPosition: boolean
 }>()
 
-const canvasScale = ref(0.5)
 const wrapperRef = ref<HTMLDivElement | null>(null)
 const canvasRef = ref<HTMLDivElement | null>(null)
 const containerRef = ref<HTMLDivElement | null>(null)
@@ -30,6 +29,11 @@ const editingCompId = ref<string | null>(null)
 interface BoxRect { x1: number; y1: number; x2: number; y2: number }
 const boxSelect = ref<BoxRect | null>(null)
 const pointerDownPos = ref<{ x: number; y: number } | null>(null)
+
+// --- grab-pan (Ctrl + drag to scroll) ---
+interface PanState { startX: number; startY: number; scrollLeft: number; scrollTop: number }
+const panState = ref<PanState | null>(null)
+const ctrlHeld = ref(false)
 
 function rectsIntersect(a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) {
   return !(a.x + a.w < b.x || b.x + b.w < a.x || a.y + a.h < b.y || b.y + b.h < a.y)
@@ -67,34 +71,50 @@ const displayComponents = computed(() => {
   return [...unselected, ...selected]
 })
 
-function updateScale() {
+function zoomToFit() {
   const container = containerRef.value
-  const wrapper = wrapperRef.value
-  if (!container || !wrapper) return
+  if (!container) return
   const cw = container.clientWidth - 32
   const ch = container.clientHeight - 32
-  const scale = Math.min(cw / pageWidth.value, ch / pageHeight.value, 1)
-  canvasScale.value = scale
-  wrapper.style.width = `${pageWidth.value * scale}px`
-  wrapper.style.height = `${pageHeight.value * scale}px`
+  const fitPercent = Math.round(Math.min(cw / pageWidth.value, ch / pageHeight.value) * 100)
+  store.setZoom(fitPercent)
 }
 
 let resizeObserver: ResizeObserver | null = null
 
 onMounted(() => {
-  updateScale()
+  zoomToFit()
   if (containerRef.value) {
-    resizeObserver = new ResizeObserver(updateScale)
+    resizeObserver = new ResizeObserver(() => {
+      if (!hasUserZoomed.value) zoomToFit()
+    })
     resizeObserver.observe(containerRef.value)
   }
+  window.addEventListener('keydown', onCtrlKeyDown)
+  window.addEventListener('keyup', onCtrlKeyUp)
 })
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   endDragSession()
+  window.removeEventListener('keydown', onCtrlKeyDown)
+  window.removeEventListener('keyup', onCtrlKeyUp)
 })
 
-watch([pageWidth, pageHeight], updateScale)
+watch([pageWidth, pageHeight], () => {
+  if (!hasUserZoomed.value) zoomToFit()
+})
+
+// 切换页面时重置为自动适应
+watch(pageId, () => {
+  store.resetUserZoomFlag()
+  nextTick(() => zoomToFit())
+})
+
+// 工具栏"适应窗口"按钮
+watch(fitRequestCount, () => {
+  nextTick(() => zoomToFit())
+})
 
 // selection helpers
 function isSelected(compId: string) {
@@ -352,17 +372,71 @@ function handleDrop(e: DragEvent) {
   const y = Math.round((e.clientY - rect.top) / canvasScale.value)
   store.addComponent(type, x, y)
 }
+
+function handleWheel(e: WheelEvent) {
+  if (!e.ctrlKey && !e.metaKey) return
+  e.preventDefault()
+  if (e.deltaY < 0) store.zoomIn()
+  else store.zoomOut()
+}
+
+// --- grab-pan handlers ---
+function handlePanStart(e: PointerEvent) {
+  if (!e.ctrlKey && !e.metaKey) return
+  e.stopPropagation()
+  e.preventDefault()
+  const container = containerRef.value
+  if (!container) return
+  panState.value = {
+    startX: e.clientX,
+    startY: e.clientY,
+    scrollLeft: container.scrollLeft,
+    scrollTop: container.scrollTop,
+  }
+  container.setPointerCapture(e.pointerId)
+}
+
+function handlePanMove(e: PointerEvent) {
+  if (!panState.value) return
+  const container = containerRef.value
+  if (!container) return
+  container.scrollLeft = panState.value.scrollLeft - (e.clientX - panState.value.startX)
+  container.scrollTop = panState.value.scrollTop - (e.clientY - panState.value.startY)
+}
+
+function handlePanEnd(e: PointerEvent) {
+  if (!panState.value) return
+  containerRef.value?.releasePointerCapture?.(e.pointerId)
+  panState.value = null
+}
+
+function onCtrlKeyDown(e: KeyboardEvent) {
+  if (e.key === 'Control' || e.key === 'Meta') ctrlHeld.value = true
+}
+function onCtrlKeyUp(e: KeyboardEvent) {
+  if (e.key === 'Control' || e.key === 'Meta') ctrlHeld.value = false
+}
 </script>
 
 <template>
   <div
     ref="containerRef"
-    class="relative min-w-0 flex-1 flex items-center justify-center overflow-hidden p-4"
+    class="canvas-zoom-container editor-scrollbar relative min-w-0 flex-1 overflow-auto flex p-4"
+    :class="{ '!cursor-grab': ctrlHeld && !panState, '!cursor-grabbing': !!panState }"
+    @pointerdown.capture="handlePanStart"
+    @pointermove="handlePanMove"
+    @pointerup="handlePanEnd"
+    @pointercancel="handlePanEnd"
     @dragenter="handlePanelDragEnterOrOver"
     @dragover="handlePanelDragEnterOrOver"
     @drop="handleDrop"
+    @wheel="handleWheel"
   >
-    <div ref="wrapperRef" class="relative shrink-0 overflow-visible">
+    <div
+      ref="wrapperRef"
+      class="relative shrink-0 m-auto"
+      :style="{ width: `${pageWidth * canvasScale}px`, height: `${pageHeight * canvasScale}px` }"
+    >
       <div
         ref="canvasRef"
         class="dnd-canvas border-2 border-slate-400/50 shadow-[0_0_16px_rgba(148,163,184,0.25)]"

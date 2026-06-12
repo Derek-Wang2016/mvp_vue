@@ -4,6 +4,7 @@ import { useEditorStore } from './stores/editorStore'
 import { storeToRefs } from 'pinia'
 import { savePage, updatePage, getPage, listPages } from './api'
 import type { PageListItem } from './api'
+import { getRendererBase } from './config'
 import { defaultEditorPageScope, parsePageScope } from './pagePolicy'
 import ComponentPanel from './components/ComponentPanel.vue'
 import Canvas from './components/Canvas.vue'
@@ -15,7 +16,7 @@ import ColorPickerDialog from './components/ColorPickerDialog.vue'
 const store = useEditorStore()
 const {
   pageName, pageId, pageScope, pageReadOnly, canUndo, canRedo, canCopy, canPaste, canCut, canDelete,
-  canMoveUp, canMoveDown, canAlign, firstSelectedId, components, selectedIds,
+  canMoveUp, canMoveDown, canAlign, firstSelectedId, components, selectedIds, userZoom,
 } = storeToRefs(store)
 
 const saving = ref(false)
@@ -159,6 +160,12 @@ async function handlePageSelectChange(e: Event) {
   } catch {
     saveMsg.value = '切换页面失败'
   }
+}
+
+function openRenderer() {
+  const id = currentPageId.value
+  if (!id) return
+  window.open(`${getRendererBase()}/?id=${id}`, '_blank')
 }
 
 function handleOpenDialogClose() {
@@ -532,6 +539,57 @@ const alignBtnClass = (enabled: boolean) =>
 
       <div class="flex-1" />
 
+      <!-- zoom controls -->
+      <span class="w-px h-4 bg-white/10" />
+      <button
+        class="text-xs px-1.5 py-1 rounded-md border transition-colors"
+        :class="userZoom <= 25 ? 'text-slate-700 border-white/5 bg-white/[0.02] cursor-not-allowed' : 'text-slate-400 border-white/10 bg-white/5 hover:text-slate-200 hover:bg-white/10 hover:border-white/15'"
+        :disabled="userZoom <= 25"
+        title="缩小 (Ctrl+滚轮)"
+        @click="store.zoomOut()"
+      >
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="8" x2="13" y2="8"/></svg>
+      </button>
+      <span
+        class="text-xs text-slate-400 tabular-nums w-10 text-center select-none"
+        title="当前缩放比例"
+      >{{ userZoom }}%</span>
+      <button
+        class="text-xs px-1.5 py-1 rounded-md border transition-colors"
+        :class="userZoom >= 200 ? 'text-slate-700 border-white/5 bg-white/[0.02] cursor-not-allowed' : 'text-slate-400 border-white/10 bg-white/5 hover:text-slate-200 hover:bg-white/10 hover:border-white/15'"
+        :disabled="userZoom >= 200"
+        title="放大 (Ctrl+滚轮)"
+        @click="store.zoomIn()"
+      >
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="8" x2="13" y2="8"/><line x1="8" y1="3" x2="8" y2="13"/></svg>
+      </button>
+      <button
+        class="text-xs px-1.5 py-1 rounded-md border transition-colors"
+        :class="userZoom === 100 ? 'text-slate-700 border-white/5 bg-white/[0.02] cursor-not-allowed' : 'text-slate-400 border-white/10 bg-white/5 hover:text-slate-200 hover:bg-white/10 hover:border-white/15'"
+        :disabled="userZoom === 100"
+        title="恢复 100%"
+        @click="store.zoomReset()"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 3 21 3 21 9"/>
+          <polyline points="9 21 3 21 3 15"/>
+          <line x1="21" y1="3" x2="14" y2="10"/>
+          <line x1="3" y1="21" x2="10" y2="14"/>
+        </svg>
+      </button>
+      <button
+        class="text-xs px-1.5 py-1 rounded-md border transition-colors text-slate-400 border-white/10 bg-white/5 hover:text-slate-200 hover:bg-white/10 hover:border-white/15"
+        title="适应窗口"
+        @click="store.requestZoomToFit()"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <polyline points="8 7 4 7 4 11"/>
+          <polyline points="16 17 20 17 20 13"/>
+        </svg>
+      </button>
+      <span class="w-px h-4 bg-white/10" />
+
       <!-- component position toggle -->
       <button
         class="text-xs px-2.5 py-1 rounded-md border transition-colors"
@@ -560,6 +618,19 @@ const alignBtnClass = (enabled: boolean) =>
       </button>
       <button class="text-slate-400 hover:text-slate-200 text-xs px-2.5 py-1 rounded-md border border-white/10 bg-white/5 hover:bg-white/10 transition-colors" @click="dialogOpen = true">
         打开
+      </button>
+      <button
+        class="text-slate-400 hover:text-slate-200 text-xs px-2.5 py-1 rounded-md border border-white/10 bg-white/5 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        :disabled="!currentPageId"
+        :title="currentPageId ? '在新标签页预览渲染效果' : '请先保存页面'"
+        @click="openRenderer()"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block mr-1 -mt-px">
+          <rect x="2" y="3" width="20" height="14" rx="2"/>
+          <line x1="8" y1="21" x2="16" y2="21"/>
+          <line x1="12" y1="17" x2="12" y2="21"/>
+        </svg>
+        预览
       </button>
 
       <span v-if="saveMsg" class="text-xs" :class="saveMsg.includes('失败') ? 'text-red-400' : 'text-green-400'">

@@ -3,3 +3,9 @@ export function getApiBase(): string {
   if (env) return env.replace(/\/$/, '')
   return `http://${window.location.hostname}:3002`
 }
+
+export function getRendererBase(): string {
+  const env = import.meta.env.VITE_RENDERER_BASE as string | undefined
+  if (env) return env.replace(/\/$/, '')
+  return `http://${window.location.hostname}:5001`
+}

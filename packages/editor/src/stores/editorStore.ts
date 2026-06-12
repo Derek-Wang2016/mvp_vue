@@ -67,6 +67,16 @@ export const useEditorStore = defineStore('editor', () => {
   const pageName = ref('未命名大屏')
   const pageWidth = ref(DEFAULT_PAGE_WIDTH)
   const pageHeight = ref(DEFAULT_PAGE_HEIGHT)
+
+  // === zoom ===
+  const ZOOM_MIN = 25
+  const ZOOM_MAX = 200
+  const ZOOM_STEP = 10
+  const userZoom = ref(100)
+  const hasUserZoomed = ref(false)
+  const fitRequestCount = ref(0)
+  const canvasScale = computed(() => userZoom.value / 100)
+
   const bgColor = ref('#0d1520')
   const bgColorTo = ref(DEFAULT_GRADIENT_COLOR_TO)
   const bgGradient = ref<BgGradient>('none')
@@ -664,6 +674,28 @@ export const useEditorStore = defineStore('editor', () => {
     pageWidth.value = s.width
     pageHeight.value = s.height
   }
+  function zoomIn() {
+    hasUserZoomed.value = true
+    userZoom.value = Math.min(ZOOM_MAX, userZoom.value + ZOOM_STEP)
+  }
+  function zoomOut() {
+    hasUserZoomed.value = true
+    userZoom.value = Math.max(ZOOM_MIN, userZoom.value - ZOOM_STEP)
+  }
+  function zoomReset() {
+    hasUserZoomed.value = true
+    userZoom.value = 100
+  }
+  function setZoom(percent: number) {
+    userZoom.value = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.round(percent)))
+  }
+  function resetUserZoomFlag() {
+    hasUserZoomed.value = false
+  }
+  function requestZoomToFit() {
+    hasUserZoomed.value = false
+    fitRequestCount.value++
+  }
   function setBgColor(color: string) {
     if (pageReadOnly.value) return
     bgColor.value = color
@@ -880,6 +912,8 @@ export const useEditorStore = defineStore('editor', () => {
     bgColor, bgColorTo, bgGradient, bgImage, bgOpacity,
     dataSources, colorDict, iconDict, savedIcons, abbrevDict,
     past, future, groupDragOffset, clipboard,
+    // zoom
+    userZoom, canvasScale, hasUserZoomed, fitRequestCount,
     // computed
     pageReadOnly,
     firstSelectedId, canUndo, canRedo, canCopy, canPaste, canCut, canDelete,
@@ -900,6 +934,7 @@ export const useEditorStore = defineStore('editor', () => {
     copySelectedComponents, cutSelectedComponents, pasteComponents,
     setGroupDragOffset,
     setPageName, setPageSize, setBgColor, setBgColorTo, setBgGradient, setBgImage, setBgOpacity,
+    zoomIn, zoomOut, zoomReset, setZoom, resetUserZoomFlag, requestZoomToFit,
     addDataSource, updateDataSource, removeDataSource, setComponentDataSource,
     addColorDictEntry, updateColorDictEntry, removeColorDictEntry,
     addIconDictEntry, updateIconDictEntry, removeIconDictEntry,
