@@ -13,6 +13,7 @@ import { componentMap } from './components/componentMap'
 import DataProvider from './components/DataProvider.vue'
 import WatermarkOverlay from './components/WatermarkOverlay.vue'
 import { WATERMARK_ENABLED, WATERMARK_TEXT } from './watermarkConfig'
+import { isEmbeddedWebView, refineEmbeddedWebView, shouldShowFullscreenButton } from './utils/browserEnv'
 
 // ---- URL parsing ----
 function parsePageIdFromUrl(): number | null {
@@ -44,6 +45,7 @@ const schema = ref<PageSchema | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
 const fullscreenMode = ref(parseFullscreenParam())
+const showFullscreenButton = ref(shouldShowFullscreenButton())
 const containerRef = ref<HTMLDivElement | null>(null)
 const scale = ref(1)
 const viewport = ref({ left: 0, top: 0, width: DEFAULT_PAGE_WIDTH, height: DEFAULT_PAGE_HEIGHT })
@@ -70,6 +72,7 @@ provide(PAGE_NAV_KEY, pageNavValue)
 
 // ---- Fullscreen ----
 async function requestBrowserFullscreen() {
+  if (isEmbeddedWebView()) return
   const el = containerRef.value
   if (!el || document.fullscreenElement === el) return
   try { await el.requestFullscreen() } catch { /* ignore */ }
@@ -135,7 +138,12 @@ function onFullscreenChange() {
     applyFullscreenMode(false)
   }
 }
-onMounted(() => document.addEventListener('fullscreenchange', onFullscreenChange))
+onMounted(() => {
+  document.addEventListener('fullscreenchange', onFullscreenChange)
+  void refineEmbeddedWebView().then((embedded) => {
+    if (embedded) showFullscreenButton.value = false
+  })
+})
 onBeforeUnmount(() => document.removeEventListener('fullscreenchange', onFullscreenChange))
 
 // ---- Canvas scaling ----
@@ -190,8 +198,9 @@ watch([schema, fullscreenMode, pageWidth, pageHeight], () => {
     class="relative w-screen h-screen bg-black"
     :class="fullscreenMode ? 'overflow-auto' : 'overflow-hidden'"
   >
-    <!-- Fullscreen toggle -->
+    <!-- Fullscreen toggle（WebView 等嵌入式环境不显示） -->
     <button
+      v-if="showFullscreenButton"
       type="button"
       :title="fullscreenMode ? '退出全屏（Esc）' : '全屏显示（1:1 尺寸）'"
       class="absolute top-3 right-3 z-[100] flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-white/85 bg-black/25 border border-white/15 backdrop-blur-sm hover:bg-white/15 hover:border-white/25 transition-colors shadow-lg shadow-black/20"
