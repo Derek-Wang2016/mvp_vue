@@ -8,10 +8,22 @@ import {
   DEFAULT_PAGE_WIDTH, DEFAULT_PAGE_HEIGHT,
   DEFAULT_GRADIENT_COLOR_TO,
   buildSavedIconsSnapshot, collectReferencedSavedIconIds, collectSavedIconsFromSchema,
-  mergeSavedIconIntoPool, isComponentLocked,
+  mergeSavedIconIntoPool, isComponentLocked, isEditorLocked, isGroupLocked,
 } from '@mvp-vue/schema'
 import { clampPageSize } from '../pageSizePresets'
 import { clampComponentLayout } from '../utils/componentLayout'
+import {
+  expandIdsToFullGroups,
+  collectMembersForGrouping,
+  getGroupMembers,
+  computeGroupBounds,
+  scaleMembersToBounds,
+  isFullGroupSelection,
+  cleanupOrphanGroupIds,
+  isGroupLockedById,
+  selectionHasGroupId,
+  clampGroupBounds,
+} from '../utils/componentGroup'
 import { getDefaultProps, getDefaultSize } from '../components/registry/registry'
 import { isCurrentPageReadOnly, type PageScope } from '../pagePolicy'
 
@@ -52,6 +64,7 @@ interface Snapshot {
 export type AlignMode = 'left' | 'right' | 'top' | 'bottom'
 
 let nextId = 1
+let nextGroupId = 1
 let nextColorDictId = 1
 let nextIconDictId = 1
 let nextAbbrevDictId = 1
@@ -124,17 +137,47 @@ export const useEditorStore = defineStore('editor', () => {
   const canAlign = computed(() => {
     if (pageReadOnly.value) return false
     if (selectedIds.value.length < 2) return false
+    if (isFullGroupSelection(components.value, selectedIds.value).isFullGroup) return false
     const ids = selectedIds.value
     if (!hasLockedInSelection(ids)) return true
     const refId = anchorComponentId.value ?? ids[0]!
     return filterUnlockedIds(ids.filter((id) => id !== refId)).length > 0
+  })
+  const fullGroupSelection = computed(() =>
+    isFullGroupSelection(components.value, selectedIds.value),
+  )
+  const activeGroupId = computed(() =>
+    fullGroupSelection.value.isFullGroup ? fullGroupSelection.value.groupId : null,
+  )
+  const activeGroupBounds = computed(() => {
+    const gid = activeGroupId.value
+    if (!gid) return null
+    const members = getGroupMembers(components.value, gid)
+    return computeGroupBounds(members)
+  })
+  const activeGroupLocked = computed(() => {
+    const gid = activeGroupId.value
+    if (!gid) return false
+    return isGroupLockedById(components.value, gid)
+  })
+  const canGroup = computed(() => {
+    if (pageReadOnly.value) return false
+    const expanded = expandIdsToFullGroups(components.value, selectedIds.value)
+    if (expanded.length < 2) return false
+    if (hasLockedInSelection(expanded)) return false
+    if (isFullGroupSelection(components.value, expanded).isFullGroup) return false
+    return true
+  })
+  const canUngroup = computed(() => {
+    if (pageReadOnly.value) return false
+    return selectionHasGroupId(components.value, selectedIds.value)
   })
   const canCut = computed(() => {
     if (pageReadOnly.value) return false
     if (selectedIds.value.length === 0) return false
     return selectedIds.value.some((id) => {
       const c = components.value.find((x) => x.id === id)
-      return c && !isComponentLocked(c)
+      return c && !isEditorLocked(c)
     })
   })
   const canDelete = computed(() => canCut.value)
@@ -150,6 +193,25 @@ export const useEditorStore = defineStore('editor', () => {
     if (nextId <= maxNum) nextId = maxNum + 1
   }
 
+  function ensureNextGroupId() {
+    let maxNum = 0
+    for (const c of components.value) {
+      const m = c.groupId?.match(/^group-(\d+)$/)
+      if (m) maxNum = Math.max(maxNum, Number(m[1]))
+    }
+    if (nextGroupId <= maxNum) nextGroupId = maxNum + 1
+  }
+
+  function applyExpandedSelection(ids: string[], anchor?: string | null) {
+    const expanded = expandIdsToFullGroups(components.value, ids)
+    selectedIds.value = expanded
+    if (anchor !== undefined) {
+      anchorComponentId.value = anchor
+    } else if (expanded.length > 0 && !expanded.includes(anchorComponentId.value ?? '')) {
+      anchorComponentId.value = expanded[0] ?? null
+    }
+  }
+
   function pushHistory() {
     if (pageReadOnly.value) return
     past.value = [...past.value, { components: cloneComponentsList(components.value), nextId }].slice(-MAX_HISTORY)
@@ -163,14 +225,14 @@ export const useEditorStore = defineStore('editor', () => {
   function hasLockedInSelection(ids: string[] = selectedIds.value): boolean {
     return ids.some((id) => {
       const c = getComponentById(id)
-      return c != null && isComponentLocked(c)
+      return c != null && isEditorLocked(c)
     })
   }
 
   function filterUnlockedIds(ids: string[]): string[] {
     return ids.filter((id) => {
       const c = getComponentById(id)
-      return c != null && !isComponentLocked(c)
+      return c != null && !isEditorLocked(c)
     })
   }
 
@@ -205,7 +267,18 @@ export const useEditorStore = defineStore('editor', () => {
     }
   }
 
-  // === actions ===
+  function setGroupLocked(groupId: string, locked: boolean) {
+    if (pageReadOnly.value) return
+    const members = getGroupMembers(components.value, groupId)
+    if (members.length === 0) return
+    const hasChange = members.some((c) => !!c.groupLocked !== locked)
+    if (!hasChange) return
+    pushHistory()
+    components.value = components.value.map((c) =>
+      c.groupId === groupId ? { ...c, groupLocked: locked || undefined } : c,
+    )
+  }
+
   function undo() {
     if (pageReadOnly.value || past.value.length === 0) return
     const prev = past.value[past.value.length - 1]!
@@ -235,27 +308,29 @@ export const useEditorStore = defineStore('editor', () => {
       return
     }
     if (multi) {
-      const idx = selectedIds.value.indexOf(id)
-      if (idx >= 0) {
-        selectedIds.value = selectedIds.value.filter((x) => x !== id)
-        if (anchorComponentId.value === id) {
+      const expandedTarget = expandIdsToFullGroups(components.value, [id])
+      const allSelected = expandedTarget.every((x) => selectedIds.value.includes(x))
+      if (allSelected) {
+        const removeSet = new Set(expandedTarget)
+        const remaining = selectedIds.value.filter((x) => !removeSet.has(x))
+        applyExpandedSelection(remaining)
+        if (anchorComponentId.value && removeSet.has(anchorComponentId.value)) {
           anchorComponentId.value = selectedIds.value[0] ?? null
         }
       } else {
-        if (selectedIds.value.length === 0) {
-          anchorComponentId.value = id
-        }
-        selectedIds.value = [...selectedIds.value, id]
+        const merged = expandIdsToFullGroups(components.value, [...selectedIds.value, id])
+        const anchor = selectedIds.value.length === 0 ? id : anchorComponentId.value
+        applyExpandedSelection(merged, anchor ?? id)
       }
     } else {
-      selectedIds.value = [id]
+      const expanded = expandIdsToFullGroups(components.value, [id])
+      selectedIds.value = expanded
       anchorComponentId.value = id
     }
   }
 
   function selectComponents(ids: string[]) {
-    selectedIds.value = ids
-    anchorComponentId.value = ids[0] ?? null
+    applyExpandedSelection(ids, ids[0] ?? null)
   }
 
   function addComponent(type: ComponentType, x: number, y: number) {
@@ -278,7 +353,7 @@ export const useEditorStore = defineStore('editor', () => {
 
   function updateComponentProps(id: string, props: Record<string, unknown>) {
     const comp = getComponentById(id)
-    if (!comp || isComponentLocked(comp)) return
+    if (!comp || isEditorLocked(comp) || comp.groupId) return
     pushHistory()
     components.value = components.value.map((c) =>
       c.id === id ? { ...c, props: { ...c.props, ...props } } : c,
@@ -287,7 +362,7 @@ export const useEditorStore = defineStore('editor', () => {
 
   function replaceComponentProps(id: string, props: Record<string, unknown>) {
     const comp = getComponentById(id)
-    if (!comp || isComponentLocked(comp)) return
+    if (!comp || isEditorLocked(comp) || comp.groupId) return
     pushHistory()
     components.value = components.value.map((c) =>
       c.id === id ? { ...c, props: { ...props } } : c,
@@ -296,7 +371,7 @@ export const useEditorStore = defineStore('editor', () => {
 
   function moveComponent(id: string, x: number, y: number) {
     const comp = getComponentById(id)
-    if (!comp || isComponentLocked(comp)) return
+    if (!comp || isEditorLocked(comp)) return
     pushHistory()
     components.value = components.value.map((c) => (c.id === id ? { ...c, x, y } : c))
   }
@@ -356,7 +431,7 @@ export const useEditorStore = defineStore('editor', () => {
 
     const posById = new Map<string, { x: number; y: number }>()
     for (const c of selected) {
-      if (c.id === ref.id || isComponentLocked(c)) continue
+      if (c.id === ref.id || isEditorLocked(c)) continue
       if (axis === 'x') {
         posById.set(c.id, {
           x: Math.round(refCenterX - Number(c.w) / 2),
@@ -510,7 +585,7 @@ export const useEditorStore = defineStore('editor', () => {
 
   function resizeComponent(id: string, x: number, y: number, w: number, h: number) {
     const comp = getComponentById(id)
-    if (!comp || isComponentLocked(comp)) return
+    if (!comp || isEditorLocked(comp)) return
     const layout = clampComponentLayout(
       { x, y, w, h },
       pageWidth.value,
@@ -530,7 +605,7 @@ export const useEditorStore = defineStore('editor', () => {
     const ph = pageHeight.value
     let changed = false
     const next = components.value.map((c) => {
-      if (!idSet.has(c.id) || isComponentLocked(c)) return c
+      if (!idSet.has(c.id) || isEditorLocked(c)) return c
       const layout = clampComponentLayout(
         { x: c.x, y: c.y, w: patch.w ?? c.w, h: patch.h ?? c.h },
         pw,
@@ -546,24 +621,25 @@ export const useEditorStore = defineStore('editor', () => {
 
   function removeComponent(id: string) {
     const comp = getComponentById(id)
-    if (!comp || isComponentLocked(comp)) return
+    if (!comp || isEditorLocked(comp)) return
     pushHistory()
-    components.value = components.value.filter((c) => c.id !== id)
+    components.value = cleanupOrphanGroupIds(components.value.filter((c) => c.id !== id))
     selectedIds.value = selectedIds.value.filter((x) => x !== id)
   }
 
   function removeComponents(ids: string[]) {
-    const removable = filterUnlockedIds(ids)
+    const expanded = expandIdsToFullGroups(components.value, ids)
+    const removable = filterUnlockedIds(expanded)
     if (removable.length === 0) return
     const removableSet = new Set(removable)
     pushHistory()
-    components.value = components.value.filter((c) => !removableSet.has(c.id))
+    components.value = cleanupOrphanGroupIds(components.value.filter((c) => !removableSet.has(c.id)))
     selectedIds.value = selectedIds.value.filter((x) => !removableSet.has(x))
   }
 
   function bringToFront(id: string) {
     const comp = getComponentById(id)
-    if (!comp || isComponentLocked(comp)) return
+    if (!comp || isEditorLocked(comp)) return
     const idx = components.value.findIndex((c) => c.id === id)
     if (idx < 0) return
     const arr = [...components.value]
@@ -575,7 +651,7 @@ export const useEditorStore = defineStore('editor', () => {
 
   function sendToBack(id: string) {
     const comp = getComponentById(id)
-    if (!comp || isComponentLocked(comp)) return
+    if (!comp || isEditorLocked(comp)) return
     const idx = components.value.findIndex((c) => c.id === id)
     if (idx < 0) return
     const arr = [...components.value]
@@ -587,7 +663,7 @@ export const useEditorStore = defineStore('editor', () => {
 
   function bringForward(id: string) {
     const comp = getComponentById(id)
-    if (!comp || isComponentLocked(comp)) return
+    if (!comp || isEditorLocked(comp)) return
     const idx = components.value.findIndex((c) => c.id === id)
     if (idx < 0 || idx >= components.value.length - 1) return
     const arr = [...components.value]
@@ -598,7 +674,7 @@ export const useEditorStore = defineStore('editor', () => {
 
   function sendBackward(id: string) {
     const comp = getComponentById(id)
-    if (!comp || isComponentLocked(comp)) return
+    if (!comp || isEditorLocked(comp)) return
     const idx = components.value.findIndex((c) => c.id === id)
     if (idx <= 0) return
     const arr = [...components.value]
@@ -609,17 +685,19 @@ export const useEditorStore = defineStore('editor', () => {
 
   function copySelectedComponents() {
     if (selectedIds.value.length === 0) return
-    clipboard.value = cloneComponentsByIds(components.value, selectedIds.value)
+    const expanded = expandIdsToFullGroups(components.value, selectedIds.value)
+    clipboard.value = cloneComponentsByIds(components.value, expanded)
   }
 
   function cutSelectedComponents() {
     if (pageReadOnly.value || selectedIds.value.length === 0) return
-    const unlocked = filterUnlockedIds(selectedIds.value)
+    const expanded = expandIdsToFullGroups(components.value, selectedIds.value)
+    const unlocked = filterUnlockedIds(expanded)
     if (unlocked.length === 0) return
     clipboard.value = cloneComponentsByIds(components.value, unlocked)
     pushHistory()
     const unlockedSet = new Set(unlocked)
-    components.value = components.value.filter((c) => !unlockedSet.has(c.id))
+    components.value = cleanupOrphanGroupIds(components.value.filter((c) => !unlockedSet.has(c.id)))
     selectedIds.value = selectedIds.value.filter((x) => !unlockedSet.has(x))
   }
 
@@ -629,7 +707,15 @@ export const useEditorStore = defineStore('editor', () => {
     if (!source || source.length === 0) return
 
     ensureNextComponentId()
+    ensureNextGroupId()
     pushHistory()
+
+    const groupIdMap = new Map<string, string>()
+    for (const c of source) {
+      if (c.groupId && !groupIdMap.has(c.groupId)) {
+        groupIdMap.set(c.groupId, `group-${nextGroupId++}`)
+      }
+    }
 
     const newComps: PageComponent[] = []
     for (const c of source) {
@@ -640,6 +726,8 @@ export const useEditorStore = defineStore('editor', () => {
         x: Math.round(Number(cloned.x) + PASTE_OFFSET) || 0,
         y: Math.round(Number(cloned.y) + PASTE_OFFSET) || 0,
         locked: undefined,
+        groupId: cloned.groupId ? groupIdMap.get(cloned.groupId) : undefined,
+        groupLocked: cloned.groupId && cloned.groupLocked ? true : undefined,
       })
     }
 
@@ -655,9 +743,92 @@ export const useEditorStore = defineStore('editor', () => {
 
     components.value = [...components.value, ...newComps]
     triggerRef(components)
-    selectedIds.value = newComps.map((c) => c.id)
-    anchorComponentId.value = newComps[0]?.id ?? null
+    const pastedIds = newComps.map((c) => c.id)
+    applyExpandedSelection(pastedIds, pastedIds[0] ?? null)
     clipboard.value = newComps.map((c) => clonePageComponent(c))
+  }
+
+  function groupSelectedComponents() {
+    if (!canGroup.value) return
+    const memberIds = collectMembersForGrouping(components.value, selectedIds.value)
+    if (memberIds.length < 2) return
+
+    ensureNextGroupId()
+    const newGroupId = `group-${nextGroupId++}`
+    const memberSet = new Set(memberIds)
+
+    pushHistory()
+    components.value = components.value.map((c) =>
+      memberSet.has(c.id) ? { ...c, groupId: newGroupId } : c,
+    )
+    applyExpandedSelection(memberIds, memberIds[0] ?? null)
+  }
+
+  function ungroupSelectedComponents() {
+    if (!canUngroup.value) return
+
+    const groupIds = new Set<string>()
+    for (const id of selectedIds.value) {
+      const comp = getComponentById(id)
+      if (comp?.groupId) groupIds.add(comp.groupId)
+    }
+    if (groupIds.size === 0) return
+
+    pushHistory()
+    components.value = components.value.map((c) => {
+      if (!c.groupId || !groupIds.has(c.groupId)) return c
+      const { groupId: _, groupLocked: __, ...rest } = c
+      return rest as PageComponent
+    })
+  }
+
+function resizeGroup(
+    groupId: string,
+    newBounds: { x: number; y: number; w: number; h: number },
+    options?: { recordHistory?: boolean },
+  ) {
+    if (pageReadOnly.value) return
+    const members = getGroupMembers(components.value, groupId)
+    if (members.length === 0) return
+    if (isGroupLockedById(components.value, groupId)) return
+
+    const oldBounds = computeGroupBounds(members)
+    if (!oldBounds) return
+
+    const clamped = clampGroupBounds(newBounds, pageWidth.value, pageHeight.value)
+    const scaled = scaleMembersToBounds(members, oldBounds, clamped)
+
+    const scaledById = new Map(scaled.map((c) => [c.id, c]))
+    const changed = members.some((c) => {
+      const next = scaledById.get(c.id)
+      if (!next) return false
+      return next.x !== c.x || next.y !== c.y || next.w !== c.w || next.h !== c.h
+    })
+    if (!changed) return
+
+    if (options?.recordHistory !== false) pushHistory()
+    components.value = components.value.map((c) => {
+      const next = scaledById.get(c.id)
+      if (!next) return c
+      const layout = clampComponentLayout(
+        { x: next.x, y: next.y, w: next.w, h: next.h },
+        pageWidth.value,
+        pageHeight.value,
+      )
+      return { ...c, ...layout }
+    })
+  }
+
+  function moveGroupByBounds(groupId: string, x: number, y: number) {
+    if (pageReadOnly.value) return
+    const members = getGroupMembers(components.value, groupId)
+    if (members.length === 0) return
+    const oldBounds = computeGroupBounds(members)
+    if (!oldBounds) return
+    const dx = x - oldBounds.x
+    const dy = y - oldBounds.y
+    if (dx === 0 && dy === 0) return
+    moveComponents(members.map((m) => m.id), dx, dy)
   }
 
   function setGroupDragOffset(offset: { dx: number; dy: number } | null) {
@@ -736,7 +907,7 @@ export const useEditorStore = defineStore('editor', () => {
   }
   function setComponentDataSource(compId: string, dsId: string | undefined) {
     const comp = getComponentById(compId)
-    if (!comp || isComponentLocked(comp)) return
+    if (!comp || isEditorLocked(comp)) return
     pushHistory()
     components.value = components.value.map((c) =>
       c.id === compId ? { ...c, dataSourceId: dsId } : c,
@@ -818,11 +989,15 @@ export const useEditorStore = defineStore('editor', () => {
   function loadPage(pId: number, name: string, schema: PageSchema, scope: PageScope = 'draft') {
     const comps = Array.isArray(schema.components) ? schema.components : []
     let maxNum = 0
+    let maxGroupNum = 0
     for (const c of comps) {
       const m = c.id.match(/^comp-(\d+)$/)
       if (m) maxNum = Math.max(maxNum, Number(m[1]))
+      const gm = c.groupId?.match(/^group-(\d+)$/)
+      if (gm) maxGroupNum = Math.max(maxGroupNum, Number(gm[1]))
     }
     nextId = maxNum + 1
+    nextGroupId = maxGroupNum + 1
 
     let maxCd = 0
     const migrated = (schema.colorDict ?? []).map((e, i) => {
@@ -878,7 +1053,7 @@ export const useEditorStore = defineStore('editor', () => {
     iconDict.value = migratedIcon
     savedIcons.value = collectSavedIconsFromSchema(schema)
     abbrevDict.value = migratedAbbrev
-    components.value = comps
+    components.value = cleanupOrphanGroupIds(comps)
     selectedIds.value = []
     anchorComponentId.value = null
     clipboard.value = null
@@ -917,7 +1092,8 @@ export const useEditorStore = defineStore('editor', () => {
     // computed
     pageReadOnly,
     firstSelectedId, canUndo, canRedo, canCopy, canPaste, canCut, canDelete,
-    canMoveUp, canMoveDown, canAlign,
+    canMoveUp, canMoveDown, canAlign, canGroup, canUngroup,
+    fullGroupSelection, activeGroupId, activeGroupBounds, activeGroupLocked,
     // actions
     undo, redo,
     selectComponent, selectComponents,
@@ -929,9 +1105,10 @@ export const useEditorStore = defineStore('editor', () => {
     resizeComponent,
     setComponentsSize,
     removeComponent, removeComponents,
-    setComponentLocked, setComponentsLocked, hasLockedInSelection,
+    setComponentLocked, setComponentsLocked, setGroupLocked, hasLockedInSelection,
     bringToFront, sendToBack, bringForward, sendBackward,
     copySelectedComponents, cutSelectedComponents, pasteComponents,
+    groupSelectedComponents, ungroupSelectedComponents, resizeGroup, moveGroupByBounds,
     setGroupDragOffset,
     setPageName, setPageSize, setBgColor, setBgColorTo, setBgGradient, setBgImage, setBgOpacity,
     zoomIn, zoomOut, zoomReset, setZoom, resetUserZoomFlag, requestZoomToFit,

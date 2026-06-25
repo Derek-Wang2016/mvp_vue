@@ -445,10 +445,23 @@ export interface PageComponent {
   dataSourceId?: string
   /** 编辑器锁定：不可选中、拖动、改属性 */
   locked?: boolean
+  /** 组合 id；同 id 的组件在编辑器中作为整体操作，渲染器忽略 */
+  groupId?: string
+  /** 组合锁定（仅编辑器；同组成员同步，渲染器忽略） */
+  groupLocked?: boolean
 }
 
 export function isComponentLocked(c: PageComponent): boolean {
   return !!c.locked
+}
+
+export function isGroupLocked(c: PageComponent): boolean {
+  return !!c.groupId && !!c.groupLocked
+}
+
+/** 编辑器交互锁定（单组件锁定或组合锁定） */
+export function isEditorLocked(c: PageComponent): boolean {
+  return isComponentLocked(c) || isGroupLocked(c)
 }
 
 // ===== 页面默认尺寸 =====

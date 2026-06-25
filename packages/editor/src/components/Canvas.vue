@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import type { PageComponent, ComponentType } from '@mvp-vue/schema'
-import { isComponentLocked, buildGradientBackground } from '@mvp-vue/schema'
+import { isEditorLocked, isComponentLocked, isGroupLocked, buildGradientBackground } from '@mvp-vue/schema'
 import { useEditorStore } from '../stores/editorStore'
 import { storeToRefs } from 'pinia'
 import ResizeHandles from './ResizeHandles.vue'
+import GroupResizeHandles from './GroupResizeHandles.vue'
 import ComponentPreview from './canvas/ComponentPreview.vue'
+import { getGroupMembers, computeGroupBounds } from '../utils/componentGroup'
 import { getEditorDef } from './registry/registry'
 
 const emit = defineEmits<{
@@ -13,7 +15,7 @@ const emit = defineEmits<{
 }>()
 
 const store = useEditorStore()
-const { components, pageWidth, pageHeight, bgColor, bgColorTo, bgGradient, bgImage, bgOpacity, selectedIds, groupDragOffset, pageReadOnly, canvasScale, hasUserZoomed, pageId, fitRequestCount } = storeToRefs(store)
+const { components, pageWidth, pageHeight, bgColor, bgColorTo, bgGradient, bgImage, bgOpacity, selectedIds, groupDragOffset, pageReadOnly, canvasScale, hasUserZoomed, pageId, fitRequestCount, activeGroupId, activeGroupBounds, activeGroupLocked } = storeToRefs(store)
 
 const props = defineProps<{
   showGrid: boolean
@@ -45,7 +47,7 @@ function pointInComp(c: PageComponent, x: number, y: number) {
 
 /** 画布坐标：重叠区优先命中已选组件（数组靠后者为上层）；锁定组件不参与命中 */
 function resolvePointerTarget(domComp: PageComponent, canvasX: number, canvasY: number): PageComponent {
-  const hit = components.value.filter((c) => !isComponentLocked(c) && pointInComp(c, canvasX, canvasY))
+  const hit = components.value.filter((c) => !isEditorLocked(c) && pointInComp(c, canvasX, canvasY))
   if (hit.length === 0) return domComp
   const selectedHit = hit.filter((c) => selectedIds.value.includes(c.id))
   if (selectedHit.length > 0) return selectedHit[selectedHit.length - 1]!
@@ -125,6 +127,37 @@ function isOnlySelected(compId: string) {
   return selectedIds.value.length === 1 && selectedIds.value[0] === compId
 }
 
+function isInActiveGroup(comp: PageComponent) {
+  return !!activeGroupId.value && comp.groupId === activeGroupId.value
+}
+
+function showIndividualSelectionBorder(comp: PageComponent) {
+  if (!isSelected(comp.id)) return false
+  if (isInActiveGroup(comp)) return false
+  return true
+}
+
+/** 已锁定但未选中的组合 — 显示外框与解锁入口 */
+const lockedGroupOverlays = computed(() => {
+  const selectedGroupIds = new Set(
+    components.value
+      .filter((c) => selectedIds.value.includes(c.id) && c.groupId)
+      .map((c) => c.groupId!),
+  )
+  const lockedIds = new Set<string>()
+  for (const c of components.value) {
+    if (c.groupId && isGroupLocked(c)) lockedIds.add(c.groupId)
+  }
+  const overlays: { groupId: string; bounds: { x: number; y: number; w: number; h: number } }[] = []
+  for (const groupId of lockedIds) {
+    if (selectedGroupIds.has(groupId)) continue
+    const members = getGroupMembers(components.value, groupId)
+    const bounds = computeGroupBounds(members)
+    if (bounds) overlays.push({ groupId, bounds })
+  }
+  return overlays
+})
+
 // box select
 function handlePointerDown(e: PointerEvent) {
   const target = e.target as HTMLElement
@@ -162,7 +195,7 @@ function handlePointerUp() {
 
   if (selRect.w > 3 || selRect.h > 3) {
     const ids = components.value
-      .filter((c) => !isComponentLocked(c) && rectsIntersect({ x: c.x, y: c.y, w: c.w, h: c.h }, selRect))
+      .filter((c) => !isEditorLocked(c) && rectsIntersect({ x: c.x, y: c.y, w: c.w, h: c.h }, selRect))
       .map((c) => c.id)
     store.selectComponents(ids)
   } else {
@@ -240,7 +273,7 @@ function handleCompPointerDown(e: PointerEvent, domComp: PageComponent) {
   if (pageReadOnly.value) return
   if (editingCompId.value) return
   if (e.button !== 0) return
-  if (isComponentLocked(domComp)) return
+  if (isEditorLocked(domComp)) return
   e.stopPropagation()
 
   endDragSession()
@@ -249,7 +282,7 @@ function handleCompPointerDown(e: PointerEvent, domComp: PageComponent) {
   if (!pt) return
 
   const target = resolvePointerTarget(domComp, pt.x, pt.y)
-  if (isComponentLocked(target)) return
+  if (isEditorLocked(target)) return
 
   if (e.shiftKey || e.ctrlKey || e.metaKey) {
     store.selectComponent(target.id, true)
@@ -321,7 +354,7 @@ function handleCompPointerDown(e: PointerEvent, domComp: PageComponent) {
 
 function handleCompContextMenu(e: MouseEvent, compId: string) {
   const comp = components.value.find((c) => c.id === compId)
-  if (!comp || isComponentLocked(comp)) return
+  if (!comp || isEditorLocked(comp)) return
   e.preventDefault()
   e.stopPropagation()
   if (!selectedIds.value.includes(compId)) {
@@ -329,6 +362,20 @@ function handleCompContextMenu(e: MouseEvent, compId: string) {
   }
   emit('contextmenu', e, compId)
 }
+
+function handleUnlockGroupClick(e: MouseEvent) {
+  e.stopPropagation()
+  if (!activeGroupId.value) return
+  store.setGroupLocked(activeGroupId.value, false)
+  if (fullGroupSelectionMemberIds.value[0]) {
+    store.selectComponent(fullGroupSelectionMemberIds.value[0])
+  }
+}
+
+const fullGroupSelectionMemberIds = computed(() => {
+  if (!activeGroupId.value) return [] as string[]
+  return components.value.filter((c) => c.groupId === activeGroupId.value).map((c) => c.id)
+})
 
 function handleUnlockClick(e: MouseEvent, compId: string) {
   e.stopPropagation()
@@ -482,14 +529,14 @@ function onCtrlKeyUp(e: KeyboardEvent) {
         <div
           v-for="comp in displayComponents"
           :key="`${comp.id}-${comp.type}`"
-          :class="{ 'pointer-events-none': comp.locked }"
+          :class="{ 'pointer-events-none': isEditorLocked(comp) }"
           :style="{
             position: 'absolute',
             left: `${comp.x}px`,
             top: `${comp.y}px`,
             width: `${comp.w}px`,
             height: `${comp.h}px`,
-            cursor: comp.locked ? 'default' : (editingCompId === comp.id ? 'text' : 'grab'),
+            cursor: isEditorLocked(comp) ? 'default' : (editingCompId === comp.id ? 'text' : 'grab'),
             overflow: 'visible',
             ...(groupDragOffset && isSelected(comp.id)
               ? { transform: `translate3d(${groupDragOffset.dx}px, ${groupDragOffset.dy}px, 0)` }
@@ -501,8 +548,8 @@ function onCtrlKeyUp(e: KeyboardEvent) {
           <ComponentPreview
             :comp="comp"
             :update-props="(patch: Record<string, unknown>) => store.updateComponentProps(comp.id, patch)"
-            :is-editing="editingCompId === comp.id"
-            :on-start-edit="() => editingCompId = comp.id"
+            :is-editing="editingCompId === comp.id && !isInActiveGroup(comp)"
+            :on-start-edit="() => { if (!isInActiveGroup(comp)) editingCompId = comp.id }"
             :on-end-edit="() => editingCompId = null"
           />
 
@@ -518,19 +565,19 @@ function onCtrlKeyUp(e: KeyboardEvent) {
           <!-- component boundary (always visible) -->
           <div
             class="absolute inset-0 pointer-events-none"
-            :class="comp.locked
+            :class="isComponentLocked(comp)
               ? 'border-[2px] border-dashed border-amber-400/60'
-              : (isSelected(comp.id)
+              : (showIndividualSelectionBorder(comp)
                 ? (isOnlySelected(comp.id)
                   ? 'border-[4px] border-blue-400 ring-[3px] ring-blue-500/30 shadow-[0_0_20px_rgba(96,165,250,0.55),0_0_6px_rgba(59,130,246,0.7)]'
                   : 'border-[4px] border-cyan-400 ring-[3px] ring-cyan-500/25 shadow-[0_0_15px_rgba(34,211,238,0.4)]')
                 : 'border-[2px] border-dashed border-slate-400/45')"
           />
-          <ResizeHandles v-if="!pageReadOnly && isSelected(comp.id) && isOnlySelected(comp.id) && !comp.locked" :comp="comp" :canvas-scale="canvasScale" />
+          <ResizeHandles v-if="!pageReadOnly && isSelected(comp.id) && isOnlySelected(comp.id) && !isEditorLocked(comp) && !isInActiveGroup(comp)" :comp="comp" :canvas-scale="canvasScale" />
 
-          <!-- lock badge -->
+          <!-- individual lock badge (not for group-locked members) -->
           <div
-            v-if="comp.locked"
+            v-if="isComponentLocked(comp)"
             class="absolute top-0 left-0 z-30 pointer-events-auto select-none -translate-x-1/3 -translate-y-1/3"
             title="点击解锁"
             @click="(e) => handleUnlockClick(e, comp.id)"
@@ -552,6 +599,72 @@ function onCtrlKeyUp(e: KeyboardEvent) {
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fde047" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-yellow-300">
                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
                 <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- group selection overlay -->
+        <div
+          v-if="activeGroupId && activeGroupBounds"
+          class="absolute z-50 overflow-visible"
+          :style="{
+            left: `${activeGroupBounds.x}px`,
+            top: `${activeGroupBounds.y}px`,
+            width: `${activeGroupBounds.w}px`,
+            height: `${activeGroupBounds.h}px`,
+            pointerEvents: 'none',
+            ...(groupDragOffset
+              ? { transform: `translate3d(${groupDragOffset.dx}px, ${groupDragOffset.dy}px, 0)` }
+              : {}),
+          }"
+        >
+          <div
+            class="absolute inset-0 pointer-events-none border-[4px] border-violet-400 ring-[3px] ring-violet-500/30 shadow-[0_0_20px_rgba(139,92,246,0.55),0_0_6px_rgba(124,58,237,0.7)]"
+          />
+          <GroupResizeHandles
+            v-if="!pageReadOnly && !activeGroupLocked"
+            :bounds="activeGroupBounds"
+            :group-id="activeGroupId"
+            :canvas-scale="canvasScale"
+          />
+          <div
+            v-if="activeGroupLocked"
+            class="absolute top-0 left-0 z-30 pointer-events-auto select-none -translate-x-1/3 -translate-y-1/3"
+            title="点击解锁组合"
+            @click="handleUnlockGroupClick"
+          >
+            <div class="flex items-center justify-center w-[22px] h-[22px] rounded-full bg-slate-950/92 border-2 border-amber-400 shadow-[0_1px_6px_rgba(0,0,0,0.65),0_0_10px_rgba(251,191,36,0.4)] cursor-pointer hover:border-amber-300">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- locked group overlays (not currently selected) -->
+        <div
+          v-for="{ groupId, bounds } in lockedGroupOverlays"
+          :key="`locked-group-${groupId}`"
+          class="absolute z-35 pointer-events-none"
+          :style="{
+            left: `${bounds.x}px`,
+            top: `${bounds.y}px`,
+            width: `${bounds.w}px`,
+            height: `${bounds.h}px`,
+          }"
+        >
+          <div class="absolute inset-0 border-2 border-dashed border-amber-400/60" />
+          <div
+            class="absolute top-0 left-0 z-30 pointer-events-auto select-none -translate-x-1/3 -translate-y-1/3"
+            title="点击解锁组合"
+            @click="(e) => { e.stopPropagation(); store.setGroupLocked(groupId, false) }"
+          >
+            <div class="flex items-center justify-center w-[22px] h-[22px] rounded-full bg-slate-950/92 border-2 border-amber-400 shadow-[0_1px_6px_rgba(0,0,0,0.65),0_0_10px_rgba(251,191,36,0.4)] cursor-pointer hover:border-amber-300">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
               </svg>
             </div>
           </div>

@@ -16,7 +16,8 @@ import ColorPickerDialog from './components/ColorPickerDialog.vue'
 const store = useEditorStore()
 const {
   pageName, pageId, pageScope, pageReadOnly, canUndo, canRedo, canCopy, canPaste, canCut, canDelete,
-  canMoveUp, canMoveDown, canAlign, firstSelectedId, components, selectedIds, userZoom,
+  canMoveUp, canMoveDown, canAlign, canGroup, canUngroup, firstSelectedId, components, selectedIds, userZoom,
+  fullGroupSelection, activeGroupId, activeGroupLocked,
 } = storeToRefs(store)
 
 const saving = ref(false)
@@ -193,7 +194,9 @@ function closeContextMenu() {
 
 function contextMenuToggleLock() {
   if (!contextMenu.value) return
-  if (selectedIds.value.length > 1) {
+  if (fullGroupSelection.value.isFullGroup && fullGroupSelection.value.groupId) {
+    store.setGroupLocked(fullGroupSelection.value.groupId, !activeGroupLocked.value)
+  } else if (selectedIds.value.length > 1) {
     const anyUnlocked = selectedIds.value.some((id) => {
       const c = components.value.find((x) => x.id === id)
       return c && !c.locked
@@ -291,6 +294,18 @@ function handleKeyDown(e: KeyboardEvent) {
     }
     return
   }
+  if (mod && key === 'g' && !editable && !e.shiftKey) {
+    if (canGroup.value) {
+      e.preventDefault(); store.groupSelectedComponents()
+    }
+    return
+  }
+  if (mod && key === 'g' && !editable && e.shiftKey) {
+    if (canUngroup.value) {
+      e.preventDefault(); store.ungroupSelectedComponents()
+    }
+    return
+  }
   if ((e.key === 'Delete' || e.key === 'Backspace') && !editable && !mod) {
     if (canDelete.value) {
       e.preventDefault()
@@ -325,6 +340,8 @@ const RedoIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" st
 const CopyIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M3.5 10.5H2.5a1.5 1.5 0 01-1.5-1.5V2.5A1.5 1.5 0 012.5 1h6.5a1.5 1.5 0 011.5 1.5V3.5"/></svg>`
 const CutIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="4" cy="4" r="2"/><circle cx="12" cy="12" r="2"/><line x1="5.2" y1="5.2" x2="10.8" y2="10.8"/><path d="M9 3.5h3.5V7M7 12.5H3.5V9"/></svg>`
 const PasteIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2.5" width="8" height="11" rx="1.5"/><line x1="6" y1="5.5" x2="10" y2="5.5"/><line x1="6" y1="8" x2="10" y2="8"/><line x1="6" y1="10.5" x2="8.5" y2="10.5"/></svg>`
+const GroupIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="5" height="5" rx="0.5"/><rect x="9" y="2" width="5" height="5" rx="0.5"/><rect x="5.5" y="9" width="5" height="5" rx="0.5"/><path d="M4.5 7v1.5M11.5 7v1.5M7.25 9.5h1.5"/></svg>`
+const UngroupIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="5" height="5" rx="0.5"/><rect x="9" y="2" width="5" height="5" rx="0.5"/><rect x="5.5" y="9" width="5" height="5" rx="0.5"/><line x1="4.5" y1="7" x2="4.5" y2="8.5"/><line x1="11.5" y1="7" x2="11.5" y2="8.5"/><line x1="7.25" y1="9.5" x2="8.75" y2="9.5"/></svg>`
 const ToBackIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="10" height="7" rx="1.5"/><line x1="8" y1="11" x2="8" y2="14.5"/><polyline points="5 12.5 8 15 11 12.5"/><line x1="2" y1="15" x2="14" y2="15"/></svg>`
 const DownIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="10" height="8" rx="1.5"/><polyline points="5 12.5 8 15 11 12.5"/></svg>`
 const UpIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="10" height="8" rx="1.5"/><polyline points="5 3.5 8 1 11 3.5"/></svg>`
@@ -359,7 +376,7 @@ const alignBtnClass = (enabled: boolean) =>
 
       <!-- page switcher -->
       <select
-        class="appearance-none bg-[#0f1824] border border-white/15 rounded-md px-2.5 py-0.5 pr-7 text-xs w-52 text-slate-200 shadow-sm shadow-black/10 hover:bg-white/[0.06] hover:border-white/25 focus:border-indigo-400/50 focus:ring-1 focus:ring-indigo-400/30 outline-none transition-colors disabled:opacity-60"
+        class="appearance-none bg-[#0f1824] border border-white/15 rounded-md px-2 py-0.5 pr-6 text-xs w-36 max-w-36 truncate text-slate-200 shadow-sm shadow-black/10 hover:bg-white/[0.06] hover:border-white/25 focus:border-indigo-400/50 focus:ring-1 focus:ring-indigo-400/30 outline-none transition-colors disabled:opacity-60 shrink-0"
         :value="currentPageId ?? ''"
         :disabled="pageOptionsLoading"
         @change="handlePageSelectChange"
@@ -369,7 +386,7 @@ const alignBtnClass = (enabled: boolean) =>
           #{{ p.id }} {{ p.name }}
         </option>
       </select>
-      <svg class="-ml-6 h-3.5 w-3.5 pointer-events-none text-slate-500" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <svg class="-ml-5 h-3.5 w-3.5 pointer-events-none text-slate-500 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
         <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z" clip-rule="evenodd" />
       </svg>
 
@@ -423,6 +440,26 @@ const alignBtnClass = (enabled: boolean) =>
         :class="canPaste ? 'text-slate-400 border-white/10 bg-white/5 hover:text-slate-200 hover:bg-white/10 hover:border-white/15' : 'text-slate-700 border-white/5 bg-white/[0.02] cursor-not-allowed'"
         :disabled="!canPaste" @click="store.pasteComponents()" title="粘贴 (Ctrl+V)"
         v-html="PasteIcon"
+      />
+
+      <span class="w-px h-4 bg-white/10" />
+
+      <!-- group / ungroup -->
+      <button
+        class="px-2 py-1 rounded-md border transition-colors"
+        :class="alignBtnClass(canGroup)"
+        :disabled="!canGroup"
+        title="组合 (Ctrl+G，需选中 2 个及以上组件)"
+        v-html="GroupIcon"
+        @click="store.groupSelectedComponents()"
+      />
+      <button
+        class="px-2 py-1 rounded-md border transition-colors"
+        :class="alignBtnClass(canUngroup)"
+        :disabled="!canUngroup"
+        title="拆分组合 (Ctrl+Shift+G)"
+        v-html="UngroupIcon"
+        @click="store.ungroupSelectedComponents()"
       />
 
       <span class="w-px h-4 bg-white/10" />
@@ -681,6 +718,21 @@ const alignBtnClass = (enabled: boolean) =>
       </button>
       <div class="border-t border-white/10 my-1" />
       <button
+        class="w-full text-left px-3 py-1.5 text-sm text-violet-300 hover:bg-violet-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        :disabled="!canGroup"
+        @click="store.groupSelectedComponents(); closeContextMenu()"
+      >
+        组合 <span class="float-right text-slate-500 text-xs">Ctrl+G</span>
+      </button>
+      <button
+        class="w-full text-left px-3 py-1.5 text-sm text-violet-300 hover:bg-violet-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        :disabled="!canUngroup"
+        @click="store.ungroupSelectedComponents(); closeContextMenu()"
+      >
+        拆分组合 <span class="float-right text-slate-500 text-xs">Ctrl+Shift+G</span>
+      </button>
+      <div class="border-t border-white/10 my-1" />
+      <button
         class="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         :disabled="!canAlign"
         @click="store.alignSelectedComponents('left'); closeContextMenu()"
@@ -755,9 +807,11 @@ const alignBtnClass = (enabled: boolean) =>
         class="w-full text-left px-3 py-1.5 text-sm text-amber-300 hover:bg-amber-500/10 transition-colors"
         @click="contextMenuToggleLock()"
       >
-        {{ selectedIds.length > 1
-          ? (selectedIds.some(id => !components.find(c => c.id === id)?.locked) ? '锁定选中' : '解锁选中')
-          : (contextMenuCompLocked ? '解锁组件' : '锁定组件') }}
+        {{ fullGroupSelection.isFullGroup
+          ? (activeGroupLocked ? '解锁组合' : '锁定组合')
+          : (selectedIds.length > 1
+            ? (selectedIds.some(id => !components.find(c => c.id === id)?.locked) ? '锁定选中' : '解锁选中')
+            : (contextMenuCompLocked ? '解锁组件' : '锁定组件')) }}
       </button>
       <div class="border-t border-white/10 my-1" />
       <button
