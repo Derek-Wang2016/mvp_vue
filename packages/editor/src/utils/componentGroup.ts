@@ -156,3 +156,89 @@ export function clampGroupBounds(
 ): GroupBounds {
   return clampComponentLayout(bounds, pageWidth, pageHeight)
 }
+
+/** 多选对齐/分布时的操作单位：未组合组件各自为单位，完整选中的组合以外接矩形为单位 */
+export type AlignUnitKind = 'component' | 'group'
+
+export interface AlignUnit {
+  key: string
+  kind: AlignUnitKind
+  groupId?: string
+  memberIds: string[]
+  bounds: GroupBounds
+}
+
+export function buildAlignUnits(components: PageComponent[], selectedIds: string[]): AlignUnit[] {
+  const selectedSet = new Set(selectedIds)
+  const selected = components.filter((c) => selectedSet.has(c.id))
+  if (selected.length === 0) return []
+
+  const processedGroupIds = new Set<string>()
+  const units: AlignUnit[] = []
+
+  const groupIdsInSelection = new Set<string>()
+  for (const c of selected) {
+    if (c.groupId) groupIdsInSelection.add(c.groupId)
+  }
+
+  for (const groupId of groupIdsInSelection) {
+    const allMembers = getGroupMembers(components, groupId)
+    if (allMembers.length === 0) continue
+    if (!allMembers.every((m) => selectedSet.has(m.id))) continue
+
+    const bounds = computeGroupBounds(allMembers)
+    if (!bounds) continue
+
+    units.push({
+      key: `group:${groupId}`,
+      kind: 'group',
+      groupId,
+      memberIds: allMembers.map((m) => m.id),
+      bounds,
+    })
+    processedGroupIds.add(groupId)
+  }
+
+  for (const c of selected) {
+    if (c.groupId && processedGroupIds.has(c.groupId)) continue
+    units.push({
+      key: c.id,
+      kind: 'component',
+      memberIds: [c.id],
+      bounds: { x: c.x, y: c.y, w: c.w, h: c.h },
+    })
+  }
+
+  return units
+}
+
+export function findAlignUnitForMember(units: AlignUnit[], memberId: string): AlignUnit | undefined {
+  return units.find((u) => u.memberIds.includes(memberId))
+}
+
+/** 将各对齐单位平移到目标左上角后，展开为成员组件坐标 */
+export function memberPositionsFromUnitOrigins(
+  components: PageComponent[],
+  units: AlignUnit[],
+  targetOriginByKey: Map<string, { x: number; y: number }>,
+): Map<string, { x: number; y: number }> {
+  const posById = new Map<string, { x: number; y: number }>()
+  const byId = new Map(components.map((c) => [c.id, c]))
+
+  for (const unit of units) {
+    const target = targetOriginByKey.get(unit.key)
+    if (!target) continue
+
+    const dx = target.x - unit.bounds.x
+    const dy = target.y - unit.bounds.y
+    if (dx === 0 && dy === 0) continue
+
+    for (const id of unit.memberIds) {
+      const c = byId.get(id)
+      if (!c) continue
+      posById.set(id, { x: Math.round(c.x + dx), y: Math.round(c.y + dy) })
+    }
+  }
+
+  return posById
+}

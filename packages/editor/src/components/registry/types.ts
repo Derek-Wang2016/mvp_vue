@@ -4,6 +4,8 @@ import type { Component } from 'vue'
 export interface ComponentPropertyFieldsProps {
   comp: PageComponent
   updateProps: (patch: Record<string, unknown>) => void
+  /** 同类型多选批量编辑：隐藏内容/数据源/资源地址等不可批量修改的字段 */
+  batch?: boolean
 }
 
 export interface ComponentDataFieldsProps extends ComponentPropertyFieldsProps {

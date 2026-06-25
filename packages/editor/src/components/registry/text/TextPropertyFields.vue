@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
+import { getTextDirection } from '@mvp-vue/schema'
 import ColorSwatch from '../../ColorSwatch.vue'
 import EditorNumberInput from '../../EditorNumberInput.vue'
 import { PROP_LABEL, PROP_INPUT, PROP_NUMBER_WRAP, PROP_NUMBER_INNER, PROP_SELECT_COMPACT } from '../../propertyPanel/shared'
@@ -8,6 +9,11 @@ import type { ComponentPropertyFieldsProps } from '../types'
 const props = defineProps<ComponentPropertyFieldsProps>()
 
 const content = ref((props.comp.props.content as string) ?? '')
+
+const textDirection = computed(() => getTextDirection(props.comp.props))
+const spacingLabel = computed(() =>
+  textDirection.value === 'vertical' ? '纵向间距' : '横向间距',
+)
 
 watch(() => props.comp.props.content, (val) => {
   content.value = (val as string) ?? ''
@@ -19,7 +25,7 @@ function saveContent() {
 </script>
 
 <template>
-  <label class="block">
+  <label v-if="!batch" class="block">
     <span :class="PROP_LABEL">内容</span>
     <input
       :class="PROP_INPUT"
@@ -64,6 +70,27 @@ function saveContent() {
     </select>
   </label>
   <label class="block">
+    <span :class="PROP_LABEL">文字方向</span>
+    <select
+      :class="PROP_SELECT_COMPACT"
+      :value="textDirection"
+      @change="props.updateProps({ textDirection: ($event.target as HTMLSelectElement).value as 'horizontal' | 'vertical' })"
+    >
+      <option value="horizontal">横向</option>
+      <option value="vertical">纵向</option>
+    </select>
+  </label>
+  <label class="block">
+    <span :class="PROP_LABEL">{{ spacingLabel }}</span>
+    <EditorNumberInput
+      :class="PROP_NUMBER_WRAP"
+      :input-class="PROP_NUMBER_INNER"
+      :model-value="(comp.props.letterSpacing as number) ?? 0"
+      @update:model-value="props.updateProps({ letterSpacing: Number($event) })"
+    />
+    <p class="text-[11px] text-slate-400 mt-0.5">单位 px；纵向文字时控制字符上下间距</p>
+  </label>
+  <label class="block">
     <span :class="PROP_LABEL">颜色</span>
     <div class="flex items-center gap-2 mt-1">
       <ColorSwatch
@@ -76,7 +103,7 @@ function saveContent() {
       </span>
     </div>
   </label>
-  <label class="block">
+  <label v-if="!batch" class="block">
     <span :class="PROP_LABEL">最大行数</span>
     <EditorNumberInput
       :min="1"
@@ -87,7 +114,7 @@ function saveContent() {
       @update:model-value="props.updateProps({ maxRows: Math.max(1, Number($event)) })"
     />
   </label>
-  <label class="block">
+  <label v-if="!batch" class="block">
     <span :class="PROP_LABEL">分隔符</span>
     <input
       class="w-full mt-1 bg-white/[0.08] border border-white/15 rounded-md px-2.5 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-indigo-400/50 focus:ring-1 focus:ring-indigo-400/30 outline-none transition-colors font-mono"

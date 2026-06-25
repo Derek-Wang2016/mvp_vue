@@ -9,7 +9,7 @@ const props = defineProps<ComponentPropertyFieldsProps>()
 </script>
 
 <template>
-  <label class="block">
+  <label v-if="!batch" class="block">
     <span :class="PROP_LABEL">标题</span>
     <input
       :class="PROP_INPUT"
@@ -50,7 +50,7 @@ const props = defineProps<ComponentPropertyFieldsProps>()
     />
     <span :class="PROP_LABEL">显示图例</span>
   </label>
-  <label class="block">
+  <label v-if="!batch" class="block">
     <span :class="PROP_LABEL">分类字段</span>
     <input
       :class="PROP_INPUT"
@@ -59,7 +59,7 @@ const props = defineProps<ComponentPropertyFieldsProps>()
       @change="props.updateProps({ categoryField: ($event.target as HTMLInputElement).value || undefined })"
     />
   </label>
-  <label class="block">
+  <label v-if="!batch" class="block">
     <span :class="PROP_LABEL">数值字段</span>
     <input
       :class="PROP_INPUT"

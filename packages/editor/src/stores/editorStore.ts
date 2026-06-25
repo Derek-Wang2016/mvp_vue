@@ -23,6 +23,10 @@ import {
   isGroupLockedById,
   selectionHasGroupId,
   clampGroupBounds,
+  buildAlignUnits,
+  findAlignUnitForMember,
+  memberPositionsFromUnitOrigins,
+  type AlignUnit,
 } from '../utils/componentGroup'
 import { getDefaultProps, getDefaultSize } from '../components/registry/registry'
 import { isCurrentPageReadOnly, type PageScope } from '../pagePolicy'
@@ -138,6 +142,8 @@ export const useEditorStore = defineStore('editor', () => {
     if (pageReadOnly.value) return false
     if (selectedIds.value.length < 2) return false
     if (isFullGroupSelection(components.value, selectedIds.value).isFullGroup) return false
+    const units = buildAlignUnits(components.value, selectedIds.value)
+    if (units.length < 2) return false
     const ids = selectedIds.value
     if (!hasLockedInSelection(ids)) return true
     const refId = anchorComponentId.value ?? ids[0]!
@@ -352,11 +358,26 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function updateComponentProps(id: string, props: Record<string, unknown>) {
-    const comp = getComponentById(id)
-    if (!comp || isEditorLocked(comp) || comp.groupId) return
+    updateComponentsProps([id], props)
+  }
+
+  function updateComponentsProps(ids: string[], propsPatch: Record<string, unknown>) {
+    if (pageReadOnly.value) return
+    const idSet = new Set(ids)
+    const targets = components.value.filter(
+      (c) => idSet.has(c.id) && !isEditorLocked(c) && !c.groupId,
+    )
+    if (targets.length === 0) return
+
+    const changed = targets.some((c) =>
+      Object.entries(propsPatch).some(([key, val]) => c.props[key] !== val),
+    )
+    if (!changed) return
+
     pushHistory()
+    const targetIdSet = new Set(targets.map((c) => c.id))
     components.value = components.value.map((c) =>
-      c.id === id ? { ...c, props: { ...c.props, ...props } } : c,
+      targetIdSet.has(c.id) ? { ...c, props: { ...c.props, ...propsPatch } } : c,
     )
   }
 
@@ -397,11 +418,18 @@ export const useEditorStore = defineStore('editor', () => {
     triggerRef(components)
   }
 
-  function resolveAnchorComponent(selected: PageComponent[], ids: string[]): PageComponent | undefined {
+  function isAlignUnitLocked(unit: AlignUnit): boolean {
+    return unit.memberIds.some((id) => {
+      const c = getComponentById(id)
+      return c != null && isEditorLocked(c)
+    })
+  }
+
+  function resolveAnchorAlignUnit(units: AlignUnit[], ids: string[]): AlignUnit | undefined {
     let refId = anchorComponentId.value ?? ids[0]
     if (!refId || !ids.includes(refId)) refId = ids[0]
     if (!refId) return undefined
-    return selected.find((c) => c.id === refId) ?? selected[0]
+    return findAlignUnitForMember(units, refId) ?? units[0]
   }
 
   /** 垂直居中：其余组件 X 中心与基准组件垂直中线对齐 */
@@ -420,93 +448,171 @@ export const useEditorStore = defineStore('editor', () => {
     const ids = [...selectedIds.value]
     if (ids.length < 2) return
 
-    const selected = components.value.filter((c) => ids.includes(c.id))
-    if (selected.length < 2) return
+    const units = buildAlignUnits(components.value, ids)
+    if (units.length < 2) return
 
-    const ref = resolveAnchorComponent(selected, ids)
-    if (!ref) return
+    const refUnit = resolveAnchorAlignUnit(units, ids)
+    if (!refUnit) return
 
-    const refCenterX = Number(ref.x) + Number(ref.w) / 2
-    const refCenterY = Number(ref.y) + Number(ref.h) / 2
+    const refCenterX = refUnit.bounds.x + refUnit.bounds.w / 2
+    const refCenterY = refUnit.bounds.y + refUnit.bounds.h / 2
 
-    const posById = new Map<string, { x: number; y: number }>()
-    for (const c of selected) {
-      if (c.id === ref.id || isEditorLocked(c)) continue
+    const targetOriginByKey = new Map<string, { x: number; y: number }>()
+    for (const unit of units) {
+      if (unit.key === refUnit.key || isAlignUnitLocked(unit)) continue
       if (axis === 'x') {
-        posById.set(c.id, {
-          x: Math.round(refCenterX - Number(c.w) / 2),
-          y: Number(c.y),
+        targetOriginByKey.set(unit.key, {
+          x: Math.round(refCenterX - unit.bounds.w / 2),
+          y: unit.bounds.y,
         })
       } else {
-        posById.set(c.id, {
-          x: Number(c.x),
-          y: Math.round(refCenterY - Number(c.h) / 2),
+        targetOriginByKey.set(unit.key, {
+          x: unit.bounds.x,
+          y: Math.round(refCenterY - unit.bounds.h / 2),
         })
       }
     }
 
-    applyComponentPositions(posById)
+    applyComponentPositions(memberPositionsFromUnitOrigins(components.value, units, targetOriginByKey))
   }
 
   function alignSelectedComponents(mode: AlignMode) {
     const ids = selectedIds.value
     if (ids.length < 2 || hasLockedInSelection(ids)) return
 
-    const selected = components.value.filter((c) => ids.includes(c.id))
-    if (selected.length < 2) return
+    const units = buildAlignUnits(components.value, ids)
+    if (units.length < 2) return
 
-    const posById = new Map<string, { x: number; y: number }>()
+    const targetOriginByKey = new Map<string, { x: number; y: number }>()
 
     switch (mode) {
       case 'left': {
-        const minX = Math.min(...selected.map((c) => c.x))
-        for (const c of selected) posById.set(c.id, { x: minX, y: c.y })
+        const minX = Math.min(...units.map((u) => u.bounds.x))
+        for (const u of units) targetOriginByKey.set(u.key, { x: minX, y: u.bounds.y })
         break
       }
       case 'right': {
-        const maxRight = Math.max(...selected.map((c) => c.x + c.w))
-        for (const c of selected) posById.set(c.id, { x: maxRight - c.w, y: c.y })
+        const maxRight = Math.max(...units.map((u) => u.bounds.x + u.bounds.w))
+        for (const u of units) {
+          targetOriginByKey.set(u.key, { x: maxRight - u.bounds.w, y: u.bounds.y })
+        }
         break
       }
       case 'top': {
-        const minY = Math.min(...selected.map((c) => c.y))
-        for (const c of selected) posById.set(c.id, { x: c.x, y: minY })
+        const minY = Math.min(...units.map((u) => u.bounds.y))
+        for (const u of units) targetOriginByKey.set(u.key, { x: u.bounds.x, y: minY })
         break
       }
       case 'bottom': {
-        const maxBottom = Math.max(...selected.map((c) => c.y + c.h))
-        for (const c of selected) posById.set(c.id, { x: c.x, y: maxBottom - c.h })
+        const maxBottom = Math.max(...units.map((u) => u.bounds.y + u.bounds.h))
+        for (const u of units) {
+          targetOriginByKey.set(u.key, { x: u.bounds.x, y: maxBottom - u.bounds.h })
+        }
         break
       }
     }
 
-    applyComponentPositions(posById)
+    applyComponentPositions(memberPositionsFromUnitOrigins(components.value, units, targetOriginByKey))
   }
 
   function equalizeSelectedWidth() {
     const ids = selectedIds.value
     if (ids.length < 2 || hasLockedInSelection(ids)) return
-    const ref = components.value.find((c) => c.id === ids[0])
-    if (!ref) return
 
-    const targetW = Math.max(MIN_COMPONENT_W, Math.round(ref.w))
+    const units = buildAlignUnits(components.value, ids)
+    if (units.length < 2) return
+
+    const refUnit = resolveAnchorAlignUnit(units, ids)
+    if (!refUnit) return
+
+    const targetW = Math.max(MIN_COMPONENT_W, Math.round(refUnit.bounds.w))
     pushHistory()
-    components.value = components.value.map((c) =>
-      ids.includes(c.id) ? { ...c, w: targetW } : c,
-    )
+
+    let next = components.value
+    for (const unit of units) {
+      if (unit.key === refUnit.key || isAlignUnitLocked(unit)) continue
+
+      if (unit.kind === 'component') {
+        const id = unit.memberIds[0]!
+        next = next.map((c) => (c.id === id ? { ...c, w: targetW } : c))
+        continue
+      }
+
+      const members = getGroupMembers(next, unit.groupId!)
+      const oldBounds = computeGroupBounds(members)
+      if (!oldBounds) continue
+
+      const clamped = clampGroupBounds(
+        { x: oldBounds.x, y: oldBounds.y, w: targetW, h: oldBounds.h },
+        pageWidth.value,
+        pageHeight.value,
+      )
+      const scaled = scaleMembersToBounds(members, oldBounds, clamped)
+      const scaledById = new Map(scaled.map((c) => [c.id, c]))
+      next = next.map((c) => {
+        const scaledComp = scaledById.get(c.id)
+        if (!scaledComp) return c
+        const layout = clampComponentLayout(
+          { x: scaledComp.x, y: scaledComp.y, w: scaledComp.w, h: scaledComp.h },
+          pageWidth.value,
+          pageHeight.value,
+        )
+        return { ...c, ...layout }
+      })
+    }
+
+    components.value = next
+    triggerRef(components)
   }
 
   function equalizeSelectedHeight() {
     const ids = selectedIds.value
     if (ids.length < 2 || hasLockedInSelection(ids)) return
-    const ref = components.value.find((c) => c.id === ids[0])
-    if (!ref) return
 
-    const targetH = Math.max(MIN_COMPONENT_H, Math.round(ref.h))
+    const units = buildAlignUnits(components.value, ids)
+    if (units.length < 2) return
+
+    const refUnit = resolveAnchorAlignUnit(units, ids)
+    if (!refUnit) return
+
+    const targetH = Math.max(MIN_COMPONENT_H, Math.round(refUnit.bounds.h))
     pushHistory()
-    components.value = components.value.map((c) =>
-      ids.includes(c.id) ? { ...c, h: targetH } : c,
-    )
+
+    let next = components.value
+    for (const unit of units) {
+      if (unit.key === refUnit.key || isAlignUnitLocked(unit)) continue
+
+      if (unit.kind === 'component') {
+        const id = unit.memberIds[0]!
+        next = next.map((c) => (c.id === id ? { ...c, h: targetH } : c))
+        continue
+      }
+
+      const members = getGroupMembers(next, unit.groupId!)
+      const oldBounds = computeGroupBounds(members)
+      if (!oldBounds) continue
+
+      const clamped = clampGroupBounds(
+        { x: oldBounds.x, y: oldBounds.y, w: oldBounds.w, h: targetH },
+        pageWidth.value,
+        pageHeight.value,
+      )
+      const scaled = scaleMembersToBounds(members, oldBounds, clamped)
+      const scaledById = new Map(scaled.map((c) => [c.id, c]))
+      next = next.map((c) => {
+        const scaledComp = scaledById.get(c.id)
+        if (!scaledComp) return c
+        const layout = clampComponentLayout(
+          { x: scaledComp.x, y: scaledComp.y, w: scaledComp.w, h: scaledComp.h },
+          pageWidth.value,
+          pageHeight.value,
+        )
+        return { ...c, ...layout }
+      })
+    }
+
+    components.value = next
+    triggerRef(components)
   }
 
   /** 水平等距：在选区外框内按相邻组件外缘相等间距重排（左缘 min(x)，右缘 max(x+w)） */
@@ -514,36 +620,32 @@ export const useEditorStore = defineStore('editor', () => {
     const ids = selectedIds.value
     if (ids.length < 2 || hasLockedInSelection(ids)) return
 
-    const selected = components.value.filter((c) => ids.includes(c.id))
-    if (selected.length < 2) return
+    const units = buildAlignUnits(components.value, ids)
+    if (units.length < 2) return
 
-    const sorted = [...selected].sort((a, b) => a.x - b.x)
-    const leftBound = Math.min(...selected.map((c) => c.x))
-    const rightBound = Math.max(...selected.map((c) => c.x + c.w))
-    const totalWidth = sorted.reduce((s, c) => s + c.w, 0)
+    const sorted = [...units].sort((a, b) => a.bounds.x - b.bounds.x)
+    const leftBound = Math.min(...units.map((u) => u.bounds.x))
+    const rightBound = Math.max(...units.map((u) => u.bounds.x + u.bounds.w))
+    const totalWidth = sorted.reduce((s, u) => s + u.bounds.w, 0)
     const gap = (rightBound - leftBound - totalWidth) / (sorted.length - 1)
     if (!Number.isFinite(gap)) return
 
-    const posById = new Map<string, { x: number; y: number }>()
+    const targetOriginByKey = new Map<string, { x: number; y: number }>()
     const step = Math.max(0, gap)
     let cursor = leftBound
-    for (const c of sorted) {
-      posById.set(c.id, { x: Math.round(cursor), y: c.y })
-      cursor += c.w + step
+    for (const u of sorted) {
+      targetOriginByKey.set(u.key, { x: Math.round(cursor), y: u.bounds.y })
+      cursor += u.bounds.w + step
     }
 
-    const changed = sorted.some((c) => {
-      const pos = posById.get(c.id)!
-      return pos.x !== c.x || pos.y !== c.y
+    const posById = memberPositionsFromUnitOrigins(components.value, units, targetOriginByKey)
+    const changed = sorted.some((u) => {
+      const target = targetOriginByKey.get(u.key)!
+      return target.x !== u.bounds.x || target.y !== u.bounds.y
     })
     if (!changed) return
 
-    pushHistory()
-    components.value = components.value.map((c) => {
-      const pos = posById.get(c.id)
-      if (!pos) return c
-      return { ...c, x: pos.x, y: pos.y }
-    })
+    applyComponentPositions(posById)
   }
 
   /** 垂直等距：在选区外框内按相邻组件外缘相等间距重排（上缘 min(y)，下缘 max(y+h)） */
@@ -551,36 +653,32 @@ export const useEditorStore = defineStore('editor', () => {
     const ids = selectedIds.value
     if (ids.length < 2 || hasLockedInSelection(ids)) return
 
-    const selected = components.value.filter((c) => ids.includes(c.id))
-    if (selected.length < 2) return
+    const units = buildAlignUnits(components.value, ids)
+    if (units.length < 2) return
 
-    const sorted = [...selected].sort((a, b) => a.y - b.y)
-    const topBound = Math.min(...selected.map((c) => c.y))
-    const bottomBound = Math.max(...selected.map((c) => c.y + c.h))
-    const totalHeight = sorted.reduce((s, c) => s + c.h, 0)
+    const sorted = [...units].sort((a, b) => a.bounds.y - b.bounds.y)
+    const topBound = Math.min(...units.map((u) => u.bounds.y))
+    const bottomBound = Math.max(...units.map((u) => u.bounds.y + u.bounds.h))
+    const totalHeight = sorted.reduce((s, u) => s + u.bounds.h, 0)
     const gap = (bottomBound - topBound - totalHeight) / (sorted.length - 1)
     if (!Number.isFinite(gap)) return
 
-    const posById = new Map<string, { x: number; y: number }>()
+    const targetOriginByKey = new Map<string, { x: number; y: number }>()
     const step = Math.max(0, gap)
     let cursor = topBound
-    for (const c of sorted) {
-      posById.set(c.id, { x: c.x, y: Math.round(cursor) })
-      cursor += c.h + step
+    for (const u of sorted) {
+      targetOriginByKey.set(u.key, { x: u.bounds.x, y: Math.round(cursor) })
+      cursor += u.bounds.h + step
     }
 
-    const changed = sorted.some((c) => {
-      const pos = posById.get(c.id)!
-      return pos.x !== c.x || pos.y !== c.y
+    const posById = memberPositionsFromUnitOrigins(components.value, units, targetOriginByKey)
+    const changed = sorted.some((u) => {
+      const target = targetOriginByKey.get(u.key)!
+      return target.x !== u.bounds.x || target.y !== u.bounds.y
     })
     if (!changed) return
 
-    pushHistory()
-    components.value = components.value.map((c) => {
-      const pos = posById.get(c.id)
-      if (!pos) return c
-      return { ...c, x: pos.x, y: pos.y }
-    })
+    applyComponentPositions(posById)
   }
 
   function resizeComponent(id: string, x: number, y: number, w: number, h: number) {
@@ -906,11 +1004,22 @@ function resizeGroup(
     )
   }
   function setComponentDataSource(compId: string, dsId: string | undefined) {
-    const comp = getComponentById(compId)
-    if (!comp || isEditorLocked(comp)) return
+    setComponentsDataSource([compId], dsId)
+  }
+
+  function setComponentsDataSource(ids: string[], dsId: string | undefined) {
+    if (pageReadOnly.value) return
+    const idSet = new Set(ids)
+    const targets = components.value.filter((c) => idSet.has(c.id) && !isEditorLocked(c))
+    if (targets.length === 0) return
+
+    const changed = targets.some((c) => c.dataSourceId !== dsId)
+    if (!changed) return
+
     pushHistory()
+    const targetIdSet = new Set(targets.map((c) => c.id))
     components.value = components.value.map((c) =>
-      c.id === compId ? { ...c, dataSourceId: dsId } : c,
+      targetIdSet.has(c.id) ? { ...c, dataSourceId: dsId } : c,
     )
   }
 
@@ -1097,7 +1206,7 @@ function resizeGroup(
     // actions
     undo, redo,
     selectComponent, selectComponents,
-    addComponent, updateComponentProps, replaceComponentProps,
+    addComponent, updateComponentProps, updateComponentsProps, replaceComponentProps,
     moveComponent, moveComponents, alignSelectedComponents,
     alignSelectedToFirstVerticalCenter, alignSelectedToFirstHorizontalCenter,
     equalizeSelectedWidth, equalizeSelectedHeight,
@@ -1112,7 +1221,7 @@ function resizeGroup(
     setGroupDragOffset,
     setPageName, setPageSize, setBgColor, setBgColorTo, setBgGradient, setBgImage, setBgOpacity,
     zoomIn, zoomOut, zoomReset, setZoom, resetUserZoomFlag, requestZoomToFit,
-    addDataSource, updateDataSource, removeDataSource, setComponentDataSource,
+    addDataSource, updateDataSource, removeDataSource, setComponentDataSource, setComponentsDataSource,
     addColorDictEntry, updateColorDictEntry, removeColorDictEntry,
     addIconDictEntry, updateIconDictEntry, removeIconDictEntry,
     mergeSavedIcon,

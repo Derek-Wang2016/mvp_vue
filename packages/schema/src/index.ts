@@ -496,6 +496,12 @@ export {
   asChartRowArray,
   filterChartArrayRows,
 } from './chartComponent'
+export {
+  type TextDirection,
+  getTextDirection,
+  getTextLetterSpacing,
+  buildTextComponentStyle,
+} from './textComponent'
 
 // ===== 页面 Schema =====
 import type { BgGradient } from './bgGradient'

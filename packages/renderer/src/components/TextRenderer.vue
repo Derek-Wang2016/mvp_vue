@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { PageComponent } from '@mvp-vue/schema'
+import { buildTextComponentStyle } from '@mvp-vue/schema'
 import { useData } from '../composables/useData'
 
 const props = defineProps<{ comp: PageComponent }>()
@@ -37,16 +38,10 @@ const displayContent = computed(() => {
 
   return content
 })
+
+const textStyle = computed(() => buildTextComponentStyle(props.comp.props))
 </script>
 
 <template>
-  <span
-    :style="{
-      fontSize: ((comp.props.fontSize as number) ?? 20) + 'px',
-      fontFamily: (comp.props.fontFamily as string) ?? 'sans-serif',
-      fontWeight: (comp.props.fontWeight as string) ?? 'normal',
-      color: (comp.props.color as string) ?? '#fff',
-      whiteSpace: 'pre-wrap',
-    }"
-  >{{ displayContent }}</span>
+  <span class="block w-full h-full" :style="textStyle">{{ displayContent }}</span>
 </template>

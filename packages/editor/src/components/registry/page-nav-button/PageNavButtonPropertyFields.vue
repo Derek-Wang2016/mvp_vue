@@ -108,6 +108,7 @@ onMounted(async () => {
 </script>
 
 <template>
+  <template v-if="!batch">
   <label class="block">
     <span :class="PROP_LABEL">按钮文字</span>
     <input
@@ -180,6 +181,8 @@ onMounted(async () => {
       })"
     />
   </label>
+  </template>
+  <p v-else :class="[PROP_HINT, 'mb-2']">批量模式下不可修改按钮文字、图标来源与跳转页面</p>
 
   <label class="block">
     <span :class="PROP_LABEL">图标与文字位置</span>
@@ -282,7 +285,7 @@ onMounted(async () => {
       @update:model-value="props.updateProps({ fontSize: Number($event) })"
     />
   </label>
-  <label class="block">
+  <label v-if="!batch" class="block">
     <span :class="PROP_LABEL">跳转页面</span>
     <select
       class="editor-select w-full mt-1 bg-white/[0.08] border border-white/15 rounded-md px-2.5 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-indigo-400/50 outline-none transition-colors"
@@ -299,7 +302,7 @@ onMounted(async () => {
   </label>
 
   <IconPickerModal
-    v-if="pickerOpen"
+    v-if="!batch && pickerOpen"
     :entry="previewIconEntry"
     :search="iconSearch"
     :picker-tab="pickerTab"

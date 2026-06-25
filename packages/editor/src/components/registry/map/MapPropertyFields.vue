@@ -25,7 +25,7 @@ const SYMBOL_LABELS: Record<MapSymbolPreset, string> = {
 </script>
 
 <template>
-  <label class="block">
+  <label v-if="!batch" class="block">
     <span :class="PROP_LABEL">标题</span>
     <input :class="PROP_INPUT" :value="(comp.props.title as string) ?? ''"
       @change="props.updateProps({ title: ($event.target as HTMLInputElement).value })" />
@@ -114,12 +114,12 @@ const SYMBOL_LABELS: Record<MapSymbolPreset, string> = {
     {{ comp.props.mapLevel === 'province' ? '数据 name 请用地级市名称，如「宝鸡市」「西安市」。' : '数据 name 请用省级名称，如「陕西省」「广东省」。' }}
     {{ (comp.props.mapDisplayMode === 'symbol' ? 'symbol' : 'fill') === 'symbol' ? ' 图标模式在地区中心落点，颜色由数值映射。' : '' }}
   </p>
-  <label class="block">
+  <label v-if="!batch" class="block">
     <span :class="PROP_LABEL">地区字段</span>
     <input :class="PROP_INPUT" placeholder="自动检测 (name/province...)" :value="(comp.props.nameField as string) ?? ''"
       @change="props.updateProps({ nameField: ($event.target as HTMLInputElement).value || undefined })" />
   </label>
-  <label class="block">
+  <label v-if="!batch" class="block">
     <span :class="PROP_LABEL">数值字段</span>
     <input :class="PROP_INPUT" placeholder="自动检测 (value/count...)" :value="(comp.props.valueField as string) ?? ''"
       @change="props.updateProps({ valueField: ($event.target as HTMLInputElement).value || undefined })" />

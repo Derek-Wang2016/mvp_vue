@@ -1,11 +1,21 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, computed } from 'vue'
+import { buildTextComponentStyle } from '@mvp-vue/schema'
 import type { CanvasPreviewProps } from '../types'
 
 const props = defineProps<CanvasPreviewProps>()
 
 const textareaRef = ref<HTMLTextAreaElement>()
 const draft = ref((props.comp.props.content as string) ?? '')
+
+const textStyle = computed(() => {
+  const extra: Record<string, string> = {}
+  if (!props.isEditing) {
+    extra.cursor = 'text'
+    extra.userSelect = 'none'
+  }
+  return buildTextComponentStyle(props.comp.props, extra)
+})
 
 watch(() => props.comp.props.content, (val) => {
   draft.value = (val as string) ?? ''
@@ -51,25 +61,14 @@ function handleKeydown(e: KeyboardEvent) {
     ref="textareaRef"
     v-model="draft"
     class="w-full h-full resize-none bg-transparent border border-blue-400 rounded p-1 outline-none"
-    :style="{
-      fontSize: ((comp.props.fontSize as number) ?? 20) + 'px',
-      fontFamily: (comp.props.fontFamily as string) ?? 'sans-serif',
-      fontWeight: (comp.props.fontWeight as string) ?? 'normal',
-      color: (comp.props.color as string) ?? '#fff',
-    }"
+    :style="textStyle"
     @blur="handleSave"
     @keydown="handleKeydown"
   />
   <span
     v-else
-    :style="{
-      fontSize: ((comp.props.fontSize as number) ?? 20) + 'px',
-      fontFamily: (comp.props.fontFamily as string) ?? 'sans-serif',
-      fontWeight: (comp.props.fontWeight as string) ?? 'normal',
-      color: (comp.props.color as string) ?? '#fff',
-      cursor: 'text',
-      userSelect: 'none',
-    }"
+    class="block w-full h-full"
+    :style="textStyle"
     @dblclick.stop="onStartEdit?.()"
   >
     {{ comp.props.content as string }}

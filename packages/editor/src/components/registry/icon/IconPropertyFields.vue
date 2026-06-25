@@ -55,6 +55,7 @@ function onPickerConfirm(entry: IconDictEntry) {
 </script>
 
 <template>
+  <template v-if="!batch">
   <div class="flex items-center gap-2 mb-2">
     <button
       type="button"
@@ -73,6 +74,8 @@ function onPickerConfirm(entry: IconDictEntry) {
     </div>
   </div>
   <p :class="PROP_HINT">支持内置 Tabler、我的图标库与内联 SVG。图标颜色对单色 SVG 生效（保留镂空细节）；含多种填色的彩色 SVG 将保持原色。</p>
+  </template>
+  <p v-else :class="[PROP_HINT, 'mb-2']">批量模式下不可修改图标来源与说明文字</p>
 
   <ColorField
     label="图标颜色"
@@ -133,7 +136,7 @@ function onPickerConfirm(entry: IconDictEntry) {
     </label>
   </div>
 
-  <label class="block pt-1 border-t border-white/10">
+  <label v-if="!batch" class="block pt-1 border-t border-white/10">
     <span :class="PROP_LABEL">说明文字（可选）</span>
     <input
       :class="PROP_INPUT"
@@ -143,7 +146,7 @@ function onPickerConfirm(entry: IconDictEntry) {
     />
   </label>
 
-  <template v-if="(comp.props.caption as string)?.trim()">
+  <template v-if="!batch && (comp.props.caption as string)?.trim()">
     <label class="block">
       <span :class="PROP_LABEL">说明字体</span>
       <select
@@ -163,7 +166,7 @@ function onPickerConfirm(entry: IconDictEntry) {
   </template>
 
   <IconPickerModal
-    v-if="pickerOpen"
+    v-if="!batch && pickerOpen"
     :entry="currentEntry()"
     :search="iconSearch"
     :picker-tab="pickerTab"

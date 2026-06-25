@@ -222,6 +222,9 @@ function openEmptyIconPicker() {
 
 <template>
   <div class="flex flex-col gap-2.5">
+    <p v-if="batch" :class="[PROP_HINT, 'text-indigo-300/80']">批量模式：API、字段与数据相关配置已隐藏，仅可修改样式与布局。</p>
+
+    <template v-if="!batch">
     <!-- Import / Export JSON -->
     <div class="flex items-center gap-2 pb-1 border-b border-white/10">
       <button
@@ -316,6 +319,7 @@ function openEmptyIconPicker() {
         @update:model-value="(v: string) => props.updateProps({ refreshInterval: Number(v) })"
       />
     </label>
+    </template>
 
     <!-- Card internal grid -->
     <div class="border-t border-white/10 pt-2" />
@@ -400,6 +404,7 @@ function openEmptyIconPicker() {
       />
     </label>
 
+    <template v-if="!batch">
     <!-- Empty display -->
     <CardListEmptyDisplaySection
       :comp="comp"
@@ -601,6 +606,7 @@ function openEmptyIconPicker() {
         />
       </div>
     </div>
+    </template>
   </div>
 
   <!-- Dialogs -->

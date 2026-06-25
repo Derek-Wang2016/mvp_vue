@@ -137,7 +137,7 @@ function showIndividualSelectionBorder(comp: PageComponent) {
   return true
 }
 
-/** 已锁定但未选中的组合 — 显示外框与解锁入口 */
+/** 已锁定但未选中的组合 — 仅保留解锁入口，不显示外框 */
 const lockedGroupOverlays = computed(() => {
   const selectedGroupIds = new Set(
     components.value
@@ -562,16 +562,15 @@ function onCtrlKeyUp(e: KeyboardEvent) {
             ({{ comp.x }},{{ comp.y }})
           </span>
 
-          <!-- component boundary (always visible) -->
+          <!-- component boundary (selected only) -->
           <div
+            v-if="showIndividualSelectionBorder(comp)"
             class="absolute inset-0 pointer-events-none"
             :class="isComponentLocked(comp)
               ? 'border-[2px] border-dashed border-amber-400/60'
-              : (showIndividualSelectionBorder(comp)
-                ? (isOnlySelected(comp.id)
-                  ? 'border-[4px] border-blue-400 ring-[3px] ring-blue-500/30 shadow-[0_0_20px_rgba(96,165,250,0.55),0_0_6px_rgba(59,130,246,0.7)]'
-                  : 'border-[4px] border-cyan-400 ring-[3px] ring-cyan-500/25 shadow-[0_0_15px_rgba(34,211,238,0.4)]')
-                : 'border-[2px] border-dashed border-slate-400/45')"
+              : (isOnlySelected(comp.id)
+                ? 'border-[4px] border-blue-400 ring-[3px] ring-blue-500/30 shadow-[0_0_20px_rgba(96,165,250,0.55),0_0_6px_rgba(59,130,246,0.7)]'
+                : 'border-[4px] border-cyan-400 ring-[3px] ring-cyan-500/25 shadow-[0_0_15px_rgba(34,211,238,0.4)]')"
           />
           <ResizeHandles v-if="!pageReadOnly && isSelected(comp.id) && isOnlySelected(comp.id) && !isEditorLocked(comp) && !isInActiveGroup(comp)" :comp="comp" :canvas-scale="canvasScale" />
 
@@ -643,7 +642,7 @@ function onCtrlKeyUp(e: KeyboardEvent) {
           </div>
         </div>
 
-        <!-- locked group overlays (not currently selected) -->
+        <!-- locked group unlock affordance (not currently selected) -->
         <div
           v-for="{ groupId, bounds } in lockedGroupOverlays"
           :key="`locked-group-${groupId}`"
@@ -655,7 +654,6 @@ function onCtrlKeyUp(e: KeyboardEvent) {
             height: `${bounds.h}px`,
           }"
         >
-          <div class="absolute inset-0 border-2 border-dashed border-amber-400/60" />
           <div
             class="absolute top-0 left-0 z-30 pointer-events-auto select-none -translate-x-1/3 -translate-y-1/3"
             title="点击解锁组合"
