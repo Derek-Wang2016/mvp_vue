@@ -8,6 +8,11 @@ const props = defineProps<CanvasPreviewProps>()
 const content = ref('')
 const missing = ref(false)
 
+const shown = computed(() => {
+  const sample = props.comp.props.sampleContent
+  return typeof sample === 'string' ? sample : content.value
+})
+
 const textStyle = computed(() => {
   const style = buildTextComponentStyle(props.comp.props)
   const bg = (props.comp.props.backgroundColor as string) || 'transparent'
@@ -36,7 +41,7 @@ watch(() => props.comp.props.rowKey, () => { void load() }, { immediate: true })
 
 <template>
   <div class="w-full h-full px-1" :style="textStyle">
-    <span v-if="String(comp.props.rowKey ?? '').trim() && content">{{ content }}</span>
+    <span v-if="String(comp.props.rowKey ?? '').trim() && shown">{{ shown }}</span>
     <span v-else class="opacity-60">
       {{ String(comp.props.rowKey ?? '').trim() ? (missing ? '无此数据行' : '空内容') : '未配置 KEY' }}
     </span>

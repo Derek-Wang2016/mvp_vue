@@ -9,13 +9,21 @@ import type { ComponentPropertyFieldsProps } from '../types'
 const props = defineProps<ComponentPropertyFieldsProps>()
 
 const rowKey = ref((props.comp.props.rowKey as string) ?? '')
-const content = ref('')
+const content = ref((props.comp.props.sampleContent as string) ?? '')
 const status = ref('')
 const busy = ref(false)
 
 watch(() => props.comp.props.rowKey, (val) => {
   rowKey.value = (val as string) ?? ''
 })
+
+watch(() => props.comp.props.sampleContent, (val) => {
+  if (typeof val === 'string') content.value = val
+})
+
+function rememberSample(text: string) {
+  props.updateProps({ rowKey: rowKey.value.trim(), sampleContent: text })
+}
 
 function saveKey() {
   props.updateProps({ rowKey: rowKey.value.trim() })
@@ -32,6 +40,7 @@ async function loadRow() {
   try {
     const row = await fetchEditableText(key)
     content.value = row?.content ?? ''
+    rememberSample(content.value)
     status.value = row ? '已读取' : '该 KEY 尚无数据行，保存后会新建'
   } catch (e) {
     status.value = e instanceof Error ? e.message : '读取失败'
@@ -46,7 +55,7 @@ async function writeRow() {
     status.value = '请先填写 KEY'
     return
   }
-  props.updateProps({ rowKey: key })
+  rememberSample(content.value)
   busy.value = true
   status.value = ''
   try {
@@ -79,6 +88,7 @@ async function writeRow() {
       rows="3"
       class="editor-scrollbar w-full mt-1 bg-white/[0.08] border border-white/15 rounded-md px-2.5 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-indigo-400/50 outline-none transition-colors resize-y"
       placeholder="读取后显示当前内容，保存时写入数据库"
+      @blur="rememberSample(content)"
     />
     <div class="flex gap-2 mt-1.5">
       <button
