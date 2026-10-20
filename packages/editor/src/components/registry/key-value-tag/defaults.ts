@@ -15,8 +15,10 @@ export function keyValueTagDefaultProps() {
     itemHeight: 40,
     /** 开启后在每项内部自动纵向滚动（无滚动条） */
     overflowScrollY: false,
-    /** 等宽外框 + KEY/VALUE 两列对齐（KEY 右对齐，VALUE 左对齐） */
+    /** 等宽外框 + KEY/VALUE 两列对齐（VALUE 左对齐；KEY 对齐见 keyTextAlign） */
     itemEqualWidth: false,
+    /** 等宽模式下 KEY 列文字对齐 */
+    keyTextAlign: 'right' as 'left' | 'center' | 'right',
     keyValueColumnGap: 8,
     /** 等宽模式下全局 KEY 列宽（px）；0 = 未设置时与 VALUE 等分 */
     keyColumnWidth: 0,

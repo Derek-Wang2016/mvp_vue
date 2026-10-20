@@ -21,6 +21,10 @@ function shouldAutoScrollTags(tags: string[]): boolean {
   return tags.length > 3
 }
 const itemEqualWidth = computed(() => props.comp.props.itemEqualWidth === true)
+const keyTextAlign = computed(() => {
+  const v = props.comp.props.keyTextAlign
+  return v === 'left' || v === 'center' || v === 'right' ? v : 'right'
+})
 const keyValueColumnGap = computed(() => {
   const v = props.comp.props.keyValueColumnGap
   return typeof v === 'number' ? v : 8
@@ -133,6 +137,11 @@ function tagChipStyle(): Record<string, string> {
   }
 }
 const showValueCount = computed(() => (props.comp.props.showValueCount as boolean) ?? false)
+const tagSeparator = computed(() => (props.comp.props.tagSeparator as string) || ',')
+
+function valueCount(value: string): number {
+  return value.split(tagSeparator.value).map(t => t.trim()).filter(t => t.length > 0).length
+}
 
 const itemBoxEnabled = computed(() => props.comp.props.itemBoxEnabled !== false)
 const itemBoxBgColor = computed(() => (props.comp.props.itemBoxBgColor as string) ?? 'rgba(255,255,255,0.06)')
@@ -241,9 +250,11 @@ const mockItems = computed(() => {
         :style="{
           fontSize: labelFontSize,
           fontWeight: 'bold',
-          ...(itemEqualWidth ? { textAlign: 'right', justifySelf: 'end' } : {}),
+          ...(itemEqualWidth
+            ? { width: '100%', textAlign: keyTextAlign, justifySelf: 'stretch' }
+            : {}),
         }"
-      >{{ item.key }}<template v-if="showValueCount && item.tags">(3)</template></span>
+      >{{ item.key }}<template v-if="showValueCount && valueCount(item.value) > 0">({{ valueCount(item.value) }})</template></span>
       <div v-if="item.tags" :style="tagViewportStyle()">
         <div
           :class="{ 'kv-tag-track-scroll': shouldAutoScrollTags(['a', 'b', 'c']) }"

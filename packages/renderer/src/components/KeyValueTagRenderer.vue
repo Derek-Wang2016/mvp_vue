@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, nextTick, onMounted, onUpdated } from 'vue'
+import { computed, ref, nextTick, onMounted, onUpdated, type CSSProperties } from 'vue'
 import type { PageComponent, ColorDictEntry, IconDictEntry, AbbrevDictEntry, CustomIconRecord } from '@mvp-vue/schema'
 import { resolveAbbrevDictValue, filterKeyValueTagItems } from '@mvp-vue/schema'
 import { useData } from '../composables/useData'
@@ -218,17 +218,16 @@ function rowToKvItem(row: unknown): KvItem {
   const rawKey = kf ? String(obj[kf] ?? '') : ''
   const rawValue = vf ? String(obj[vf] ?? '') : ''
 
-  let tags: string[] = []
-  if (tagSplitEnabled.value && rawValue) {
-    const sep = tagSeparator.value || ','
-    tags = rawValue.split(sep).map(t => t.trim()).filter(t => t.length > 0)
-  }
+  const sep = tagSeparator.value || ','
+  const parts = rawValue
+    ? rawValue.split(sep).map(t => t.trim()).filter(t => t.length > 0)
+    : []
 
   return {
     key: rawKey,
     value: rawValue,
-    tags,
-    tagCount: tags.length,
+    tags: tagSplitEnabled.value ? parts : [],
+    tagCount: parts.length,
   }
 }
 
@@ -349,11 +348,17 @@ const itemBoxStyle = computed(() => {
   return style
 })
 
-const labelCellStyle = computed(() =>
+const keyTextAlign = computed(() => {
+  const v = props.comp.props.keyTextAlign
+  return v === 'left' || v === 'center' || v === 'right' ? v : 'right'
+})
+
+const labelCellStyle = computed((): CSSProperties =>
   itemEqualWidth.value
     ? {
-        justifySelf: 'end',
-        textAlign: 'right' as const,
+        justifySelf: 'stretch',
+        width: '100%',
+        textAlign: keyTextAlign.value,
         minWidth: '0',
         maxWidth: '100%',
       }
@@ -481,7 +486,7 @@ function tagChipStyle(): Record<string, string> {
             />
           </span>
           {{ resolveLabelDisplay(item.key).text }}
-          <template v-if="showValueCount && item.tagCount > 1">({{ item.tagCount }})</template>
+          <template v-if="showValueCount && item.tagCount > 0">({{ item.tagCount }})</template>
         </span>
 
         <!-- Tag mode: split value into colored tags -->

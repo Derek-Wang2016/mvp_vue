@@ -114,6 +114,18 @@ function update(kv: Record<string, unknown>) {
         </label>
         <p :class="'text-[10px] text-slate-500'">每项外框等宽；可设 KEY 固定列宽，其余空间给 VALUE</p>
         <label v-if="propBool('itemEqualWidth')" class="block">
+          <span :class="PROP_LABEL">KEY 对齐</span>
+          <select
+            :class="PROP_SELECT_COMPACT"
+            :value="propStr('keyTextAlign', 'right')"
+            @change="update({ keyTextAlign: ($event.target as HTMLSelectElement).value })"
+          >
+            <option value="left">左对齐</option>
+            <option value="center">居中对齐</option>
+            <option value="right">右对齐</option>
+          </select>
+        </label>
+        <label v-if="propBool('itemEqualWidth')" class="block">
           <span :class="PROP_LABEL">KEY 列默认宽度 (px)</span>
           <EditorNumberInput
             :min="0" :max="800" :step="1"
@@ -456,7 +468,7 @@ function update(kv: Record<string, unknown>) {
           />
           <span :class="PROP_LABEL">在标签后显示值个数</span>
         </label>
-        <p :class="'text-[10px] text-slate-500 mt-0.5'">开启后 Key 会显示为 "名称(3)" 格式</p>
+        <p :class="'text-[10px] text-slate-500 mt-0.5'">按分隔符统计值个数，显示为「名称(3)」；不开启 TAG 分割也会显示</p>
       </div>
     </section>
 
