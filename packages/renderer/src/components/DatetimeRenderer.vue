@@ -32,7 +32,13 @@ function formatted(): string {
 <template>
   <div
     class="w-full h-full flex items-center justify-center select-none"
-    :style="{ fontSize: fontSize + 'px', fontFamily, color, fontVariantNumeric: 'tabular-nums' }"
+    :style="{
+      fontSize: fontSize + 'px',
+      fontFamily,
+      color,
+      background: (comp.props.backgroundColor as string) || 'transparent',
+      fontVariantNumeric: 'tabular-nums',
+    }"
   >
     {{ formatted() }}
   </div>

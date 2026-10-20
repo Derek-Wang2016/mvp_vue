@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ColorField from '../../ColorField.vue'
 import ColorSwatch from '../../ColorSwatch.vue'
 import EditorNumberInput from '../../EditorNumberInput.vue'
 import { PROP_LABEL, PROP_NUMBER_WRAP, PROP_NUMBER_INNER } from '../../propertyPanel/shared'
@@ -59,4 +60,9 @@ const props = defineProps<ComponentPropertyFieldsProps>()
       </span>
     </div>
   </label>
+  <ColorField
+    label="背景色"
+    :value="(comp.props.backgroundColor as string) ?? 'transparent'"
+    @change="(v: string) => props.updateProps({ backgroundColor: v || 'transparent' })"
+  />
 </template>

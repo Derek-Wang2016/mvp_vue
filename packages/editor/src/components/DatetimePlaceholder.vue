@@ -33,6 +33,7 @@ onBeforeUnmount(() => clearInterval(timer))
       fontSize: ((comp.props.fontSize as number) ?? 20) + 'px',
       fontFamily: (comp.props.fontFamily as string) ?? 'sans-serif',
       color: (comp.props.color as string) ?? '#ffffff',
+      background: (comp.props.backgroundColor as string) || 'transparent',
       fontVariantNumeric: 'tabular-nums',
     }"
   >
