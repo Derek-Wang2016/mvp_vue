@@ -21,6 +21,8 @@ import {
 import { isStrictPagePolicy } from './pageScopePolicy.js'
 import { registerDraftPageRoutes } from './routes/draftPages.js'
 import { registerPublishPageRoutes } from './routes/publishPages.js'
+import { registerEditableTextRoutes } from './editableTextRoutes.js'
+import { ensureDatabaseSchema } from './ensureDatabaseSchema.js'
 
 const app = Fastify({ logger: true })
 await app.register(cors, { origin: true })
@@ -28,6 +30,7 @@ const prisma = new PrismaClient()
 
 registerDraftPageRoutes(app, prisma)
 registerPublishPageRoutes(app, prisma)
+registerEditableTextRoutes(app, prisma)
 
 if (isStrictPagePolicy()) {
   console.log('PAGE_POLICY=strict：发布模式，调试表只读')
@@ -316,6 +319,10 @@ app.get('/api/demo/live-data', async (_req, reply) => {
 })
 
 try {
+  const applied = await ensureDatabaseSchema(prisma)
+  if (applied.length > 0) {
+    console.log('数据库结构已更新:', applied.join(', '))
+  }
   await app.listen({ port: 3002, host: '0.0.0.0' })
   console.log('Server running at http://0.0.0.0:3002')
 } catch (err) {

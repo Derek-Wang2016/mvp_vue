@@ -8,6 +8,7 @@ const { pageReadOnly } = storeToRefs(store)
 
 const PANEL_ITEMS: { type: ComponentType; label: string }[] = [
   { type: 'text', label: '文本' },
+  { type: 'editable-text', label: '可编辑文本' },
   { type: 'image', label: '图片' },
   { type: 'icon', label: '图标' },
   { type: 'rectangle', label: '矩形' },
@@ -28,6 +29,7 @@ const PANEL_ITEMS: { type: ComponentType; label: string }[] = [
 
 const ICONS: Record<string, string> = {
   text: 'T',
+  'editable-text': '✎',
   image: '🖼',
   icon: '◇',
   rectangle: '▭',

@@ -26,6 +26,7 @@ const DATA_BINDING_PROP_KEYS = [
 /** 各组件类型在批量编辑时禁止写入的 props */
 const BATCH_EXCLUDED_PROPS_BY_TYPE: Partial<Record<ComponentType, readonly string[]>> = {
   text: ['content', 'separator', 'maxRows', 'textField'],
+  'editable-text': ['rowKey'],
   image: ['src'],
   icon: [...ICON_SOURCE_PROP_KEYS, 'caption'],
   'bar-chart': ['title', ...DATA_BINDING_PROP_KEYS],

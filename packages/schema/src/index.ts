@@ -1,5 +1,5 @@
 // ===== 组件类型 =====
-export type ComponentType = 'text' | 'image' | 'icon' | 'rectangle' | 'ellipse' | 'line' | 'bar-chart' | 'line-chart' | 'pie-chart' | 'table' | 'iframe' | 'video' | 'datetime' | 'analog-clock' | 'page-nav-button' | 'card-list' | 'card' | 'key-value-tag' | 'map'
+export type ComponentType = 'text' | 'image' | 'icon' | 'rectangle' | 'ellipse' | 'line' | 'bar-chart' | 'line-chart' | 'pie-chart' | 'table' | 'iframe' | 'video' | 'datetime' | 'analog-clock' | 'page-nav-button' | 'card-list' | 'card' | 'key-value-tag' | 'map' | 'editable-text'
 
 export {
   type MapLevel,

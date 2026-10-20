@@ -35,3 +35,10 @@ model CustomIcon {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
+
+/// 可编辑文本：以 key 唯一标识一行，不存在时由 PUT 新建
+model EditableText {
+  key       String   @id
+  content   String   @default("")
+  updatedAt DateTime @updatedAt
+}

@@ -15,6 +15,7 @@ import MapRenderer from './MapRenderer.vue'
 import CardListRenderer from './CardListRenderer.vue'
 import CardRenderer from './CardRenderer.vue'
 import KeyValueTagRenderer from './KeyValueTagRenderer.vue'
+import EditableTextRenderer from './EditableTextRenderer.vue'
 
 export interface CompRendererProps {
   comp: PageComponent
@@ -44,4 +45,5 @@ export const componentMap: Record<ComponentType, Component<CompRendererProps> | 
   'card': CardRenderer,
   'key-value-tag': KeyValueTagRenderer,
   'map': MapRenderer,
+  'editable-text': EditableTextRenderer,
 }

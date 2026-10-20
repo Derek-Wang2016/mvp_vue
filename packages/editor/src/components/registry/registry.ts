@@ -15,6 +15,7 @@ import { rectangleDefaultProps, rectangleDefaultSize } from './rectangle/default
 import { ellipseDefaultProps, ellipseDefaultSize } from './ellipse/defaults'
 import { lineDefaultProps, lineDefaultSize } from './line/defaults'
 import { mapDefaultProps, mapDefaultSize } from './map/defaults'
+import { editableTextDefaultProps, editableTextDefaultSize } from './editable-text/defaults'
 
 // Stubs (fallback for types not yet implemented)
 import StubPropertyFields from './StubPropertyFields.vue'
@@ -57,6 +58,8 @@ import EllipsePropertyFields from './ellipse/EllipsePropertyFields.vue'
 import EllipseCanvasPreview from './ellipse/EllipseCanvasPreview.vue'
 import LinePropertyFields from './line/LinePropertyFields.vue'
 import LineCanvasPreview from './line/LineCanvasPreview.vue'
+import EditableTextPropertyFields from './editable-text/EditableTextPropertyFields.vue'
+import EditableTextCanvasPreview from './editable-text/EditableTextCanvasPreview.vue'
 
 const chartDef = {
   defaultProps: chartDefaultProps,
@@ -157,6 +160,12 @@ export const editorRegistry: EditorRegistry = {
     defaultSize: mapDefaultSize,
     PropertyFields: MapPropertyFields,
     CanvasPreview: MapCanvasPreview,
+  },
+  'editable-text': {
+    defaultProps: editableTextDefaultProps,
+    defaultSize: editableTextDefaultSize,
+    PropertyFields: EditableTextPropertyFields,
+    CanvasPreview: EditableTextCanvasPreview,
   },
 }
 
