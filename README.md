@@ -7,6 +7,7 @@
 | 文档 | 说明 |
 |------|------|
 | [doc/deploy-linux-nginx.md](doc/deploy-linux-nginx.md) | **Linux 部署主文档**（[§0 速查](doc/deploy-linux-nginx.md#0-部署速查内网标准方案)：Nginx 静态 + API `:3002`） |
+| [deploy/docker/README.md](deploy/docker/README.md) | **Docker 离线部署**（构建机打包 / 目标机 load、升级、回滚、备份） |
 | [doc/tech-stack.md](doc/tech-stack.md) | 技术选型说明（版本、对比、约束） |
 | [doc/dev-plan.md](doc/dev-plan.md) | 分阶段开发计划与进度跟踪 |
 | [doc/parity-checklist.md](doc/parity-checklist.md) | 与 React 版功能对等验收清单 |
@@ -61,6 +62,10 @@ pnpm build:server       # tsc → packages/server/dist/
 **Linux 内网部署**：按 [doc/deploy-linux-nginx.md §0](doc/deploy-linux-nginx.md#0-部署速查内网标准方案) — 构建时 `VITE_API_BASE=http://<服务器IP>:3002`，Nginx 托管 `8080/8081`，API 用 systemd 跑 `3002`。
 
 试运行（不配 Nginx）见 [§4.4](doc/deploy-linux-nginx.md#44-无-nginx-试运行内网验收)。配置模板：`doc/nginx/mvp-intranet.conf.example`、`doc/systemd/mvp-server.service.example`。
+
+**Docker 部署**：构建机执行 `TAG=<版本> ./deploy/docker/build.sh` 与
+`./deploy/docker/package.sh`；目标机按 [deploy/docker/README.md](deploy/docker/README.md)
+执行。设计说明见 [doc/docker-deploy-design.md](doc/docker-deploy-design.md)。
 
 ## 与 React 版的关系
 
