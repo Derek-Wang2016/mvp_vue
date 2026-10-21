@@ -1,0 +1,63 @@
+name: mvp-vue
+
+services:
+  api:
+    image: mvp-vue-api:${TAG:?TAG is required}
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: file:/data/dev.db
+      PAGE_POLICY: ${PAGE_POLICY:-strict}
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - ./data:/data
+      - ./backups:/backups
+    networks:
+      - mvp
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3002/api/publish/pages').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  web:
+    image: mvp-vue-web:${TAG:?TAG is required}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      RENDERER_PORT: ${RENDERER_PORT:-5001}
+    ports:
+      - "${EDITOR_PORT:-5000}:5000"
+      - "${RENDERER_PORT:-5001}:5001"
+    networks:
+      - mvp
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "wget -qO- http://127.0.0.1:5000/ > /dev/null || exit 1"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  mvp:
+    driver: bridge
