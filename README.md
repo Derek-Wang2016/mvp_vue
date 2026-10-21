@@ -8,6 +8,7 @@
 |------|------|
 | [doc/deploy-linux-nginx.md](doc/deploy-linux-nginx.md) | **Linux 部署主文档**（[§0 速查](doc/deploy-linux-nginx.md#0-部署速查内网标准方案)：Nginx 静态 + API `:3002`） |
 | [deploy/docker/README.md](deploy/docker/README.md) | **Docker 离线部署**（构建机打包 / 目标机 load、升级、回滚、备份） |
+| [doc/docker-deploy-guide.md](doc/docker-deploy-guide.md) | **Docker 部署操作手册**（新机器部署、旧部署迁移、程序升级全流程） |
 | [doc/tech-stack.md](doc/tech-stack.md) | 技术选型说明（版本、对比、约束） |
 | [doc/dev-plan.md](doc/dev-plan.md) | 分阶段开发计划与进度跟踪 |
 | [doc/parity-checklist.md](doc/parity-checklist.md) | 与 React 版功能对等验收清单 |

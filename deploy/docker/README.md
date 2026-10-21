@@ -1,5 +1,8 @@
 # mvp_vue Docker 部署（离线）
 
+完整操作手册（新机器部署、从旧部署迁移、升级、回滚、备份）见
+[doc/docker-deploy-guide.md](../../doc/docker-deploy-guide.md)。
+
 默认访问：Editor `http://<IP>:5000`，Renderer `http://<IP>:5001/?id=<发布页ID>`。
 API 不对外暴露，由 Nginx 同源 `/api/` 反代。
 
