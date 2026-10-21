@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import type { PageComponent } from '@mvp-vue/schema'
-import { buildTextComponentStyle } from '@mvp-vue/schema'
+import { buildEditableTextBoxStyle } from '@mvp-vue/schema'
 import { fetchEditableText, saveEditableText } from '../editableTextApi'
 
 const props = defineProps<{ comp: PageComponent }>()
@@ -12,11 +12,10 @@ const open = ref(false)
 const saving = ref(false)
 const message = ref('')
 
-const textStyle = computed(() => {
-  const style = buildTextComponentStyle(props.comp.props)
-  const bg = (props.comp.props.backgroundColor as string) || 'transparent'
-  return { ...style, backgroundColor: bg, overflow: 'hidden', cursor: 'text' }
-})
+const textStyle = computed(() => ({
+  ...buildEditableTextBoxStyle(props.comp.props),
+  cursor: 'text',
+}))
 
 const rowKey = computed(() => String(props.comp.props.rowKey ?? '').trim())
 
@@ -63,8 +62,8 @@ watch(rowKey, () => { void load() })
 
 <template>
   <div class="w-full h-full px-1" :style="textStyle" title="双击编辑" @dblclick.stop="beginEdit">
-    <span v-if="content">{{ content }}</span>
-    <span v-else class="opacity-50">{{ rowKey ? (message || '双击输入') : '未配置 KEY' }}</span>
+    <span v-if="content" class="w-full">{{ content }}</span>
+    <span v-else class="w-full opacity-50">{{ rowKey ? (message || '双击输入') : '未配置 KEY' }}</span>
   </div>
   <Teleport to="body">
     <div

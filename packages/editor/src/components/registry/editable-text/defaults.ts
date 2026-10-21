@@ -6,6 +6,11 @@ export function editableTextDefaultProps() {
     fontWeight: 'normal' as const,
     color: '#ffffff',
     backgroundColor: 'transparent',
+    borderWidth: 0,
+    borderColor: '#ffffff',
+    borderRadius: 0,
+    textAlign: 'left' as const,
+    verticalAlign: 'top' as const,
   }
 }
 

@@ -167,4 +167,61 @@ async function writeRow() {
       >透明</button>
     </div>
   </label>
+  <label class="block">
+    <span :class="PROP_LABEL">水平对齐</span>
+    <select
+      :class="PROP_SELECT_COMPACT"
+      :value="(comp.props.textAlign as string) ?? 'left'"
+      @change="props.updateProps({ textAlign: ($event.target as HTMLSelectElement).value })"
+    >
+      <option value="left">左对齐</option>
+      <option value="center">居中</option>
+      <option value="right">右对齐</option>
+    </select>
+  </label>
+  <label class="block">
+    <span :class="PROP_LABEL">垂直对齐</span>
+    <select
+      :class="PROP_SELECT_COMPACT"
+      :value="(comp.props.verticalAlign as string) ?? 'top'"
+      @change="props.updateProps({ verticalAlign: ($event.target as HTMLSelectElement).value })"
+    >
+      <option value="top">顶部</option>
+      <option value="middle">居中</option>
+      <option value="bottom">底部</option>
+    </select>
+  </label>
+  <label class="block">
+    <span :class="PROP_LABEL">边框线宽</span>
+    <EditorNumberInput
+      :min="0"
+      :max="32"
+      :class="PROP_NUMBER_WRAP"
+      :input-class="PROP_NUMBER_INNER"
+      :model-value="(comp.props.borderWidth as number) ?? 0"
+      @update:model-value="props.updateProps({ borderWidth: Math.max(0, Number($event) || 0) })"
+    />
+  </label>
+  <label class="block">
+    <span :class="PROP_LABEL">边框颜色</span>
+    <div class="flex items-center gap-2 mt-1">
+      <ColorSwatch
+        class="w-7 h-7 shrink-0 border border-white/10"
+        :value="(comp.props.borderColor as string) ?? '#ffffff'"
+        @change="(hex: string) => props.updateProps({ borderColor: hex })"
+      />
+      <span class="text-xs text-slate-400 font-mono">{{ (comp.props.borderColor as string) ?? '#ffffff' }}</span>
+    </div>
+  </label>
+  <label class="block">
+    <span :class="PROP_LABEL">圆角</span>
+    <EditorNumberInput
+      :min="0"
+      :max="200"
+      :class="PROP_NUMBER_WRAP"
+      :input-class="PROP_NUMBER_INNER"
+      :model-value="(comp.props.borderRadius as number) ?? 0"
+      @update:model-value="props.updateProps({ borderRadius: Math.max(0, Number($event) || 0) })"
+    />
+  </label>
 </template>

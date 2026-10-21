@@ -502,6 +502,13 @@ export {
   getTextLetterSpacing,
   buildTextComponentStyle,
 } from './textComponent'
+export {
+  type EditableTextAlign,
+  type EditableTextVerticalAlign,
+  getEditableTextAlign,
+  getEditableTextVerticalAlign,
+  buildEditableTextBoxStyle,
+} from './editableTextComponent'
 
 // ===== 页面 Schema =====
 import type { BgGradient } from './bgGradient'

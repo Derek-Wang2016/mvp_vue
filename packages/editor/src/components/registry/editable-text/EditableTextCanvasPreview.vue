@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { buildTextComponentStyle } from '@mvp-vue/schema'
+import { buildEditableTextBoxStyle } from '@mvp-vue/schema'
 import { fetchEditableText } from '../../../editableTextApi'
 import type { CanvasPreviewProps } from '../types'
 
@@ -13,11 +13,7 @@ const shown = computed(() => {
   return typeof sample === 'string' ? sample : content.value
 })
 
-const textStyle = computed(() => {
-  const style = buildTextComponentStyle(props.comp.props)
-  const bg = (props.comp.props.backgroundColor as string) || 'transparent'
-  return { ...style, backgroundColor: bg, overflow: 'hidden' }
-})
+const textStyle = computed(() => buildEditableTextBoxStyle(props.comp.props))
 
 async function load() {
   const key = String(props.comp.props.rowKey ?? '').trim()
@@ -41,8 +37,8 @@ watch(() => props.comp.props.rowKey, () => { void load() }, { immediate: true })
 
 <template>
   <div class="w-full h-full px-1" :style="textStyle">
-    <span v-if="String(comp.props.rowKey ?? '').trim() && shown">{{ shown }}</span>
-    <span v-else class="opacity-60">
+    <span v-if="String(comp.props.rowKey ?? '').trim() && shown" class="w-full">{{ shown }}</span>
+    <span v-else class="w-full opacity-60">
       {{ String(comp.props.rowKey ?? '').trim() ? (missing ? '无此数据行' : '空内容') : '未配置 KEY' }}
     </span>
   </div>
