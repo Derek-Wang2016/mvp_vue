@@ -17,6 +17,9 @@ vitest.config.ts.timestamp-*
 !packages/editor/.env.production.example
 !packages/renderer/.env.production.example
 
+# Prisma 本地默认数据源（非敏感）
+!packages/server/prisma/.env
+
 # 日志与覆盖率
 *.log
 npm-debug.log*
@@ -54,3 +57,11 @@ packages/server/prisma/*.db-journal
 *.swo
 .cache/
 .turbo/
+
+# Docker 部署本地数据与发布产物
+deploy/docker/.env
+deploy/docker/data/
+deploy/docker/backups/
+deploy/docker/images.tar.gz
+deploy/docker/release.env
+release/

@@ -24,6 +24,11 @@ import { registerPublishPageRoutes } from './routes/publishPages.js'
 import { registerEditableTextRoutes } from './editableTextRoutes.js'
 import { ensureDatabaseSchema } from './ensureDatabaseSchema.js'
 
+// 本地开发未设置 DATABASE_URL 时沿用原来的 prisma/dev.db
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = 'file:./dev.db'
+}
+
 const app = Fastify({ logger: true })
 await app.register(cors, { origin: true })
 const prisma = new PrismaClient()
