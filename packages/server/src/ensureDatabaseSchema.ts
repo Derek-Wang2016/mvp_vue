@@ -7,6 +7,38 @@ import type { PrismaClient } from '@prisma/client'
  */
 const STEPS: { id: string; sql: string }[] = [
   {
+    id: '2026-10-21-baseline-page-draft',
+    sql: `CREATE TABLE IF NOT EXISTS "PageDraft" (
+      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+      "name" TEXT NOT NULL,
+      "schemaJson" TEXT NOT NULL,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL
+    )`,
+  },
+  {
+    id: '2026-10-21-baseline-page-published',
+    sql: `CREATE TABLE IF NOT EXISTS "PagePublished" (
+      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+      "name" TEXT NOT NULL,
+      "schemaJson" TEXT NOT NULL,
+      "sourceDraftId" INTEGER,
+      "publishedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  },
+  {
+    id: '2026-10-21-baseline-custom-icon',
+    sql: `CREATE TABLE IF NOT EXISTS "CustomIcon" (
+      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+      "name" TEXT NOT NULL,
+      "svgContent" TEXT NOT NULL,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL
+    )`,
+  },
+  {
     id: '2026-10-20-editable-text',
     sql: `CREATE TABLE IF NOT EXISTS "EditableText" (
       "key" TEXT NOT NULL PRIMARY KEY,
