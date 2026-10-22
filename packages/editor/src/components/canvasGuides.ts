@@ -8,9 +8,13 @@ type Box = { x: number; y: number; r: number; b: number }
 
 function edgePairs(box: Box) {
   return {
-    x: [box.x, (box.x + box.r) / 2, box.r],
-    y: [box.y, (box.y + box.b) / 2, box.b],
+    x: [box.x, (box.x + box.r) / 2, box.r] as const,
+    y: [box.y, (box.y + box.b) / 2, box.b] as const,
   }
+}
+
+function at(values: readonly number[], index: number): number {
+  return values[index] ?? 0
 }
 
 export type AlignHit = { axis: GuideAxis; pos: number; center: boolean }
@@ -34,16 +38,20 @@ export function alignEdges(moving: Box[], others: Box[], threshold: number): Ali
       const peer = edgePairs(other)
       for (let i = 0; i < 3; i++) {
         const center = i === 1
-        if (Math.abs(self.x[i] - peer.x[i]) <= threshold) {
-          const pos = peer.x[i]
+        const selfX = at(self.x, i)
+        const peerX = at(peer.x, i)
+        const selfY = at(self.y, i)
+        const peerY = at(peer.y, i)
+        if (Math.abs(selfX - peerX) <= threshold) {
+          const pos = peerX
           const key = `x:${Math.round(pos)}`
           if (!seen.has(key)) {
             seen.add(key)
             lines.push({ axis: 'x', pos, center })
           }
         }
-        if (Math.abs(self.y[i] - peer.y[i]) <= threshold) {
-          const pos = peer.y[i]
+        if (Math.abs(selfY - peerY) <= threshold) {
+          const pos = peerY
           const key = `y:${Math.round(pos)}`
           if (!seen.has(key)) {
             seen.add(key)
@@ -111,20 +119,20 @@ export function snapDragToGuides(rawDx: number, rawDy: number, scale: number) {
   for (const box of boxes) {
     const self = edgePairs(box)
     for (const line of rulerX) {
-      consider(rawDx, self.x[0], line, 'x', false)
-      consider(rawDx, self.x[1], line, 'x', true)
-      consider(rawDx, self.x[2], line, 'x', false)
+      consider(rawDx, at(self.x, 0), line, 'x', false)
+      consider(rawDx, at(self.x, 1), line, 'x', true)
+      consider(rawDx, at(self.x, 2), line, 'x', false)
     }
     for (const line of rulerY) {
-      consider(rawDy, self.y[0], line, 'y', false)
-      consider(rawDy, self.y[1], line, 'y', true)
-      consider(rawDy, self.y[2], line, 'y', false)
+      consider(rawDy, at(self.y, 0), line, 'y', false)
+      consider(rawDy, at(self.y, 1), line, 'y', true)
+      consider(rawDy, at(self.y, 2), line, 'y', false)
     }
     for (const other of others) {
       const peer = edgePairs(other)
       for (let i = 0; i < 3; i++) {
-        consider(rawDx, self.x[i], peer.x[i], 'x', i === 1)
-        consider(rawDy, self.y[i], peer.y[i], 'y', i === 1)
+        consider(rawDx, at(self.x, i), at(peer.x, i), 'x', i === 1)
+        consider(rawDy, at(self.y, i), at(peer.y, i), 'y', i === 1)
       }
     }
   }
