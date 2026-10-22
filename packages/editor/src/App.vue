@@ -366,7 +366,7 @@ const alignBtnClass = (enabled: boolean) =>
 <template>
   <div ref="editorRootRef" class="h-screen flex flex-col outline-none" tabindex="-1" @mousedown="editorRootRef?.focus({ preventScroll: true })">
     <!-- Header / Toolbar -->
-    <header class="h-11 border-b border-white/10 flex items-center px-4 text-xs shrink-0 gap-2.5 bg-gradient-to-b from-[#111d2e] to-[#0f1a28]">
+    <header class="h-11 border-b border-white/10 flex items-center px-4 text-xs shrink-0 gap-2.5 overflow-hidden bg-gradient-to-b from-[#111d2e] to-[#0f1a28]">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2" class="shrink-0">
         <rect x="3" y="3" width="18" height="18" rx="3"/>
         <line x1="9" y1="9" x2="15" y2="9"/>
@@ -649,7 +649,8 @@ const alignBtnClass = (enabled: boolean) =>
 
       <span class="w-px h-4 bg-white/10" />
 
-      <!-- file ops -->
+      <!-- file ops：固定在右侧，状态提示不占按钮宽度 -->
+      <div class="ml-auto flex items-center gap-2 shrink-0">
       <button class="text-slate-400 hover:text-slate-200 text-xs px-2.5 py-1 rounded-md border border-white/10 bg-white/5 hover:bg-white/10 transition-colors" @click="jsonDialogOpen = true">
         JSON
       </button>
@@ -669,18 +670,22 @@ const alignBtnClass = (enabled: boolean) =>
         </svg>
         预览
       </button>
-
-      <span v-if="saveMsg" class="text-xs" :class="saveMsg.includes('失败') ? 'text-red-400' : 'text-green-400'">
-        {{ saveMsg }}
-      </span>
-      <span v-if="lastSavedAt" class="text-[10px] text-slate-600 tabular-nums">{{ lastSavedAt }}</span>
-
       <button
         class="bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-400 hover:to-violet-500 text-white text-xs px-4 py-1.5 rounded-md font-medium shadow-sm shadow-indigo-500/25 disabled:opacity-50 transition-all"
         :disabled="saving || pageReadOnly" @click="handleSave"
       >
         {{ saving ? '保存中...' : '保存' }}
       </button>
+      <span
+        v-if="saveMsg || lastSavedAt"
+        class="text-[10px] leading-tight max-w-[4.5rem] text-right"
+        :class="saveMsg.includes('失败') ? 'text-red-400' : 'text-emerald-400/90'"
+        :title="[saveMsg, lastSavedAt].filter(Boolean).join(' ')"
+      >
+        <span class="block truncate">{{ saveMsg }}</span>
+        <span v-if="lastSavedAt" class="block text-slate-500 tabular-nums truncate">{{ lastSavedAt.split(' ').pop() }}</span>
+      </span>
+      </div>
     </header>
 
     <!-- Three-column body -->
