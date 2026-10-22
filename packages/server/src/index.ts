@@ -8,7 +8,7 @@ import {
   resolveProvinceOption,
   cacheMapGeoJson,
 } from './mapStatsDemo.js'
-import { buildCardListResponse } from './cardListDemo.js'
+import { buildCardListResponse, buildCardResponse } from './cardListDemo.js'
 import { buildWardKvSingleResponse, buildWardKvMultiResponse } from './wardKvStatsDemo.js'
 import {
   createCustomIcon,
@@ -289,6 +289,22 @@ app.get('/api/demo/map-stats', async (req, reply) => {
  */
 app.get('/api/demo/card-list', async (req, reply) => {
   const result = buildCardListResponse(req.query as Record<string, unknown>)
+  if ('error' in result) {
+    reply.status(result.status).send({ error: result.error })
+    return
+  }
+  reply.send(result)
+})
+
+/**
+ * 单卡片 REST 测试数据（记录来自 card-list 同一数据集）
+ *
+ * GET /api/demo/card?patientId=012119494
+ * patientId 匹配 hisPatientId，也可传 patientPkId。
+ * 响应 data 为单条床位记录，供卡片组件数据路径填 data。
+ */
+app.get('/api/demo/card', async (req, reply) => {
+  const result = buildCardResponse(req.query as Record<string, unknown>)
   if ('error' in result) {
     reply.status(result.status).send({ error: result.error })
     return

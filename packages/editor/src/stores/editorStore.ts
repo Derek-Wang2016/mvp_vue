@@ -681,6 +681,20 @@ export const useEditorStore = defineStore('editor', () => {
     applyComponentPositions(posById)
   }
 
+  function setComponentRotate(id: string, rotate: number, recordHistory = true) {
+    const comp = getComponentById(id)
+    if (!comp || isEditorLocked(comp)) return
+    let next = Math.round(rotate) % 360
+    if (next > 180) next -= 360
+    if (next <= -180) next += 360
+    const value = next === 0 ? undefined : next
+    if ((comp.rotate ?? undefined) === value) return
+    if (recordHistory) pushHistory()
+    components.value = components.value.map((c) =>
+      c.id === id ? { ...c, rotate: value } : c,
+    )
+  }
+
   function resizeComponent(id: string, x: number, y: number, w: number, h: number) {
     const comp = getComponentById(id)
     if (!comp || isEditorLocked(comp)) return
@@ -1212,6 +1226,7 @@ function resizeGroup(
     equalizeSelectedWidth, equalizeSelectedHeight,
     distributeSelectedComponentsHorizontal, distributeSelectedComponentsVertical,
     resizeComponent,
+    setComponentRotate,
     setComponentsSize,
     removeComponent, removeComponents,
     setComponentLocked, setComponentsLocked, setGroupLocked, hasLockedInSelection,

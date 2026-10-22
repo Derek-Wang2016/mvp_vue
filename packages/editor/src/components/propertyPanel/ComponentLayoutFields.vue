@@ -16,6 +16,11 @@ const props = withDefaults(defineProps<{
 const store = useEditorStore()
 const { pageWidth, pageHeight } = storeToRefs(store)
 
+function applyRotate(value: number) {
+  if (props.disabled) return
+  store.setComponentRotate(props.comp.id, Number(value) || 0)
+}
+
 function apply(patch: Partial<{ x: number; y: number; w: number; h: number }>) {
   if (props.disabled) return
   const next = clampComponentLayout(
@@ -85,6 +90,19 @@ function apply(patch: Partial<{ x: number; y: number; w: number; h: number }>) {
           :model-value="comp.h"
           :disabled="disabled"
           @update:model-value="apply({ h: Number($event) })"
+        />
+      </label>
+      <label class="block min-w-0 col-span-2">
+        <span class="text-[10px] text-slate-500">旋转 °</span>
+        <EditorNumberInput
+          :min="-180"
+          :max="180"
+          :step="1"
+          :class="PROP_NUMBER_WRAP"
+          :input-class="PROP_NUMBER_INNER"
+          :model-value="comp.rotate ?? 0"
+          :disabled="disabled"
+          @update:model-value="applyRotate(Number($event))"
         />
       </label>
     </div>

@@ -3,6 +3,8 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import type { PageComponent, ComponentType } from '@mvp-vue/schema'
 import { isEditorLocked, isComponentLocked, isGroupLocked, buildGradientBackground } from '@mvp-vue/schema'
 import { useEditorStore } from '../stores/editorStore'
+import CanvasRulers from './CanvasRulers.vue'
+import { snapDragToGuides } from './canvasGuides'
 import { storeToRefs } from 'pinia'
 import ResizeHandles from './ResizeHandles.vue'
 import GroupResizeHandles from './GroupResizeHandles.vue'
@@ -310,7 +312,7 @@ function handleCompPointerDown(e: PointerEvent, domComp: PageComponent) {
     const scale = canvasScale.value
     const dx = (ev.clientX - dragState.value.startX) / scale
     const dy = (ev.clientY - dragState.value.startY) / scale
-    store.setGroupDragOffset({ dx, dy })
+    store.setGroupDragOffset(snapDragToGuides(dx, dy, scale))
   }
 
   function onUp(ev: PointerEvent) {
@@ -320,8 +322,9 @@ function handleCompPointerDown(e: PointerEvent, domComp: PageComponent) {
     }
     const state = dragState.value
     const scale = canvasScale.value
-    const dx = (ev.clientX - state.startX) / scale
-    const dy = (ev.clientY - state.startY) / scale
+    const rawDx = (ev.clientX - state.startX) / scale
+    const rawDy = (ev.clientY - state.startY) / scale
+    const { dx, dy } = snapDragToGuides(rawDx, rawDy, scale)
 
     if (dx !== 0 || dy !== 0) {
       if (state.isMultiDrag) {
@@ -457,6 +460,15 @@ function handlePanEnd(e: PointerEvent) {
   panState.value = null
 }
 
+function compTransform(comp: PageComponent): Record<string, string> {
+  const spin = comp.rotate ? `rotate(${comp.rotate}deg)` : ''
+  const drag = groupDragOffset.value && isSelected(comp.id)
+    ? `translate3d(${groupDragOffset.value.dx}px, ${groupDragOffset.value.dy}px, 0)`
+    : ''
+  const transform = [drag, spin].filter(Boolean).join(' ')
+  return transform ? { transform } : {}
+}
+
 function onCtrlKeyDown(e: KeyboardEvent) {
   if (e.key === 'Control' || e.key === 'Meta') ctrlHeld.value = true
 }
@@ -466,9 +478,10 @@ function onCtrlKeyUp(e: KeyboardEvent) {
 </script>
 
 <template>
+  <CanvasRulers>
   <div
     ref="containerRef"
-    class="canvas-zoom-container editor-scrollbar relative min-w-0 flex-1 overflow-auto flex p-4"
+    class="canvas-zoom-container editor-scrollbar relative min-w-0 min-h-0 flex-1 overflow-auto flex p-4"
     :class="{ '!cursor-grab': ctrlHeld && !panState, '!cursor-grabbing': !!panState }"
     @pointerdown.capture="handlePanStart"
     @pointermove="handlePanMove"
@@ -481,7 +494,7 @@ function onCtrlKeyUp(e: KeyboardEvent) {
   >
     <div
       ref="wrapperRef"
-      class="relative shrink-0 m-auto"
+      class="editor-canvas-frame relative shrink-0 m-auto"
       :style="{ width: `${pageWidth * canvasScale}px`, height: `${pageHeight * canvasScale}px` }"
     >
       <div
@@ -538,9 +551,8 @@ function onCtrlKeyUp(e: KeyboardEvent) {
             height: `${comp.h}px`,
             cursor: isEditorLocked(comp) ? 'default' : (editingCompId === comp.id ? 'text' : 'grab'),
             overflow: 'visible',
-            ...(groupDragOffset && isSelected(comp.id)
-              ? { transform: `translate3d(${groupDragOffset.dx}px, ${groupDragOffset.dy}px, 0)` }
-              : {}),
+            transformOrigin: 'center center',
+            ...compTransform(comp),
           }"
           @pointerdown="(e) => handleCompPointerDown(e, comp)"
           @contextmenu="(e) => handleCompContextMenu(e, comp.id)"
@@ -682,4 +694,5 @@ function onCtrlKeyUp(e: KeyboardEvent) {
       </div>
     </div>
   </div>
+  </CanvasRulers>
 </template>

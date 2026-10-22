@@ -102,6 +102,57 @@ function calcRectProportional(
   return { x, y, w: newW, h: newH }
 }
 
+function pagePoint(ev: PointerEvent) {
+  const canvas = document.querySelector('.dnd-canvas') as HTMLElement | null
+  const scale = props.canvasScale || 1
+  if (!canvas) return { x: ev.clientX / scale, y: ev.clientY / scale }
+  const rect = canvas.getBoundingClientRect()
+  return {
+    x: (ev.clientX - rect.left) / scale,
+    y: (ev.clientY - rect.top) / scale,
+  }
+}
+
+function normalizeDeg(deg: number) {
+  let d = Math.round(deg) % 360
+  if (d > 180) d -= 360
+  if (d <= -180) d += 360
+  return d
+}
+
+function handleRotateDown(e: PointerEvent) {
+  if (isComponentLocked(props.comp)) return
+  e.stopPropagation()
+  e.preventDefault()
+  ;(e.target as HTMLElement).setPointerCapture?.(e.pointerId)
+
+  const cx = props.comp.x + props.comp.w / 2
+  const cy = props.comp.y + props.comp.h / 2
+  const start = pagePoint(e)
+  const startAngle = Math.atan2(start.y - cy, start.x - cx)
+  const orig = props.comp.rotate ?? 0
+  let historyRecorded = false
+  document.body.style.cursor = 'grabbing'
+
+  function onMove(ev: PointerEvent) {
+    const p = pagePoint(ev)
+    const angle = Math.atan2(p.y - cy, p.x - cx)
+    let deg = orig + ((angle - startAngle) * 180) / Math.PI
+    if (ev.shiftKey) deg = Math.round(deg / 15) * 15
+    useEditorStore().setComponentRotate(props.comp.id, normalizeDeg(deg), !historyRecorded)
+    historyRecorded = true
+  }
+
+  function onUp() {
+    window.removeEventListener('pointermove', onMove)
+    window.removeEventListener('pointerup', onUp)
+    document.body.style.cursor = ''
+  }
+
+  window.addEventListener('pointermove', onMove)
+  window.addEventListener('pointerup', onUp)
+}
+
 function handlePointerDown(dir: Dir, e: PointerEvent) {
   if (isComponentLocked(props.comp)) return
   e.stopPropagation()
@@ -136,6 +187,15 @@ function handlePointerDown(dir: Dir, e: PointerEvent) {
 </script>
 
 <template>
+  <div
+    title="旋转（按住 Shift 按 15° 吸附）"
+    class="absolute z-[11] cursor-grab"
+    :style="{ left: '50%', top: '-28px', width: '12px', height: '28px', marginLeft: '-6px' }"
+    @pointerdown="(e: PointerEvent) => handleRotateDown(e)"
+  >
+    <div class="absolute left-[5px] top-[10px] w-[2px] h-[18px] bg-blue-500 pointer-events-none" />
+    <div class="absolute left-0 top-0 w-3 h-3 rounded-full bg-blue-500 border-2 border-white" />
+  </div>
   <div
     v-for="{ dir, style } in HANDLES"
     :key="dir"

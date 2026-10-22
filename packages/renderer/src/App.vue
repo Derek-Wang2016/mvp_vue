@@ -286,7 +286,9 @@ watch([schema, fullscreenMode, pageWidth, pageHeight], () => {
                   top: comp.y + 'px',
                   width: comp.w + 'px',
                   height: comp.h + 'px',
-                  overflow: 'hidden',
+                  overflow: 'visible',
+                  transformOrigin: 'center center',
+                  transform: comp.rotate ? `rotate(${comp.rotate}deg)` : undefined,
                 }"
               >
                 <component

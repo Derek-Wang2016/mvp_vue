@@ -441,6 +441,8 @@ export interface PageComponent {
   y: number
   w: number
   h: number
+  /** 绕中心旋转的角度，单位度；0 或省略表示不旋转 */
+  rotate?: number
   props: Record<string, unknown>
   dataSourceId?: string
   /** 编辑器锁定：不可选中、拖动、改属性 */

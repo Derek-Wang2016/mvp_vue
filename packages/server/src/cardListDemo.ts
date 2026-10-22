@@ -420,6 +420,29 @@ export function parseCardListQuery(query: Record<string, unknown>):
   return { pageNo, pageSize, wardId }
 }
 
+/**
+ * 单卡片：从卡片列表同一数据集中按 patientId 取一条有患者的床位。
+ * patientId 匹配 hisPatientId，也接受 patientPkId。
+ */
+export function buildCardResponse(query: Record<string, unknown>):
+  | { code: 0; data: CardListBedItem; msg: string }
+  | { error: string; status: number } {
+  const raw = query.patientId ?? query.hisPatientId
+  const patientId = raw == null ? '' : String(raw).trim()
+  const pool = buildCardListPool()
+  if (!patientId) {
+    const sample = pool.find((r) => r.hisPatientId)?.hisPatientId ?? ''
+    return { error: `缺少 patientId，例如 ?patientId=${sample}`, status: 400 }
+  }
+  const found = pool.find((r) =>
+    r.hisPatientId === patientId || (r.patientPkId != null && String(r.patientPkId) === patientId),
+  )
+  if (!found || !found.hisPatientId) {
+    return { error: `未找到患者 ${patientId}`, status: 404 }
+  }
+  return { code: 0, data: found, msg: '' }
+}
+
 export function buildCardListResponse(query: Record<string, unknown>): CardListApiResponse | { error: string; status: number } {
   const parsed = parseCardListQuery(query)
   if ('error' in parsed) return parsed
