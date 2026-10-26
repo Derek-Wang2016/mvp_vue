@@ -97,6 +97,19 @@ describe('场景接口', () => {
     expect(badJson.json().field).toBe('sceneJson')
   })
 
+  it('拒绝过深的 sceneJson 且不泄露异常', async () => {
+    const deep = '{"a":'.repeat(20000) + '1' + '}'.repeat(20000)
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/3d/scenes',
+      payload: JSON.stringify({ name: '深场景', sceneJson: deep }),
+      headers: { 'content-type': 'application/json' },
+    })
+    expect(res.statusCode).toBe(400)
+    expect(res.json().field).toBe('sceneJson')
+    expect(res.body).not.toContain('Maximum call stack')
+  })
+
   it('缩略图必须是图片', async () => {
     const glb = await uploadGlb(ctx, 'scene.glb', 'scene-thumb-glb')
     const rejected = await ctx.app.inject({
@@ -137,6 +150,43 @@ describe('场景接口', () => {
     const res = await ctx.app.inject({ url: `/api/3d/scenes/${row.id}` })
     expect(res.statusCode).toBe(500)
     expect(res.json().error).toBe('场景 JSON 已损坏')
+
+    const scalar = await ctx.prisma.scene.create({
+      data: { name: '标量场景', sceneJson: 'null' },
+    })
+    const scalarRes = await ctx.app.inject({ url: `/api/3d/scenes/${scalar.id}` })
+    expect(scalarRes.statusCode).toBe(500)
+    expect(scalarRes.json().error).toBe('场景 JSON 已损坏')
+  })
+
+  it('更新时省略 thumbnailFileId 会清空缩略图', async () => {
+    const image = await uploadImage(ctx, 'clear-thumb.png')
+    const created = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/3d/scenes',
+      payload: { name: '带缩略图', sceneJson: sceneDocument(), thumbnailFileId: image.json().id },
+    })
+    expect(created.statusCode).toBe(201)
+    expect(created.json().thumbnailUrl).toBe(`/api/3d/files/${image.json().id}`)
+
+    const updated = await ctx.app.inject({
+      method: 'PUT',
+      url: `/api/3d/scenes/${created.json().id}`,
+      payload: { name: '无缩略图', sceneJson: sceneDocument() },
+    })
+    expect(updated.statusCode).toBe(200)
+    expect(updated.json().thumbnailFileId).toBeNull()
+    expect(updated.json().thumbnailUrl).toBeNull()
+  })
+
+  it('缩略图文件不存在时拒绝创建', async () => {
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/3d/scenes',
+      payload: { name: '场景', sceneJson: sceneDocument(), thumbnailFileId: 999999 },
+    })
+    expect(res.statusCode).toBe(400)
+    expect(res.json().field).toBe('thumbnailFileId')
   })
 
   it('不存在或非法 id 返回错误', async () => {
@@ -162,6 +212,10 @@ describe('场景接口', () => {
     const badId = await ctx.app.inject({ url: '/api/3d/scenes/abc' })
     expect(badId.statusCode).toBe(400)
     expect(badId.json().error).toBe('无效的 id')
+
+    const overflowId = await ctx.app.inject({ url: '/api/3d/scenes/3000000000' })
+    expect(overflowId.statusCode).toBe(400)
+    expect(overflowId.json().error).toBe('无效的 id')
   })
 
   it('列表按 updatedAt 倒序排列', async () => {

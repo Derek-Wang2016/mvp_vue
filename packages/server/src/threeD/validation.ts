@@ -193,7 +193,7 @@ const sceneDocumentShape = z
   .passthrough()
 
 export type SceneNormalizeResult =
-  | { ok: true; value: string }
+  | { ok: true; value: string; scene: unknown }
   | { ok: false; error: string; field: string }
 
 export function normalizeSceneJson(input: unknown): SceneNormalizeResult {
@@ -205,7 +205,18 @@ export function normalizeSceneJson(input: unknown): SceneNormalizeResult {
       return { ok: false, error: 'sceneJson 不是合法 JSON', field: 'sceneJson' }
     }
   }
-  const parsed = sceneDocumentShape.safeParse(candidate)
+  let value: string
+  try {
+    value = JSON.stringify(candidate)
+  } catch {
+    return { ok: false, error: 'sceneJson 结构过深，无法序列化', field: 'sceneJson' }
+  }
+  let parsed: ReturnType<typeof sceneDocumentShape.safeParse>
+  try {
+    parsed = sceneDocumentShape.safeParse(candidate)
+  } catch {
+    return { ok: false, error: 'sceneJson 结构过深，无法序列化', field: 'sceneJson' }
+  }
   if (!parsed.success) {
     const issue = parsed.error.issues[0]
     const path = issue?.path.join('.')
@@ -215,7 +226,7 @@ export function normalizeSceneJson(input: unknown): SceneNormalizeResult {
       field: path ? `sceneJson.${path}` : 'sceneJson',
     }
   }
-  return { ok: true, value: JSON.stringify(candidate) }
+  return { ok: true, value, scene: candidate }
 }
 
 export function zodError(error: z.ZodError): { message: string; field?: string } {

@@ -5,14 +5,6 @@ import { formatSceneMeta } from './mappers.js'
 import { isPrismaError, parseId, sendError } from './http.js'
 import { thumbnailRefError } from './refs.js'
 
-function parseStoredScene(raw: string): unknown | undefined {
-  try {
-    return JSON.parse(raw)
-  } catch {
-    return undefined
-  }
-}
-
 function sceneDetail(row: Scene, scene: unknown) {
   return { ...formatSceneMeta(row), scene }
 }
@@ -44,12 +36,12 @@ export function registerSceneRoutes(app: FastifyInstance, prisma: PrismaClient) 
       sendError(reply, 404, '场景不存在')
       return
     }
-    const scene = parseStoredScene(row.sceneJson)
-    if (scene === undefined) {
+    const normalized = normalizeSceneJson(row.sceneJson)
+    if (!normalized.ok) {
       sendError(reply, 500, '场景 JSON 已损坏')
       return
     }
-    reply.send(sceneDetail(row, scene))
+    reply.send(sceneDetail(row, normalized.scene))
   })
 
   app.post('/api/3d/scenes', async (req, reply) => {
@@ -79,7 +71,7 @@ export function registerSceneRoutes(app: FastifyInstance, prisma: PrismaClient) 
           thumbnailFileId: meta.data.thumbnailFileId ?? null,
         },
       })
-      reply.status(201).send(sceneDetail(row, JSON.parse(normalized.value)))
+      reply.status(201).send(sceneDetail(row, normalized.scene))
     } catch (err) {
       if (isPrismaError(err, 'P2003')) {
         sendError(reply, 409, '引用的缩略图不存在')
@@ -122,7 +114,7 @@ export function registerSceneRoutes(app: FastifyInstance, prisma: PrismaClient) 
           thumbnailFileId: meta.data.thumbnailFileId ?? null,
         },
       })
-      reply.send(sceneDetail(row, JSON.parse(normalized.value)))
+      reply.send(sceneDetail(row, normalized.scene))
     } catch (err) {
       if (isPrismaError(err, 'P2025')) {
         sendError(reply, 404, '场景不存在')
