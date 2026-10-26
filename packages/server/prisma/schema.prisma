@@ -42,3 +42,13 @@ model EditableText {
   content   String   @default("")
   updatedAt DateTime @updatedAt
 }
+
+/// 图床：通用图片二进制，编辑器通过 /api/images/:id 引用
+model HostedImage {
+  id        Int      @id @default(autoincrement())
+  name      String
+  mime      String
+  data      Bytes
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

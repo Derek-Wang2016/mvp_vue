@@ -5,6 +5,15 @@ import type { PrismaClient } from '@prisma/client'
  * 后续升级在 STEPS 末尾追加，id 不要改已上线的步骤。
  * SQL 尽量写成可重复执行（CREATE TABLE IF NOT EXISTS、ADD COLUMN 前先判断）。
  */
+const HOSTED_IMAGE_SQL = `CREATE TABLE IF NOT EXISTS "HostedImage" (
+  "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "name" TEXT NOT NULL,
+  "mime" TEXT NOT NULL,
+  "data" BLOB NOT NULL,
+  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+)`
+
 const STEPS: { id: string; sql: string }[] = [
   {
     id: '2026-10-21-baseline-page-draft',
@@ -39,6 +48,10 @@ const STEPS: { id: string; sql: string }[] = [
     )`,
   },
   {
+    id: '2026-10-22-hosted-image',
+    sql: HOSTED_IMAGE_SQL,
+  },
+  {
     id: '2026-10-20-editable-text',
     sql: `CREATE TABLE IF NOT EXISTS "EditableText" (
       "key" TEXT NOT NULL PRIMARY KEY,
@@ -67,6 +80,15 @@ export async function ensureDatabaseSchema(prisma: PrismaClient): Promise<string
     await prisma.$executeRawUnsafe(step.sql)
     await prisma.$executeRaw`INSERT INTO "SchemaMigration" ("id") VALUES (${step.id})`
     ran.push(step.id)
+  }
+
+  // 升级旧库时，迁移记录可能来自别的文件；表不存在就补建，不依赖是否记过步骤
+  const hosted = await prisma.$queryRawUnsafe<Array<{ name: string }>>(
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'HostedImage'`,
+  )
+  if (hosted.length === 0) {
+    await prisma.$executeRawUnsafe(HOSTED_IMAGE_SQL)
+    if (!ran.includes('2026-10-22-hosted-image')) ran.push('2026-10-22-hosted-image')
   }
 
   return ran

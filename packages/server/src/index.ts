@@ -23,19 +23,22 @@ import { registerDraftPageRoutes } from './routes/draftPages.js'
 import { registerPublishPageRoutes } from './routes/publishPages.js'
 import { registerEditableTextRoutes } from './editableTextRoutes.js'
 import { ensureDatabaseSchema } from './ensureDatabaseSchema.js'
+import { registerHostedImageRoutes } from './hostedImageRoutes.js'
 
 // 本地开发未设置 DATABASE_URL 时沿用原来的 prisma/dev.db
 if (!process.env.DATABASE_URL) {
   process.env.DATABASE_URL = 'file:./dev.db'
 }
 
-const app = Fastify({ logger: true })
+const app = Fastify({ logger: true, bodyLimit: 8 * 1024 * 1024 })
 await app.register(cors, { origin: true })
 const prisma = new PrismaClient()
 
 registerDraftPageRoutes(app, prisma)
 registerPublishPageRoutes(app, prisma)
 registerEditableTextRoutes(app, prisma)
+registerHostedImageRoutes(app, prisma)
+
 
 if (isStrictPagePolicy()) {
   console.log('PAGE_POLICY=strict：发布模式，调试表只读')
@@ -341,6 +344,7 @@ app.get('/api/demo/live-data', async (_req, reply) => {
 
 try {
   const applied = await ensureDatabaseSchema(prisma)
+  console.log('数据库文件:', process.env.DATABASE_URL ?? '(未设置)')
   if (applied.length > 0) {
     console.log('数据库结构已更新:', applied.join(', '))
   }
