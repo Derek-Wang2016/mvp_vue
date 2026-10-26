@@ -8,8 +8,31 @@ import {
 export function registerModelLibraryRoutes(app: FastifyInstance, prisma: PrismaClient) {
   app.get('/api/3d/model-library', async (_req, reply) => {
     const [systemRows, importedRows] = await Promise.all([
-      prisma.systemModel.findMany({ orderBy: [{ kind: 'asc' }, { id: 'asc' }] }),
-      prisma.importedModel.findMany({ orderBy: { id: 'asc' } }),
+      prisma.systemModel.findMany({
+        select: {
+          id: true,
+          key: true,
+          name: true,
+          kind: true,
+          width: true,
+          depth: true,
+          height: true,
+          fileId: true,
+          configJson: true,
+        },
+        orderBy: [{ kind: 'asc' }, { id: 'asc' }],
+      }),
+      prisma.importedModel.findMany({
+        select: {
+          id: true,
+          name: true,
+          fileId: true,
+          width: true,
+          depth: true,
+          configJson: true,
+        },
+        orderBy: { id: 'asc' },
+      }),
     ])
 
     const system: Array<Record<string, unknown>> = []
@@ -28,8 +51,12 @@ export function registerModelLibraryRoutes(app: FastifyInstance, prisma: PrismaC
       else if (mapped.skipped) skipped.push(`imported-${row.id}`)
     }
 
-    if (skipped.length > 0) {
-      reply.header('X-Skipped-Models', skipped.join(','))
+    const skippedHeader = skipped
+      .map((token) => encodeURIComponent(token).slice(0, 200))
+      .join(',')
+      .slice(0, 4000)
+    if (skippedHeader) {
+      reply.header('X-Skipped-Models', skippedHeader)
     }
     reply.send({ system, imported })
   })

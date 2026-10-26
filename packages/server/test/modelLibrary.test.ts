@@ -102,6 +102,61 @@ describe('运行时模型库接口', () => {
     expect(res.headers['x-skipped-models']).toBe('device-no-file')
   })
 
+  it('脏 key 编码后写入跳过响应头，不触发头注入也不被逗号拆分', async () => {
+    const dirtyKey = 'dirty\r\nX-Injected: 1,设备'
+    await ctx.prisma.systemModel.create({
+      data: {
+        key: dirtyKey,
+        name: '脏 key 设备',
+        kind: 'device',
+        configJson: JSON.stringify({ deviceKind: 'bed', tagPrefix: 'BED' }),
+      },
+    })
+
+    const res = await ctx.app.inject({ url: '/api/3d/model-library' })
+    expect(res.statusCode).toBe(200)
+    const header = res.headers['x-skipped-models']
+    expect(header).toBe(encodeURIComponent(dirtyKey))
+    expect(String(header)).not.toContain('\r')
+    expect(String(header)).not.toContain('\n')
+    expect(String(header).split(',')).toHaveLength(1)
+    expect(res.headers['x-injected']).toBeUndefined()
+  })
+
+  it('脏系统行与脏导入行同时存在时按查询顺序拼接，正常导入条目不含 kind', async () => {
+    const uploaded = await uploadGlb(ctx, 'monitor.glb', 'library-combo')
+    const fileId = uploaded.json().id
+    const good = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/3d/imported-models',
+      payload: { name: '监护仪', fileId, config: { scale: 1 } },
+    })
+    expect(good.statusCode).toBe(201)
+
+    await ctx.prisma.systemModel.create({
+      data: {
+        key: 'device-dirty-system',
+        name: '脏系统设备',
+        kind: 'device',
+        configJson: JSON.stringify({ deviceKind: 'bed', tagPrefix: 'BED' }),
+      },
+    })
+    const dirtyImported = await ctx.prisma.importedModel.create({
+      data: { name: '脏导入模型', fileId, configJson: '{bad' },
+    })
+
+    const res = await ctx.app.inject({ url: '/api/3d/model-library' })
+    expect(res.statusCode).toBe(200)
+    const body = res.json()
+    expect(body.system).toEqual([])
+    expect(body.imported).toHaveLength(1)
+    expect(body.imported[0].id).toBe(`imported-${good.json().id}`)
+    expect(body.imported[0]).not.toHaveProperty('kind')
+    expect(res.headers['x-skipped-models']).toBe(
+      `device-dirty-system,imported-${dirtyImported.id}`,
+    )
+  })
+
   it('脏导入模型被跳过，正常导入行仍输出', async () => {
     const uploaded = await uploadGlb(ctx, 'ventilator.glb', 'library-dirty')
     const fileId = uploaded.json().id

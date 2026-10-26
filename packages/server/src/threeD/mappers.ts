@@ -4,6 +4,14 @@ import { deviceConfigSchema, importedConfigSchema, roomConfigSchema } from './va
 
 type SystemModelWithCategory = SystemModel & { category: ModelCategory | null }
 type ImportedModelWithCategory = ImportedModel & { category: ModelCategory | null }
+type SystemModelLibraryRow = Pick<
+  SystemModel,
+  'id' | 'key' | 'name' | 'kind' | 'width' | 'depth' | 'height' | 'fileId' | 'configJson'
+>
+type ImportedModelLibraryRow = Pick<
+  ImportedModel,
+  'id' | 'name' | 'fileId' | 'width' | 'depth' | 'configJson'
+>
 type SceneMetaRow = Pick<
   Scene,
   'id' | 'name' | 'description' | 'thumbnailFileId' | 'createdAt' | 'updatedAt'
@@ -92,7 +100,7 @@ export function formatSceneMeta(row: SceneMetaRow) {
 }
 
 export function systemModelToLibraryEntry(
-  row: SystemModel,
+  row: SystemModelLibraryRow,
 ): { entry: Record<string, unknown> | null; skipped: boolean } {
   if (row.kind === 'room') {
     if (row.width == null || row.depth == null) {
@@ -147,7 +155,7 @@ export function systemModelToLibraryEntry(
 }
 
 export function importedModelToLibraryEntry(
-  row: ImportedModel,
+  row: ImportedModelLibraryRow,
 ): { entry: Record<string, unknown> | null; skipped: boolean } {
   const config = parseJsonSafe(importedConfigSchema, row.configJson)
   if (!config) {
