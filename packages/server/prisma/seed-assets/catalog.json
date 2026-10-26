@@ -1,0 +1,356 @@
+[
+  {
+    "id": "room-ward",
+    "label": "病房",
+    "category": "room",
+    "render": "shell",
+    "footprint": [
+      4.2,
+      5
+    ],
+    "height": 2.8,
+    "defaultKind": "room"
+  },
+  {
+    "id": "room-corridor",
+    "label": "走廊",
+    "category": "room",
+    "render": "floor",
+    "footprint": [
+      4.2,
+      2.7
+    ],
+    "height": 1.15,
+    "defaultKind": "corridor"
+  },
+  {
+    "id": "device-bedside",
+    "label": "床旁信息卡",
+    "category": "device",
+    "url": "/models/devices/bedside.glb",
+    "kind": "bedside",
+    "tagPrefix": "BED",
+    "initialStatus": "standby",
+    "metrics": [],
+    "labelOffset": [
+      0,
+      1.5,
+      0
+    ],
+    "lampOffset": [
+      0.22,
+      1.19,
+      0.02
+    ],
+    "screen": {
+      "renderer": "bedside",
+      "position": [
+        0,
+        0.86,
+        0.031
+      ],
+      "size": [
+        0.58,
+        0.36
+      ]
+    },
+    "statusStrip": {
+      "position": [
+        0,
+        1.095,
+        0.02
+      ],
+      "size": [
+        0.6,
+        0.024
+      ]
+    }
+  },
+  {
+    "id": "device-callhost",
+    "label": "呼叫主机",
+    "category": "device",
+    "url": "/models/devices/callhost.glb",
+    "kind": "callhost",
+    "tagPrefix": "CH",
+    "initialStatus": "normal",
+    "metrics": [],
+    "labelOffset": [
+      0,
+      2.15,
+      0
+    ],
+    "lampOffset": [
+      0,
+      1.96,
+      0.02
+    ],
+    "screen": {
+      "renderer": "callhost",
+      "position": [
+        0,
+        1.34,
+        0.052
+      ],
+      "size": [
+        1.18,
+        0.74
+      ]
+    },
+    "statusStrip": {
+      "position": [
+        0,
+        1.85,
+        0.02
+      ],
+      "size": [
+        1.24,
+        0.035
+      ]
+    }
+  },
+  {
+    "id": "device-rack",
+    "label": "网络机柜",
+    "category": "device",
+    "url": "/models/devices/rack.glb",
+    "kind": "rack",
+    "tagPrefix": "RACK",
+    "initialStatus": "normal",
+    "metrics": [
+      {
+        "label": "机柜温度",
+        "value": "22.4 °C"
+      },
+      {
+        "label": "端口负载",
+        "value": "38 %"
+      }
+    ],
+    "labelOffset": [
+      0,
+      2.1,
+      0
+    ],
+    "lampOffset": [
+      0.3,
+      1.84,
+      0
+    ],
+    "statusStrip": {
+      "position": [
+        0,
+        1.6,
+        0.305
+      ],
+      "size": [
+        0.6,
+        0.045
+      ]
+    }
+  },
+  {
+    "id": "device-ahu",
+    "label": "空调机组",
+    "category": "device",
+    "url": "/models/devices/ahu.glb",
+    "kind": "ahu",
+    "tagPrefix": "AHU",
+    "initialStatus": "normal",
+    "metrics": [
+      {
+        "label": "送风温度",
+        "value": "18.5 °C"
+      },
+      {
+        "label": "风机频率",
+        "value": "36 Hz"
+      }
+    ],
+    "labelOffset": [
+      0,
+      1.9,
+      0
+    ],
+    "lampOffset": [
+      0.92,
+      1.14,
+      0.1
+    ],
+    "statusStrip": {
+      "position": [
+        0,
+        1.15,
+        0.43
+      ],
+      "size": [
+        1.75,
+        0.04
+      ]
+    }
+  },
+  {
+    "id": "device-imaging",
+    "label": "影像设备",
+    "category": "device",
+    "url": "/models/devices/imaging.glb",
+    "kind": "imaging",
+    "tagPrefix": "CT",
+    "initialStatus": "normal",
+    "metrics": [
+      {
+        "label": "球管温度",
+        "value": "46 °C"
+      },
+      {
+        "label": "待机功耗",
+        "value": "1.2 kW"
+      }
+    ],
+    "labelOffset": [
+      0,
+      2.3,
+      0
+    ],
+    "lampOffset": [
+      0,
+      1.62,
+      0.55
+    ],
+    "statusStrip": {
+      "position": [
+        0,
+        1.9,
+        0
+      ],
+      "size": [
+        0.5,
+        0.06
+      ]
+    }
+  },
+  {
+    "id": "device-monitor",
+    "label": "监护仪",
+    "category": "device",
+    "url": "/models/devices/monitor.glb",
+    "kind": "monitor",
+    "tagPrefix": "MON",
+    "initialStatus": "normal",
+    "metrics": [
+      {
+        "label": "心率",
+        "value": "78 bpm"
+      },
+      {
+        "label": "血氧饱和度",
+        "value": "98 %"
+      }
+    ],
+    "labelOffset": [
+      0,
+      2,
+      0
+    ],
+    "lampOffset": [
+      0.2,
+      1.5,
+      0.02
+    ],
+    "statusStrip": {
+      "position": [
+        0,
+        1.05,
+        0.085
+      ],
+      "size": [
+        0.4,
+        0.025
+      ]
+    }
+  },
+  {
+    "id": "device-gas",
+    "label": "气源终端",
+    "category": "device",
+    "url": "/models/devices/gas.glb",
+    "kind": "gas",
+    "tagPrefix": "MG",
+    "initialStatus": "normal",
+    "metrics": [
+      {
+        "label": "氧气压力",
+        "value": "0.42 MPa"
+      },
+      {
+        "label": "气源余量",
+        "value": "76 %"
+      }
+    ],
+    "labelOffset": [
+      0,
+      1.8,
+      0
+    ],
+    "lampOffset": [
+      0,
+      1.36,
+      0
+    ],
+    "statusStrip": {
+      "position": [
+        0,
+        1.34,
+        0.25
+      ],
+      "size": [
+        0.3,
+        0.04
+      ]
+    }
+  },
+  {
+    "id": "device-bed",
+    "label": "病床",
+    "category": "device",
+    "url": "/models/devices/bed.glb",
+    "kind": "bed",
+    "footprint": [2.1, 1.063],
+    "tagPrefix": "BED",
+    "initialStatus": "standby",
+    "metrics": [],
+    "states": [
+      {
+        "id": "occupancy",
+        "label": "床位状态",
+        "defaultValue": "vacant",
+        "targets": [
+          "*"
+        ],
+        "values": [
+          {
+            "id": "vacant",
+            "label": "空床",
+            "color": "#cfe3f3",
+            "opacity": 0.12
+          },
+          {
+            "id": "occupied",
+            "label": "有人",
+            "color": "#efe9dc"
+          }
+        ]
+      }
+    ],
+    "labelOffset": [
+      0,
+      1.5,
+      0
+    ],
+    "lampOffset": [
+      0,
+      1.45,
+      0
+    ]
+  }
+]
