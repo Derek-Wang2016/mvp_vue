@@ -39,7 +39,7 @@ export function registerCategoryRoutes(app: FastifyInstance, prisma: PrismaClien
   app.put('/api/3d/categories/:id', async (req, reply) => {
     const id = parseId((req.params as { id: string }).id)
     if (id == null) {
-      sendError(reply, 400, 'invalid id')
+      sendError(reply, 400, '无效的 id')
       return
     }
     const parsed = categoryInputSchema.partial().safeParse(req.body)
@@ -77,7 +77,7 @@ export function registerCategoryRoutes(app: FastifyInstance, prisma: PrismaClien
   app.delete('/api/3d/categories/:id', async (req, reply) => {
     const id = parseId((req.params as { id: string }).id)
     if (id == null) {
-      sendError(reply, 400, 'invalid id')
+      sendError(reply, 400, '无效的 id')
       return
     }
     const [systemCount, importedCount] = await Promise.all([
@@ -96,6 +96,7 @@ export function registerCategoryRoutes(app: FastifyInstance, prisma: PrismaClien
         sendError(reply, 404, '分类不存在')
         return
       }
+      // 计数与删除之间存在并发插入窗口，最终以数据库外键约束为准
       if (isPrismaError(err, 'P2003')) {
         sendError(reply, 409, '分类仍被模型引用，无法删除')
         return

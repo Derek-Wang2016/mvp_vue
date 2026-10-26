@@ -87,4 +87,33 @@ describe('分类接口', () => {
     const list = await ctx.app.inject({ url: '/api/3d/categories' })
     expect(list.json()).toHaveLength(0)
   })
+
+  it('拒绝非法参数与不存在的分类', async () => {
+    const invalidName = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/3d/categories',
+      payload: { name: '' },
+    })
+    expect(invalidName.statusCode).toBe(400)
+
+    const emptyUpdate = await ctx.app.inject({
+      method: 'PUT',
+      url: '/api/3d/categories/1',
+      payload: {},
+    })
+    expect(emptyUpdate.statusCode).toBe(400)
+
+    const missing = await ctx.app.inject({
+      method: 'PUT',
+      url: '/api/3d/categories/999',
+      payload: { name: 'X' },
+    })
+    expect(missing.statusCode).toBe(404)
+
+    const hugeId = await ctx.app.inject({
+      method: 'DELETE',
+      url: '/api/3d/categories/1e300',
+    })
+    expect(hugeId.statusCode).toBe(400)
+  })
 })
