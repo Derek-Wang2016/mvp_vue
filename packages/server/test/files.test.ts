@@ -94,4 +94,49 @@ describe('文件接口', () => {
     })
     expect(deleted.statusCode).toBe(200)
   })
+
+  it('元数据、非法 id、下载头与场景快照引用', async () => {
+    const uploaded = await uploadGlb(ctx, 'meta.glb', 'meta')
+    const fileId = uploaded.json().id
+
+    const meta = await ctx.app.inject({ url: `/api/3d/files/${fileId}/meta` })
+    expect(meta.statusCode).toBe(200)
+    expect(meta.json()).not.toHaveProperty('data')
+    expect(meta.json().sha256).toBe(uploaded.json().sha256)
+
+    const invalid = await ctx.app.inject({ url: '/api/3d/files/1e300' })
+    expect(invalid.statusCode).toBe(400)
+
+    const noFile = await ctx.app.inject({ method: 'POST', url: '/api/3d/files', payload: {} })
+    expect(noFile.statusCode).toBe(400)
+
+    const download = await ctx.app.inject({ url: `/api/3d/files/${fileId}?download=1` })
+    expect(download.statusCode).toBe(200)
+    expect(download.headers['content-disposition']).toContain(
+      "attachment; filename*=UTF-8''meta.glb",
+    )
+
+    await ctx.prisma.scene.create({
+      data: {
+        name: '快照',
+        sceneJson: JSON.stringify({
+          version: 2,
+          rooms: [],
+          nodes: [],
+          modelLibrary: [
+            { id: 'device-x', label: 'X', category: 'device', url: `/api/3d/files/${fileId}` },
+          ],
+        }),
+      },
+    })
+    const blocked = await ctx.app.inject({ method: 'DELETE', url: `/api/3d/files/${fileId}` })
+    expect(blocked.statusCode).toBe(409)
+    expect(blocked.json().error).toContain('场景快照 1 个')
+  })
+
+  it('长文件名不会切断代理对', async () => {
+    const surrogateName = `${'a'.repeat(199)}😀.glb`
+    const uploaded = await uploadGlb(ctx, surrogateName, 'surrogate')
+    expect(uploaded.statusCode).toBe(201)
+  })
 })

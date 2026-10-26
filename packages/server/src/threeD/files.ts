@@ -52,12 +52,21 @@ export function registerFileRoutes(app: FastifyInstance, prisma: PrismaClient) {
       sendError(reply, 400, '缺少 file 字段', 'file')
       return
     }
+    if (part.fieldname !== 'file') {
+      sendError(reply, 400, '必须以 file 字段上传文件', 'file')
+      return
+    }
 
     let bytes: Buffer
     try {
       bytes = await part.toBuffer()
-    } catch {
-      sendError(reply, 413, '文件超过 50MB 限制', 'file')
+    } catch (err) {
+      const code = (err as { code?: string }).code
+      if (code === 'FST_REQ_FILE_TOO_LARGE') {
+        sendError(reply, 413, '文件超过 50MB 限制', 'file')
+      } else {
+        sendError(reply, 400, '文件上传失败', 'file')
+      }
       return
     }
     if (part.file.truncated) {
@@ -72,13 +81,14 @@ export function registerFileRoutes(app: FastifyInstance, prisma: PrismaClient) {
     }
 
     const sha256 = createHash('sha256').update(bytes).digest('hex')
-    const existing = await prisma.assetFile.findUnique({ where: { sha256 } })
+    const select = { id: true, name: true, mime: true, size: true, sha256: true }
+    const existing = await prisma.assetFile.findUnique({ where: { sha256 }, select })
     if (existing) {
       reply.send(fileMeta(existing, true))
       return
     }
 
-    const name = (part.filename || 'file').slice(0, 200)
+    const name = Array.from(part.filename || 'file').slice(0, 200).join('')
     try {
       const row = await prisma.assetFile.create({
         data: { name, mime, size: bytes.length, sha256, data: bytes },
@@ -86,7 +96,7 @@ export function registerFileRoutes(app: FastifyInstance, prisma: PrismaClient) {
       reply.status(201).send(fileMeta(row, false))
     } catch (err) {
       if (isPrismaError(err, 'P2002')) {
-        const raced = await prisma.assetFile.findUnique({ where: { sha256 } })
+        const raced = await prisma.assetFile.findUnique({ where: { sha256 }, select })
         if (raced) {
           reply.send(fileMeta(raced, true))
           return
@@ -128,10 +138,9 @@ export function registerFileRoutes(app: FastifyInstance, prisma: PrismaClient) {
       return
     }
     const query = req.query as { download?: string }
-    const body = Buffer.from(row.data)
     reply
       .header('Content-Type', row.mime)
-      .header('Content-Length', String(body.length))
+      .header('Content-Length', String(row.data.length))
       .header('ETag', `"${row.sha256}"`)
       .header('Cache-Control', 'public, max-age=31536000, immutable')
     if (query.download === '1') {
@@ -140,7 +149,7 @@ export function registerFileRoutes(app: FastifyInstance, prisma: PrismaClient) {
         `attachment; filename*=UTF-8''${encodeURIComponent(row.name)}`,
       )
     }
-    reply.send(body)
+    reply.send(row.data)
   })
 
   app.delete('/api/3d/files/:id', async (req, reply) => {
@@ -159,11 +168,15 @@ export function registerFileRoutes(app: FastifyInstance, prisma: PrismaClient) {
       prisma.importedModel.count({ where: { OR: [{ fileId: id }, { thumbnailFileId: id }] } }),
       prisma.scene.count({ where: { thumbnailFileId: id } }),
     ])
-    if (systemCount + importedCount + sceneCount > 0) {
+    const scenes = await prisma.scene.findMany({ select: { id: true, sceneJson: true } })
+    const snapshotUrl = new RegExp(`/api/3d/files/${id}(?![0-9])`)
+    const snapshotCount = scenes.filter((scene) => snapshotUrl.test(scene.sceneJson)).length
+    if (systemCount + importedCount + sceneCount + snapshotCount > 0) {
       const refs = [
         systemCount > 0 ? `系统模型 ${systemCount} 个` : null,
         importedCount > 0 ? `导入模型 ${importedCount} 个` : null,
         sceneCount > 0 ? `场景 ${sceneCount} 个` : null,
+        snapshotCount > 0 ? `场景快照 ${snapshotCount} 个` : null,
       ].filter(Boolean)
       sendError(reply, 409, `文件正被引用（${refs.join('、')}），无法删除`)
       return
