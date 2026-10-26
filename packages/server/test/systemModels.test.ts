@@ -150,4 +150,65 @@ describe('系统模型接口', () => {
     const missing = await ctx.app.inject({ url: `/api/3d/system-models/${id}` })
     expect(missing.statusCode).toBe(404)
   })
+
+  it('按分类、类型与关键字过滤', async () => {
+    const category = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/3d/categories',
+      payload: { name: '房间' },
+    })
+    const categoryId = category.json().id
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/api/3d/system-models',
+      payload: {
+        key: 'room-a',
+        name: '病房A',
+        kind: 'room',
+        width: 4,
+        depth: 5,
+        height: 2.8,
+        categoryId,
+        config: {},
+      },
+    })
+    const uploaded = await uploadGlb(ctx, 'monitor.glb', 'filter-monitor')
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/api/3d/system-models',
+      payload: {
+        key: 'device-mon',
+        name: '监护仪',
+        kind: 'device',
+        fileId: uploaded.json().id,
+        categoryId,
+        config: { deviceKind: 'monitor', tagPrefix: 'MON' },
+      },
+    })
+
+    const byCategory = await ctx.app.inject({
+      url: `/api/3d/system-models?categoryId=${categoryId}`,
+    })
+    expect(byCategory.json()).toHaveLength(2)
+
+    const byKind = await ctx.app.inject({ url: '/api/3d/system-models?kind=device' })
+    expect(byKind.json().map((row: { key: string }) => row.key)).toEqual(['device-mon'])
+
+    const byQuery = await ctx.app.inject({
+      url: `/api/3d/system-models?q=${encodeURIComponent('病房')}`,
+    })
+    expect(byQuery.json().map((row: { key: string }) => row.key)).toEqual(['room-a'])
+
+    const repeated = await ctx.app.inject({ url: '/api/3d/system-models?q=a&q=b' })
+    expect(repeated.statusCode).toBe(400)
+  })
+
+  it('可按数字 id 读取详情', async () => {
+    const created = await createRoom()
+    const detail = await ctx.app.inject({
+      url: `/api/3d/system-models/${created.json().id}`,
+    })
+    expect(detail.statusCode).toBe(200)
+    expect(detail.json().key).toBe('room-ward')
+  })
 })

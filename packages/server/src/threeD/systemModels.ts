@@ -49,11 +49,12 @@ async function findModel(prisma: PrismaClient, raw: string) {
 
 export function registerSystemModelRoutes(app: FastifyInstance, prisma: PrismaClient) {
   app.get('/api/3d/system-models', async (req, reply) => {
-    const query = req.query as { categoryId?: string; kind?: string; q?: string }
+    const query = req.query as Record<string, unknown>
     const where: Prisma.SystemModelWhereInput = {}
 
     if (query.categoryId !== undefined && query.categoryId !== '') {
-      const categoryId = parseId(query.categoryId)
+      const categoryId =
+        typeof query.categoryId === 'string' ? parseId(query.categoryId) : null
       if (categoryId == null) {
         sendError(reply, 400, '无效的 categoryId', 'categoryId')
         return
@@ -67,17 +68,18 @@ export function registerSystemModelRoutes(app: FastifyInstance, prisma: PrismaCl
       }
       where.kind = query.kind
     }
-    if (query.q) {
-      where.OR = [
-        { key: { contains: query.q } },
-        { name: { contains: query.q } },
-      ]
+    if (query.q !== undefined && query.q !== '') {
+      if (typeof query.q !== 'string') {
+        sendError(reply, 400, 'q 必须是单个字符串', 'q')
+        return
+      }
+      where.OR = [{ key: { contains: query.q } }, { name: { contains: query.q } }]
     }
 
     const rows = await prisma.systemModel.findMany({
       where,
       include: { category: true },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
     })
     reply.send(rows.map(formatSystemModel))
   })
@@ -115,6 +117,10 @@ export function registerSystemModelRoutes(app: FastifyInstance, prisma: PrismaCl
         sendError(reply, 409, '模型 key 已存在', 'key')
         return
       }
+      if (isPrismaError(err, 'P2003')) {
+        sendError(reply, 409, '引用的分类或文件不存在')
+        return
+      }
       throw err
     }
   })
@@ -150,6 +156,10 @@ export function registerSystemModelRoutes(app: FastifyInstance, prisma: PrismaCl
       }
       if (isPrismaError(err, 'P2002')) {
         sendError(reply, 409, '模型 key 已存在', 'key')
+        return
+      }
+      if (isPrismaError(err, 'P2003')) {
+        sendError(reply, 409, '引用的分类或文件不存在')
         return
       }
       throw err
