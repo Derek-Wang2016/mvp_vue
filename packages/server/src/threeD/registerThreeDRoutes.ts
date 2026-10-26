@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import type { PrismaClient } from '@prisma/client'
+import { registerCategoryRoutes } from './categories.js'
 
-export function registerThreeDRoutes(_app: FastifyInstance, _prisma: PrismaClient) {
-  // 后续任务逐步注册 3D 路由
+export function registerThreeDRoutes(app: FastifyInstance, prisma: PrismaClient) {
+  registerCategoryRoutes(app, prisma)
 }
