@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 import { buildApp } from './app.js'
 import { ensureDatabaseSchema } from './ensureDatabaseSchema.js'
+import { isStrictPagePolicy } from './pageScopePolicy.js'
 
 if (!process.env.DATABASE_URL) {
   process.env.DATABASE_URL = 'file:./dev.db'
@@ -8,6 +9,10 @@ if (!process.env.DATABASE_URL) {
 
 const prisma = new PrismaClient()
 const app = await buildApp(prisma)
+
+if (isStrictPagePolicy()) {
+  console.log('PAGE_POLICY=strict：发布模式，调试表只读')
+}
 
 try {
   const applied = await ensureDatabaseSchema(prisma)

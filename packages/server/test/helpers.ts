@@ -15,26 +15,37 @@ export interface TestContext {
 
 const prismaDir = fileURLToPath(new URL('../prisma', import.meta.url))
 
+function removeDbFiles(dbPath: string): void {
+  for (const suffix of ['', '-journal', '-wal', '-shm']) {
+    try {
+      rmSync(dbPath + suffix, { force: true })
+    } catch {
+      // Windows 上句柄释放可能有延迟，测试文件已被 .gitignore 覆盖
+    }
+  }
+}
+
 export async function createTestContext(): Promise<TestContext> {
   const dbName = `test-${randomUUID()}.db`
   process.env.DATABASE_URL = `file:./${dbName}`
   const dbPath = join(prismaDir, dbName)
   const prisma = new PrismaClient()
-  await ensureDatabaseSchema(prisma)
-  const app = await buildApp(prisma, { logger: false })
+  let app: FastifyInstance
+  try {
+    await ensureDatabaseSchema(prisma)
+    app = await buildApp(prisma, { logger: false })
+  } catch (err) {
+    await prisma.$disconnect()
+    removeDbFiles(dbPath)
+    throw err
+  }
   return {
     prisma,
     app,
     cleanup: async () => {
       await app.close()
       await prisma.$disconnect()
-      for (const suffix of ['', '-journal', '-wal', '-shm']) {
-        try {
-          rmSync(dbPath + suffix, { force: true })
-        } catch {
-          // Windows 上句柄释放可能有延迟，测试文件已被 .gitignore 覆盖
-        }
-      }
+      removeDbFiles(dbPath)
     },
   }
 }
@@ -52,7 +63,9 @@ export function multipartBody(filename: string, mime: string, bytes: Buffer) {
 }
 
 export function sampleGlb(tag: string): Buffer {
-  const json = Buffer.from(JSON.stringify({ asset: { version: '2.0' }, tag }))
+  const rawJson = Buffer.from(JSON.stringify({ asset: { version: '2.0' }, tag }))
+  const padded = (4 - (rawJson.length % 4)) % 4
+  const json = Buffer.concat([rawJson, Buffer.alloc(padded, 0x20)])
   const total = 12 + 8 + json.length
   const header = Buffer.alloc(12)
   header.write('glTF', 0, 'ascii')

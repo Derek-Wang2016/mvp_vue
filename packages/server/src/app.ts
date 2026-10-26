@@ -2,7 +2,6 @@ import Fastify, { type FastifyInstance } from 'fastify'
 import cors from '@fastify/cors'
 import multipart from '@fastify/multipart'
 import type { PrismaClient } from '@prisma/client'
-import { isStrictPagePolicy } from './pageScopePolicy.js'
 import { registerDraftPageRoutes } from './routes/draftPages.js'
 import { registerPublishPageRoutes } from './routes/publishPages.js'
 import { registerEditableTextRoutes } from './editableTextRoutes.js'
@@ -35,10 +34,6 @@ export async function buildApp(
   registerCustomIconRoutes(app, prisma)
   registerThreeDRoutes(app, prisma)
   registerDemoRoutes(app, prisma)
-
-  if (isStrictPagePolicy()) {
-    console.log('PAGE_POLICY=strict：发布模式，调试表只读')
-  }
 
   return app
 }
