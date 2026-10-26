@@ -27,4 +27,21 @@ describe('3D 数据表', () => {
     const applied = await ensureDatabaseSchema(ctx.prisma)
     expect(applied).toEqual([])
   })
+
+  it('创建关键索引与外键', async () => {
+    const indexes = await ctx.prisma.$queryRaw<Array<{ name: string }>>`
+      PRAGMA index_list('AssetFile')
+    `
+    expect(indexes.map((row) => row.name)).toContain('AssetFile_sha256_key')
+
+    const modelIndexes = await ctx.prisma.$queryRaw<Array<{ name: string }>>`
+      PRAGMA index_list('SystemModel')
+    `
+    expect(modelIndexes.map((row) => row.name)).toContain('SystemModel_key_key')
+
+    const foreignKeys = await ctx.prisma.$queryRaw<Array<{ table: string }>>`
+      PRAGMA foreign_key_list('Scene')
+    `
+    expect(foreignKeys.length).toBeGreaterThan(0)
+  })
 })
