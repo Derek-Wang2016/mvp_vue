@@ -55,63 +55,59 @@ interface CatalogEntry {
   states?: unknown[]
 }
 
+interface PreparedAsset {
+  url: string
+  fileName: string
+  bytes: Buffer
+  sha256: string
+}
+
+interface PreparedModel {
+  entry: CatalogEntry
+  isRoom: boolean
+  configJson: string
+}
+
 const here = dirname(fileURLToPath(import.meta.url))
 const assetsDir = join(here, 'seed-assets')
 const force = process.argv.includes('--force')
 const prisma = new PrismaClient()
 
-async function main() {
-  await ensureDatabaseSchema(prisma)
+/**
+ * 事务外完成资源读取与配置校验，缩短事务窗口；
+ * 事务内只做数据库写入，失败时整体回滚。
+ */
+function prepareCatalog(catalog: CatalogEntry[]): {
+  assets: PreparedAsset[]
+  models: PreparedModel[]
+} {
+  const assets: PreparedAsset[] = []
+  const models: PreparedModel[] = []
 
-  const [modelCount, sceneCount] = await Promise.all([
-    prisma.systemModel.count(),
-    prisma.scene.count(),
-  ])
-  if (!force && (modelCount > 0 || sceneCount > 0)) {
-    console.log('3D 数据已存在，跳过 seed。使用 --force 更新。')
-    return
-  }
-
-  const categoryIds = new Map<string, number>()
-  for (const name of ['房间', '设备']) {
-    const row = await prisma.modelCategory.upsert({
-      where: { name },
-      update: {},
-      create: { name },
-    })
-    categoryIds.set(name, row.id)
-  }
-
-  const catalog = JSON.parse(
-    readFileSync(join(assetsDir, 'catalog.json'), 'utf8'),
-  ) as CatalogEntry[]
-
-  const fileIdByUrl = new Map<string, number>()
-  const fileIds = new Set<number>()
   for (const entry of catalog) {
-    if (!entry.url) continue
-    const fileName = entry.url.split('/').pop()
-    if (!fileName) throw new Error(`${entry.id} 的 url 无法解析文件名`)
-    const bytes = readFileSync(join(assetsDir, 'models', fileName))
-    const sha256 = createHash('sha256').update(bytes).digest('hex')
-    const existing = await prisma.assetFile.findUnique({ where: { sha256 } })
-    const file =
-      existing ??
-      (await prisma.assetFile.create({
-        data: {
-          name: fileName,
-          mime: 'model/gltf-binary',
-          size: bytes.length,
-          sha256,
-          data: bytes,
-        },
-      }))
-    fileIdByUrl.set(entry.url, file.id)
-    fileIds.add(file.id)
-  }
+    if (entry.category !== 'room' && entry.category !== 'device') {
+      throw new Error(
+        `${entry.id} 的 category 必须是 room 或 device（当前：${String(entry.category)}）`,
+      )
+    }
+    if (entry.category === 'device' && !entry.url) {
+      throw new Error(`${entry.id} 是设备，必须提供 url`)
+    }
 
-  let modelTotal = 0
-  for (const entry of catalog) {
+    if (entry.url) {
+      const fileName = entry.url.split(/[\\/]/).pop()
+      if (!fileName) throw new Error(`${entry.id} 的 url 无法解析文件名`)
+      let bytes: Buffer
+      try {
+        bytes = readFileSync(join(assetsDir, 'models', fileName))
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err)
+        throw new Error(`${entry.id} 读取模型文件 ${fileName} 失败：${reason}`)
+      }
+      const sha256 = createHash('sha256').update(bytes).digest('hex')
+      assets.push({ url: entry.url, fileName, bytes, sha256 })
+    }
+
     const isRoom = entry.category === 'room'
     if (!isRoom && !entry.kind) {
       throw new Error(`${entry.id} 缺少 kind`)
@@ -139,25 +135,29 @@ async function main() {
       ? roomConfigSchema.parse(rawConfig)
       : deviceConfigSchema.parse(rawConfig)
 
-    const data = {
-      key: entry.id,
-      name: entry.label,
-      categoryId: categoryIds.get(isRoom ? '房间' : '设备') ?? null,
-      kind: isRoom ? 'room' : 'device',
-      width: entry.footprint?.[0] ?? null,
-      depth: entry.footprint?.[1] ?? null,
-      height: entry.height ?? null,
-      fileId: entry.url ? (fileIdByUrl.get(entry.url) ?? null) : null,
-      configJson: JSON.stringify(config),
-    }
-
-    await prisma.systemModel.upsert({
-      where: { key: entry.id },
-      update: data,
-      create: data,
-    })
-    modelTotal += 1
+    models.push({ entry, isRoom, configJson: JSON.stringify(config) })
   }
+
+  return { assets, models }
+}
+
+async function main() {
+  await ensureDatabaseSchema(prisma)
+
+  const [modelCount, sceneCount] = await Promise.all([
+    prisma.systemModel.count(),
+    prisma.scene.count(),
+  ])
+  if (!force && (modelCount > 0 || sceneCount > 0)) {
+    console.log('3D 数据已存在，跳过 seed。使用 --force 更新。')
+    return
+  }
+
+  const catalog = JSON.parse(
+    readFileSync(join(assetsDir, 'catalog.json'), 'utf8'),
+  ) as CatalogEntry[]
+
+  const { assets, models } = prepareCatalog(catalog)
 
   const sceneRaw = readFileSync(
     join(assetsDir, 'scenes', 'hospital-ward.json'),
@@ -171,26 +171,84 @@ async function main() {
 
   const sceneName = '住院病区示例'
   const sceneDescription = '由 3ddemo 医院病区场景导入'
-  const existingScene = await prisma.scene.findFirst({
-    where: { name: sceneName },
-  })
-  if (existingScene) {
-    await prisma.scene.update({
-      where: { id: existingScene.id },
-      data: { description: sceneDescription, sceneJson },
-    })
-  } else {
-    await prisma.scene.create({
-      data: {
-        name: sceneName,
-        description: sceneDescription,
-        sceneJson,
-      },
-    })
-  }
+
+  const { modelTotal, fileCount } = await prisma.$transaction(
+    async (tx) => {
+      const categoryIds = new Map<string, number>()
+      for (const name of ['房间', '设备']) {
+        const row = await tx.modelCategory.upsert({
+          where: { name },
+          update: {},
+          create: { name },
+        })
+        categoryIds.set(name, row.id)
+      }
+
+      const fileIdByUrl = new Map<string, number>()
+      const fileIds = new Set<number>()
+      for (const asset of assets) {
+        const file = await tx.assetFile.upsert({
+          where: { sha256: asset.sha256 },
+          update: {},
+          create: {
+            name: asset.fileName,
+            mime: 'model/gltf-binary',
+            size: asset.bytes.length,
+            sha256: asset.sha256,
+            data: asset.bytes,
+          },
+        })
+        fileIdByUrl.set(asset.url, file.id)
+        fileIds.add(file.id)
+      }
+
+      let seededModels = 0
+      for (const { entry, isRoom, configJson } of models) {
+        const data = {
+          key: entry.id,
+          name: entry.label,
+          categoryId: categoryIds.get(isRoom ? '房间' : '设备') ?? null,
+          kind: isRoom ? 'room' : 'device',
+          width: entry.footprint?.[0] ?? null,
+          depth: entry.footprint?.[1] ?? null,
+          height: entry.height ?? null,
+          fileId: entry.url ? (fileIdByUrl.get(entry.url) ?? null) : null,
+          configJson,
+        }
+
+        await tx.systemModel.upsert({
+          where: { key: entry.id },
+          update: data,
+          create: data,
+        })
+        seededModels += 1
+      }
+
+      const existingScene = await tx.scene.findFirst({
+        where: { name: sceneName },
+      })
+      if (existingScene) {
+        await tx.scene.update({
+          where: { id: existingScene.id },
+          data: { description: sceneDescription, sceneJson },
+        })
+      } else {
+        await tx.scene.create({
+          data: {
+            name: sceneName,
+            description: sceneDescription,
+            sceneJson,
+          },
+        })
+      }
+
+      return { modelTotal: seededModels, fileCount: fileIds.size }
+    },
+    { timeout: 30_000 },
+  )
 
   console.log(
-    `seed 完成：分类 2，系统模型 ${modelTotal}，文件 ${fileIds.size}，场景 1`,
+    `seed 完成：分类 2，系统模型 ${modelTotal}，文件 ${fileCount}，场景 1`,
   )
 }
 
