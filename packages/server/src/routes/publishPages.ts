@@ -141,9 +141,16 @@ export function registerPublishPageRoutes(app: FastifyInstance, prisma: PrismaCl
       const { id } = req.params as { id: string }
       const pageId = parsePageId(id)
       const { name, schemaJson } = req.body as { name: string; schemaJson: unknown }
-      const page = await prisma.pagePublished.update({
+      const schema = JSON.stringify(schemaJson)
+      const page = await prisma.pagePublished.upsert({
         where: { id: pageId },
-        data: { name, schemaJson: JSON.stringify(schemaJson) },
+        create: {
+          id: pageId,
+          name,
+          schemaJson: schema,
+          publishedAt: new Date(),
+        },
+        update: { name, schemaJson: schema },
       })
       reply.send(formatPublishDetail(page))
     } catch (err) {
