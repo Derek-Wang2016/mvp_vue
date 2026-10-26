@@ -1,7 +1,10 @@
 import { z } from 'zod'
 
-export const vec3Schema = z.tuple([z.number(), z.number(), z.number()])
-export const vec2Schema = z.tuple([z.number().positive(), z.number().positive()])
+export const vec3Schema = z.tuple([z.number().finite(), z.number().finite(), z.number().finite()])
+export const vec2Schema = z.tuple([
+  z.number().positive().finite(),
+  z.number().positive().finite(),
+])
 export const statusSchema = z.enum(['normal', 'warning', 'alarm', 'standby', 'calling', 'emergency'])
 export const deviceKindSchema = z.enum(['rack', 'ahu', 'imaging', 'monitor', 'gas', 'bed', 'bedside', 'callhost'])
 export const roomRenderSchema = z.enum(['glb', 'floor', 'shell'])
@@ -20,7 +23,7 @@ const stateValueSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
   color: z.string().min(1),
-  opacity: z.number().min(0).max(1).optional(),
+  opacity: z.number().min(0).max(1).finite().optional(),
 })
 
 const stateDefinitionSchema = z.object({
@@ -59,7 +62,7 @@ export const roomConfigSchema = z
       .object({
         side: sideSchema,
         type: doorTypeSchema.default('single'),
-        margin: z.number().nonnegative().optional(),
+        margin: z.number().nonnegative().finite().optional(),
         from: edgeOriginSchema.optional(),
         open: z.boolean().optional(),
       })
@@ -67,10 +70,10 @@ export const roomConfigSchema = z
     windows: z
       .object({
         side: sideSchema.optional(),
-        width: z.number().positive().optional(),
+        width: z.number().positive().finite().optional(),
         count: z.number().int().positive().optional(),
         from: edgeOriginSchema.optional(),
-        margin: z.number().nonnegative().optional(),
+        margin: z.number().nonnegative().finite().optional(),
       })
       .optional(),
     bathroomCorner: bathroomCornerSchema.nullable().optional(),
@@ -78,8 +81,8 @@ export const roomConfigSchema = z
       .object({
         count: z.number().int().min(1).max(10),
         placement: z.enum(['both-sides', 'left', 'right']).default('both-sides'),
-        gap: z.number().positive().optional(),
-        aisle: z.number().positive().optional(),
+        gap: z.number().positive().finite().optional(),
+        aisle: z.number().positive().finite().optional(),
       })
       .optional(),
     wallColor: z.string().min(1).optional(),
@@ -108,8 +111,8 @@ export const deviceConfigSchema = z
 
 export const importedConfigSchema = z
   .object({
-    scale: z.number().positive().optional(),
-    rotationY: z.number().optional(),
+    scale: z.number().positive().finite().optional(),
+    rotationY: z.number().finite().optional(),
     offset: vec3Schema.optional(),
     castShadow: z.boolean().optional(),
     receiveShadow: z.boolean().optional(),
@@ -131,9 +134,9 @@ const systemModelBaseShape = {
     .regex(/^[a-z0-9][a-z0-9-]*$/, 'key 只能包含小写字母、数字和连字符'),
   name: z.string().trim().min(1).max(80),
   categoryId: z.number().int().positive().nullable().optional(),
-  width: z.number().positive().nullable().optional(),
-  depth: z.number().positive().nullable().optional(),
-  height: z.number().positive().nullable().optional(),
+  width: z.number().positive().finite().nullable().optional(),
+  depth: z.number().positive().finite().nullable().optional(),
+  height: z.number().positive().finite().nullable().optional(),
   fileId: z.number().int().positive().nullable().optional(),
   thumbnailFileId: z.number().int().positive().nullable().optional(),
 }
@@ -141,9 +144,9 @@ const systemModelBaseShape = {
 const roomSystemModelInputSchema = z.object({
   ...systemModelBaseShape,
   kind: z.literal('room'),
-  width: z.number().positive('房间宽度必须为正数'),
-  depth: z.number().positive('房间深度必须为正数'),
-  height: z.number().positive('房间高度必须为正数'),
+  width: z.number().positive('房间宽度必须为正数').finite(),
+  depth: z.number().positive('房间深度必须为正数').finite(),
+  height: z.number().positive('房间高度必须为正数').finite(),
   config: roomConfigSchema.default({}),
 })
 
@@ -166,9 +169,9 @@ export const importedModelInputSchema = z.object({
   categoryId: z.number().int().positive().nullable().optional(),
   fileId: z.number().int().positive(),
   thumbnailFileId: z.number().int().positive().nullable().optional(),
-  width: z.number().positive().nullable().optional(),
-  depth: z.number().positive().nullable().optional(),
-  height: z.number().positive().nullable().optional(),
+  width: z.number().positive().finite().nullable().optional(),
+  depth: z.number().positive().finite().nullable().optional(),
+  height: z.number().positive().finite().nullable().optional(),
   config: importedConfigSchema.default({}),
 })
 
@@ -180,7 +183,7 @@ export const sceneMetaSchema = z.object({
 
 const sceneDocumentShape = z
   .object({
-    version: z.number(),
+    version: z.number().finite(),
     rooms: z.array(z.unknown()),
     nodes: z.array(z.unknown()),
     modelLibrary: z.array(z.unknown()),
@@ -215,9 +218,6 @@ export function normalizeSceneJson(input: unknown): SceneNormalizeResult {
 
 export function zodError(error: z.ZodError): { message: string; field?: string } {
   const issue = error.issues[0]
-  let field = issue?.path.length ? issue.path.join('.') : undefined
-  if (field?.startsWith('config')) {
-    field = `configJson${field.slice('config'.length)}`
-  }
+  const field = issue?.path.length ? issue.path.join('.') : undefined
   return { message: issue?.message ?? '参数校验失败', field }
 }

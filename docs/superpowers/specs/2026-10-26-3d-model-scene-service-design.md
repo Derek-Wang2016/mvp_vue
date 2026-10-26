@@ -320,7 +320,7 @@
 |---|---|---|
 | GET | `/api/3d/imported-models?categoryId=&q=` | 列表，含 `fileUrl`、`thumbnailUrl`、`config`；分页暂不做 |
 | GET | `/api/3d/imported-models/:id` | 详情 |
-| POST | `/api/3d/imported-models` | body `{ name, categoryId?, fileId, thumbnailFileId?, width?, depth?, height?, configJson? }`；`fileId` 必须存在且为 GLB |
+| POST | `/api/3d/imported-models` | body `{ name, categoryId?, fileId, thumbnailFileId?, width?, depth?, height?, config? }`；`fileId` 必须存在且为 GLB |
 | PUT | `/api/3d/imported-models/:id` | 全量更新可变字段 |
 | DELETE | `/api/3d/imported-models/:id` | 不自动删除 `AssetFile` |
 

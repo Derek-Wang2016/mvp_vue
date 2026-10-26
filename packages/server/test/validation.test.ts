@@ -4,6 +4,7 @@ import {
   normalizeSceneJson,
   roomConfigSchema,
   systemModelInputSchema,
+  zodError,
 } from '../src/threeD/validation.js'
 import {
   importedModelToLibraryEntry,
@@ -29,6 +30,11 @@ describe('roomConfigSchema', () => {
     expect(door.success).toBe(false)
     if (!door.success) expect(door.error.issues[0]?.path).toEqual(['door', 'side'])
   })
+
+  it('保留未知的顶层字段', () => {
+    const parsed = roomConfigSchema.parse({ futureKey: 1 })
+    expect((parsed as Record<string, unknown>).futureKey).toBe(1)
+  })
 })
 
 describe('deviceConfigSchema', () => {
@@ -40,6 +46,15 @@ describe('deviceConfigSchema', () => {
 
   it('拒绝缺少 deviceKind', () => {
     const res = deviceConfigSchema.safeParse({ tagPrefix: 'BED' })
+    expect(res.success).toBe(false)
+  })
+
+  it('拒绝非法的初始状态', () => {
+    const res = deviceConfigSchema.safeParse({
+      deviceKind: 'monitor',
+      tagPrefix: 'MON',
+      initialStatus: 'broken',
+    })
     expect(res.success).toBe(false)
   })
 })
@@ -84,6 +99,37 @@ describe('systemModelInputSchema', () => {
     })
     expect(device.success).toBe(false)
   })
+
+  it('拒绝 Infinity 尺寸', () => {
+    const room = systemModelInputSchema.safeParse({
+      key: 'room-x',
+      name: 'X',
+      kind: 'room',
+      width: Infinity,
+      depth: 5,
+      height: 2.8,
+      config: {},
+    })
+    expect(room.success).toBe(false)
+    expect(
+      normalizeSceneJson(JSON.parse('{"version":1e999,"rooms":[],"nodes":[],"modelLibrary":[]}')).ok,
+    ).toBe(false)
+  })
+
+  it('zodError 保留请求字段名 config', () => {
+    const res = systemModelInputSchema.safeParse({
+      key: 'room-x',
+      name: 'X',
+      kind: 'room',
+      width: 4,
+      depth: 5,
+      height: 2.8,
+      config: { bedLayout: { count: 0 } },
+    })
+    expect(res.success).toBe(false)
+    if (res.success) return
+    expect(zodError(res.error).field).toBe('config.bedLayout.count')
+  })
 })
 
 describe('normalizeSceneJson', () => {
@@ -96,6 +142,13 @@ describe('normalizeSceneJson', () => {
   it('拒绝缺少版本或数组字段', () => {
     expect(normalizeSceneJson({ rooms: [], nodes: [], modelLibrary: [] }).ok).toBe(false)
     expect(normalizeSceneJson({ version: 2, rooms: {}, nodes: [], modelLibrary: [] }).ok).toBe(false)
+  })
+
+  it('拒绝非法 JSON 字符串并给出 sceneJson 字段', () => {
+    const res = normalizeSceneJson('{bad')
+    expect(res.ok).toBe(false)
+    if (res.ok) return
+    expect(res.field).toBe('sceneJson')
   })
 })
 
@@ -153,6 +206,83 @@ describe('模型库映射', () => {
     expect(entry?.url).toBe('/api/3d/files/9')
     expect(entry?.kind).toBe('bed')
     expect(entry?.footprint).toEqual([2.1, 1.063])
+  })
+
+  it('设备模板在缺少尺寸时使用配置 footprint 与默认偏移', () => {
+    const row = {
+      ...base,
+      id: 3,
+      key: 'device-monitor',
+      name: '监护仪',
+      kind: 'device',
+      width: null,
+      depth: null,
+      height: null,
+      fileId: 10,
+      configJson: JSON.stringify({
+        deviceKind: 'monitor',
+        tagPrefix: 'MON',
+        footprint: [0.5, 0.4],
+      }),
+    }
+    const { entry, skipped } = systemModelToLibraryEntry(row)
+    expect(skipped).toBe(false)
+    expect(entry?.labelOffset).toEqual([0, 2, 0])
+    expect(entry?.lampOffset).toEqual([0, 1.5, 0])
+    expect(entry?.footprint).toEqual([0.5, 0.4])
+  })
+
+  it('脏数据行返回跳过标记', () => {
+    const deviceNoFile = {
+      ...base,
+      id: 4,
+      key: 'device-x',
+      name: 'X',
+      kind: 'device',
+      width: null,
+      depth: null,
+      height: null,
+      fileId: null,
+      configJson: JSON.stringify({ deviceKind: 'bed', tagPrefix: 'BED' }),
+    }
+    expect(systemModelToLibraryEntry(deviceNoFile)).toEqual({ entry: null, skipped: true })
+
+    const deviceBadConfig = { ...deviceNoFile, id: 5, key: 'device-y', fileId: 5, configJson: '{}' }
+    expect(systemModelToLibraryEntry(deviceBadConfig)).toEqual({ entry: null, skipped: true })
+
+    const roomNoSize = {
+      ...base,
+      id: 6,
+      key: 'room-x',
+      name: 'X',
+      kind: 'room',
+      width: null,
+      depth: 5,
+      height: 2.8,
+      fileId: null,
+      configJson: '{}',
+    }
+    expect(systemModelToLibraryEntry(roomNoSize)).toEqual({ entry: null, skipped: true })
+
+    const deviceBadJson = { ...deviceNoFile, id: 7, key: 'device-z', fileId: 5, configJson: '{bad' }
+    expect(systemModelToLibraryEntry(deviceBadJson)).toEqual({ entry: null, skipped: true })
+  })
+
+  it('GLB 房间模板输出文件 url', () => {
+    const row = {
+      ...base,
+      id: 8,
+      key: 'room-glb',
+      name: 'GLB 病房',
+      kind: 'room',
+      width: 4.2,
+      depth: 5,
+      height: 2.8,
+      fileId: 12,
+      configJson: JSON.stringify({ render: 'glb' }),
+    }
+    const { entry } = systemModelToLibraryEntry(row)
+    expect(entry?.url).toBe('/api/3d/files/12')
   })
 
   it('导入模型输出 imported id 与 source', () => {

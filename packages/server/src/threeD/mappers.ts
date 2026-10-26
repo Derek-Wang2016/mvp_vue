@@ -17,6 +17,15 @@ function parseJson<T>(schema: z.ZodType<T>, raw: string): T {
   return schema.parse(JSON.parse(raw))
 }
 
+function parseJsonSafe<T>(schema: z.ZodType<T>, raw: string): T | null {
+  try {
+    const parsed = schema.safeParse(JSON.parse(raw))
+    return parsed.success ? parsed.data : null
+  } catch {
+    return null
+  }
+}
+
 export function formatCategory(row: ModelCategory) {
   return {
     id: row.id,
@@ -83,13 +92,19 @@ export function systemModelToLibraryEntry(
   row: SystemModel,
 ): { entry: Record<string, unknown> | null; skipped: boolean } {
   if (row.kind === 'room') {
-    const config = parseJson(roomConfigSchema, row.configJson)
+    if (row.width == null || row.depth == null) {
+      return { entry: null, skipped: true }
+    }
+    const config = parseJsonSafe(roomConfigSchema, row.configJson)
+    if (!config) {
+      return { entry: null, skipped: true }
+    }
     const entry: Record<string, unknown> = {
       id: row.key,
       label: row.name,
       category: 'room',
       render: config.render,
-      footprint: [row.width ?? 0, row.depth ?? 0],
+      footprint: [row.width, row.depth],
       height: row.height ?? 2.8,
       defaultKind: config.defaultKind,
     }
@@ -103,7 +118,10 @@ export function systemModelToLibraryEntry(
     return { entry: null, skipped: true }
   }
 
-  const config = parseJson(deviceConfigSchema, row.configJson)
+  const config = parseJsonSafe(deviceConfigSchema, row.configJson)
+  if (!config) {
+    return { entry: null, skipped: true }
+  }
   const entry: Record<string, unknown> = {
     id: row.key,
     label: row.name,
