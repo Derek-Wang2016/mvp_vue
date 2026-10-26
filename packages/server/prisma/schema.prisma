@@ -52,3 +52,84 @@ model HostedImage {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+/// 3D 模型分类（系统模型与导入模型共用）
+model ModelCategory {
+  id             Int             @id @default(autoincrement())
+  name           String          @unique
+  sortOrder      Int             @default(0)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  systemModels   SystemModel[]
+  importedModels ImportedModel[]
+}
+
+/// 3D 二进制文件（GLB / 图片），按 sha256 去重
+model AssetFile {
+  id                      Int             @id @default(autoincrement())
+  name                    String
+  mime                    String
+  size                    Int
+  sha256                  String          @unique
+  data                    Bytes
+  createdAt               DateTime        @default(now())
+  systemModelFiles        SystemModel[]   @relation("SystemModelFile")
+  systemModelThumbnails   SystemModel[]   @relation("SystemModelThumbnail")
+  importedModelFiles      ImportedModel[] @relation("ImportedModelFile")
+  importedModelThumbnails ImportedModel[] @relation("ImportedModelThumbnail")
+  sceneThumbnails         Scene[]         @relation("SceneThumbnail")
+}
+
+/// 系统模型模板
+model SystemModel {
+  id              Int            @id @default(autoincrement())
+  key             String         @unique
+  name            String
+  categoryId      Int?
+  kind            String
+  width           Float?
+  depth           Float?
+  height          Float?
+  fileId          Int?
+  thumbnailFileId Int?
+  configJson      String         @default("{}")
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  category        ModelCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  file            AssetFile?     @relation("SystemModelFile", fields: [fileId], references: [id], onDelete: Restrict)
+  thumbnail       AssetFile?     @relation("SystemModelThumbnail", fields: [thumbnailFileId], references: [id], onDelete: Restrict)
+
+  @@index([categoryId, kind])
+}
+
+/// 用户导入的 GLB 模型
+model ImportedModel {
+  id              Int            @id @default(autoincrement())
+  name            String
+  categoryId      Int?
+  fileId          Int
+  thumbnailFileId Int?
+  width           Float?
+  depth           Float?
+  height          Float?
+  configJson      String         @default("{}")
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  category        ModelCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  file            AssetFile      @relation("ImportedModelFile", fields: [fileId], references: [id], onDelete: Restrict)
+  thumbnail       AssetFile?     @relation("ImportedModelThumbnail", fields: [thumbnailFileId], references: [id], onDelete: Restrict)
+
+  @@index([categoryId])
+}
+
+/// 3D 场景（整份 SceneDocument v2 快照）
+model Scene {
+  id              Int         @id @default(autoincrement())
+  name            String
+  description     String?
+  sceneJson       String
+  thumbnailFileId Int?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  thumbnail       AssetFile?  @relation("SceneThumbnail", fields: [thumbnailFileId], references: [id], onDelete: Restrict)
+}

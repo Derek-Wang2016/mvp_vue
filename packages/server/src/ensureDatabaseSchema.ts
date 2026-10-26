@@ -14,6 +14,71 @@ const HOSTED_IMAGE_SQL = `CREATE TABLE IF NOT EXISTS "HostedImage" (
   "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 )`
 
+const MODEL_CATEGORY_SQL = `CREATE TABLE IF NOT EXISTS "ModelCategory" (
+  "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "name" TEXT NOT NULL,
+  "sortOrder" INTEGER NOT NULL DEFAULT 0,
+  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+)`
+
+const ASSET_FILE_SQL = `CREATE TABLE IF NOT EXISTS "AssetFile" (
+  "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "name" TEXT NOT NULL,
+  "mime" TEXT NOT NULL,
+  "size" INTEGER NOT NULL,
+  "sha256" TEXT NOT NULL,
+  "data" BLOB NOT NULL,
+  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+)`
+
+const SYSTEM_MODEL_SQL = `CREATE TABLE IF NOT EXISTS "SystemModel" (
+  "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "key" TEXT NOT NULL,
+  "name" TEXT NOT NULL,
+  "categoryId" INTEGER,
+  "kind" TEXT NOT NULL,
+  "width" REAL,
+  "depth" REAL,
+  "height" REAL,
+  "fileId" INTEGER,
+  "thumbnailFileId" INTEGER,
+  "configJson" TEXT NOT NULL DEFAULT '{}',
+  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "SystemModel_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "ModelCategory" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT "SystemModel_fileId_fkey" FOREIGN KEY ("fileId") REFERENCES "AssetFile" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT "SystemModel_thumbnailFileId_fkey" FOREIGN KEY ("thumbnailFileId") REFERENCES "AssetFile" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+)`
+
+const IMPORTED_MODEL_SQL = `CREATE TABLE IF NOT EXISTS "ImportedModel" (
+  "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "name" TEXT NOT NULL,
+  "categoryId" INTEGER,
+  "fileId" INTEGER NOT NULL,
+  "thumbnailFileId" INTEGER,
+  "width" REAL,
+  "depth" REAL,
+  "height" REAL,
+  "configJson" TEXT NOT NULL DEFAULT '{}',
+  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "ImportedModel_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "ModelCategory" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT "ImportedModel_fileId_fkey" FOREIGN KEY ("fileId") REFERENCES "AssetFile" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT "ImportedModel_thumbnailFileId_fkey" FOREIGN KEY ("thumbnailFileId") REFERENCES "AssetFile" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+)`
+
+const SCENE_SQL = `CREATE TABLE IF NOT EXISTS "Scene" (
+  "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "name" TEXT NOT NULL,
+  "description" TEXT,
+  "sceneJson" TEXT NOT NULL,
+  "thumbnailFileId" INTEGER,
+  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "Scene_thumbnailFileId_fkey" FOREIGN KEY ("thumbnailFileId") REFERENCES "AssetFile" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+)`
+
 const STEPS: { id: string; sql: string }[] = [
   {
     id: '2026-10-21-baseline-page-draft',
@@ -58,6 +123,46 @@ const STEPS: { id: string; sql: string }[] = [
       "content" TEXT NOT NULL DEFAULT '',
       "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`,
+  },
+  {
+    id: '2026-10-26-3d-model-category',
+    sql: MODEL_CATEGORY_SQL,
+  },
+  {
+    id: '2026-10-26-3d-model-category-name-index',
+    sql: `CREATE UNIQUE INDEX IF NOT EXISTS "ModelCategory_name_key" ON "ModelCategory"("name")`,
+  },
+  {
+    id: '2026-10-26-3d-asset-file',
+    sql: ASSET_FILE_SQL,
+  },
+  {
+    id: '2026-10-26-3d-asset-file-sha-index',
+    sql: `CREATE UNIQUE INDEX IF NOT EXISTS "AssetFile_sha256_key" ON "AssetFile"("sha256")`,
+  },
+  {
+    id: '2026-10-26-3d-system-model',
+    sql: SYSTEM_MODEL_SQL,
+  },
+  {
+    id: '2026-10-26-3d-system-model-key-index',
+    sql: `CREATE UNIQUE INDEX IF NOT EXISTS "SystemModel_key_key" ON "SystemModel"("key")`,
+  },
+  {
+    id: '2026-10-26-3d-system-model-category-index',
+    sql: `CREATE INDEX IF NOT EXISTS "SystemModel_categoryId_kind_idx" ON "SystemModel"("categoryId", "kind")`,
+  },
+  {
+    id: '2026-10-26-3d-imported-model',
+    sql: IMPORTED_MODEL_SQL,
+  },
+  {
+    id: '2026-10-26-3d-imported-model-category-index',
+    sql: `CREATE INDEX IF NOT EXISTS "ImportedModel_categoryId_idx" ON "ImportedModel"("categoryId")`,
+  },
+  {
+    id: '2026-10-26-3d-scene',
+    sql: SCENE_SQL,
   },
 ]
 
