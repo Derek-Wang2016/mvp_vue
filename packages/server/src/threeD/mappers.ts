@@ -84,6 +84,7 @@ export function formatSceneMeta(row: SceneMetaRow) {
     id: row.id,
     name: row.name,
     description: row.description,
+    thumbnailFileId: row.thumbnailFileId,
     thumbnailUrl: fileUrl(row.thumbnailFileId),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
