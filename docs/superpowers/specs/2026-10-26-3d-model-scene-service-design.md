@@ -25,7 +25,7 @@
 - 分类 / 文件 / 系统模型 / 导入模型 / 场景的 REST API。
 - 运行时模型库接口 `GET /api/3d/model-library`，系统模型部分与 3ddemo 现有 `ModelEntry` 结构兼容。
 - 启动时增量建表（沿用 `ensureDatabaseSchema` 模式）。
-- 一次性 seed 脚本：导入现有 `catalog.json`、`hospital-ward.json` 与 10 个内置 GLB 副本。
+- 一次性 seed 脚本：导入现有 `catalog.json`、`hospital-ward.json` 与 8 个内置设备 GLB 副本。
 - 单元测试与接口集成测试。
 
 ### 本轮不包含
@@ -280,7 +280,7 @@
 上传规则：
 
 - 单文件 ≤ 50MB（`@fastify/multipart` 的 `limits.fileSize`），单请求 1 个文件。
-- 根据扩展名与 MIME 判断类型；GLB 校验 `glTF` 魔数。
+- 按文件魔数识别 GLB / PNG / JPEG / WEBP，并校验 GLB 魔数 `glTF`；不以扩展名或请求 MIME 作为判定依据。
 - 去重命中返回 `200` 且 `deduplicated: true`；新建返回 `201`。
 
 ### 6.3 系统模型
