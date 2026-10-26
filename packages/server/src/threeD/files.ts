@@ -25,8 +25,12 @@ function detectMime(bytes: Buffer): string | null {
   return null
 }
 
-function fileMeta(row: { id: number; name: string; mime: string; size: number; sha256: string }, deduplicated: boolean) {
-  return { ...row, url: fileUrl(row.id), deduplicated }
+function fileMeta(
+  row: { id: number; name: string; mime: string; size: number; sha256: string },
+  deduplicated: boolean,
+) {
+  const { id, name, mime, size, sha256 } = row
+  return { id, name, mime, size, sha256, url: fileUrl(id), deduplicated }
 }
 
 export function registerFileRoutes(app: FastifyInstance, prisma: PrismaClient) {

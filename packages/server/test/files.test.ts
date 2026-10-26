@@ -24,11 +24,21 @@ describe('文件接口', () => {
     expect(first.statusCode).toBe(201)
     expect(first.json().mime).toBe('model/gltf-binary')
     expect(first.json().deduplicated).toBe(false)
+    expect(Object.keys(first.json()).sort()).toEqual([
+      'deduplicated',
+      'id',
+      'mime',
+      'name',
+      'sha256',
+      'size',
+      'url',
+    ])
 
     const second = await uploadGlb(ctx, 'bed-copy.glb', 'bed')
     expect(second.statusCode).toBe(200)
     expect(second.json().deduplicated).toBe(true)
     expect(second.json().id).toBe(first.json().id)
+    expect(Object.keys(second.json())).not.toContain('data')
 
     const download = await ctx.app.inject({
       url: `/api/3d/files/${first.json().id}`,
