@@ -211,4 +211,48 @@ describe('系统模型接口', () => {
     expect(detail.statusCode).toBe(200)
     expect(detail.json().key).toBe('room-ward')
   })
+
+  it('拒绝过深的 config 且不泄露异常', async () => {
+    const uploaded = await uploadGlb(ctx, 'deep.glb', 'deep-config')
+    const fileId = uploaded.json().id
+    await ctx.prisma.systemModel.create({
+      data: {
+        key: 'device-ok',
+        name: '正常设备',
+        kind: 'device',
+        fileId,
+        configJson: JSON.stringify({ deviceKind: 'bed', tagPrefix: 'BED' }),
+      },
+    })
+
+    const deep = '{"a":'.repeat(20000) + '1' + '}'.repeat(20000)
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/3d/system-models',
+      payload: `{"key":"device-deep","name":"深","kind":"device","fileId":${fileId},"config":{"deviceKind":"bed","tagPrefix":"BED","deep":${deep}}}`,
+      headers: { 'content-type': 'application/json' },
+    })
+    expect(res.statusCode).toBe(400)
+    expect(res.json().field).toBe('config')
+    expect(res.body).not.toContain('Maximum call stack')
+
+    const valid = await ctx.app.inject({ url: '/api/3d/system-models/device-ok' })
+    expect(valid.statusCode).toBe(200)
+    expect(valid.json().config.deviceKind).toBe('bed')
+  })
+
+  it('configJson 损坏时返回固定错误', async () => {
+    await ctx.prisma.systemModel.create({
+      data: {
+        key: 'device-corrupt',
+        name: '损坏设备',
+        kind: 'device',
+        configJson: '{bad',
+      },
+    })
+    const res = await ctx.app.inject({ url: '/api/3d/system-models/device-corrupt' })
+    expect(res.statusCode).toBe(500)
+    expect(res.json()).toEqual({ error: '模型配置已损坏' })
+    expect(res.body).not.toContain('Unexpected token')
+  })
 })

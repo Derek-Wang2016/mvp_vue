@@ -45,80 +45,96 @@ const statusStripSchema = z.object({
   size: vec2Schema,
 })
 
-export const roomConfigSchema = z
-  .object({
-    render: roomRenderSchema.default('shell'),
-    defaultKind: roomKindSchema.default('room'),
-    walls: z
-      .object({
-        front: z.boolean(),
-        back: z.boolean(),
-        left: z.boolean(),
-        right: z.boolean(),
-      })
-      .partial()
-      .optional(),
-    door: z
-      .object({
-        side: sideSchema,
-        type: doorTypeSchema.default('single'),
-        margin: z.number().nonnegative().finite().optional(),
-        from: edgeOriginSchema.optional(),
-        open: z.boolean().optional(),
-      })
-      .optional(),
-    windows: z
-      .object({
-        side: sideSchema.optional(),
-        width: z.number().positive().finite().optional(),
-        count: z.number().int().positive().optional(),
-        from: edgeOriginSchema.optional(),
-        margin: z.number().nonnegative().finite().optional(),
-      })
-      .optional(),
-    bathroomCorner: bathroomCornerSchema.nullable().optional(),
-    bedLayout: z
-      .object({
-        count: z.number().int().min(1).max(10),
-        placement: z.enum(['both-sides', 'left', 'right']).default('both-sides'),
-        gap: z.number().positive().finite().optional(),
-        aisle: z.number().positive().finite().optional(),
-      })
-      .optional(),
-    wallColor: z.string().min(1).optional(),
-    floorColor: z.string().min(1).optional(),
-    doorColor: z.string().min(1).optional(),
-    showName: z.boolean().optional(),
+function ensureSerializable<T extends z.ZodTypeAny>(schema: T) {
+  return schema.superRefine((value, ctx) => {
+    try {
+      JSON.stringify(value)
+    } catch {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: '配置结构过深，无法序列化' })
+    }
   })
-  .passthrough()
+}
 
-export const deviceConfigSchema = z
-  .object({
-    deviceKind: deviceKindSchema,
-    tagPrefix: z.string().min(1).max(16),
-    initialStatus: statusSchema.default('normal'),
-    metrics: z.array(metricSchema).default([]),
-    labelOffset: vec3Schema.optional(),
-    lampOffset: vec3Schema.optional(),
-    screen: screenSchema.optional(),
-    statusStrip: statusStripSchema.optional(),
-    states: z.array(stateDefinitionSchema).optional(),
-    footprint: vec2Schema.optional(),
-    castShadow: z.boolean().optional(),
-    receiveShadow: z.boolean().optional(),
-  })
-  .passthrough()
+export const roomConfigSchema = ensureSerializable(
+  z
+    .object({
+      render: roomRenderSchema.default('shell'),
+      defaultKind: roomKindSchema.default('room'),
+      walls: z
+        .object({
+          front: z.boolean(),
+          back: z.boolean(),
+          left: z.boolean(),
+          right: z.boolean(),
+        })
+        .partial()
+        .optional(),
+      door: z
+        .object({
+          side: sideSchema,
+          type: doorTypeSchema.default('single'),
+          margin: z.number().nonnegative().finite().optional(),
+          from: edgeOriginSchema.optional(),
+          open: z.boolean().optional(),
+        })
+        .optional(),
+      windows: z
+        .object({
+          side: sideSchema.optional(),
+          width: z.number().positive().finite().optional(),
+          count: z.number().int().positive().optional(),
+          from: edgeOriginSchema.optional(),
+          margin: z.number().nonnegative().finite().optional(),
+        })
+        .optional(),
+      bathroomCorner: bathroomCornerSchema.nullable().optional(),
+      bedLayout: z
+        .object({
+          count: z.number().int().min(1).max(10),
+          placement: z.enum(['both-sides', 'left', 'right']).default('both-sides'),
+          gap: z.number().positive().finite().optional(),
+          aisle: z.number().positive().finite().optional(),
+        })
+        .optional(),
+      wallColor: z.string().min(1).optional(),
+      floorColor: z.string().min(1).optional(),
+      doorColor: z.string().min(1).optional(),
+      showName: z.boolean().optional(),
+    })
+    .passthrough(),
+)
 
-export const importedConfigSchema = z
-  .object({
-    scale: z.number().positive().finite().optional(),
-    rotationY: z.number().finite().optional(),
-    offset: vec3Schema.optional(),
-    castShadow: z.boolean().optional(),
-    receiveShadow: z.boolean().optional(),
-    labelOffset: vec3Schema.optional(),
-  })
-  .passthrough()
+export const deviceConfigSchema = ensureSerializable(
+  z
+    .object({
+      deviceKind: deviceKindSchema,
+      tagPrefix: z.string().min(1).max(16),
+      initialStatus: statusSchema.default('normal'),
+      metrics: z.array(metricSchema).default([]),
+      labelOffset: vec3Schema.optional(),
+      lampOffset: vec3Schema.optional(),
+      screen: screenSchema.optional(),
+      statusStrip: statusStripSchema.optional(),
+      states: z.array(stateDefinitionSchema).optional(),
+      footprint: vec2Schema.optional(),
+      castShadow: z.boolean().optional(),
+      receiveShadow: z.boolean().optional(),
+    })
+    .passthrough(),
+)
+
+export const importedConfigSchema = ensureSerializable(
+  z
+    .object({
+      scale: z.number().positive().finite().optional(),
+      rotationY: z.number().finite().optional(),
+      offset: vec3Schema.optional(),
+      castShadow: z.boolean().optional(),
+      receiveShadow: z.boolean().optional(),
+      labelOffset: vec3Schema.optional(),
+    })
+    .passthrough(),
+)
 
 export const categoryInputSchema = z.object({
   name: z.string().trim().min(1).max(40),

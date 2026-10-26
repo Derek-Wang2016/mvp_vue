@@ -1,5 +1,12 @@
 import type { FastifyReply } from 'fastify'
 
+export class CorruptConfigError extends Error {
+  constructor() {
+    super('模型配置已损坏')
+    this.name = 'CorruptConfigError'
+  }
+}
+
 export function sendError(
   reply: FastifyReply,
   status: number,

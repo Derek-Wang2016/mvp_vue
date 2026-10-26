@@ -1,5 +1,6 @@
 import type { ImportedModel, ModelCategory, Scene, SystemModel } from '@prisma/client'
 import type { z } from 'zod'
+import { CorruptConfigError } from './http.js'
 import { deviceConfigSchema, importedConfigSchema, roomConfigSchema } from './validation.js'
 
 type SystemModelWithCategory = SystemModel & { category: ModelCategory | null }
@@ -22,7 +23,17 @@ export function fileUrl(id: number | null | undefined): string | null {
 }
 
 function parseJson<T>(schema: z.ZodType<T>, raw: string): T {
-  return schema.parse(JSON.parse(raw))
+  let value: unknown
+  try {
+    value = JSON.parse(raw)
+  } catch {
+    throw new CorruptConfigError()
+  }
+  const parsed = schema.safeParse(value)
+  if (!parsed.success) {
+    throw new CorruptConfigError()
+  }
+  return parsed.data
 }
 
 function parseJsonSafe<T>(schema: z.ZodType<T>, raw: string): T | null {

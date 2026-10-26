@@ -196,4 +196,21 @@ describe('导入模型接口', () => {
     expect(res.statusCode).toBe(400)
     expect(res.json().error).toBe('无效的 id')
   })
+
+  it('configJson 损坏时列表与详情返回固定错误', async () => {
+    const uploaded = await uploadGlb(ctx, 'corrupt.glb', 'corrupt-config')
+    const row = await ctx.prisma.importedModel.create({
+      data: { name: '损坏模型', fileId: uploaded.json().id, configJson: '{bad' },
+    })
+
+    const list = await ctx.app.inject({ url: '/api/3d/imported-models' })
+    expect(list.statusCode).toBe(500)
+    expect(list.json()).toEqual({ error: '模型配置已损坏' })
+    expect(list.body).not.toContain('Unexpected token')
+
+    const detail = await ctx.app.inject({ url: `/api/3d/imported-models/${row.id}` })
+    expect(detail.statusCode).toBe(500)
+    expect(detail.json()).toEqual({ error: '模型配置已损坏' })
+    expect(detail.body).not.toContain('Unexpected token')
+  })
 })
