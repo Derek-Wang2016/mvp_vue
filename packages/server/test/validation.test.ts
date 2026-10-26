@@ -319,9 +319,30 @@ describe('模型库映射', () => {
       height: 1.4,
       configJson: JSON.stringify({ scale: 1 }),
     }
-    const entry = importedModelToLibraryEntry(row)
-    expect(entry.id).toBe('imported-7')
-    expect(entry.source).toBe('imported')
-    expect(entry.url).toBe('/api/3d/files/11')
+    const { entry, skipped } = importedModelToLibraryEntry(row)
+    expect(skipped).toBe(false)
+    expect(entry?.id).toBe('imported-7')
+    expect(entry?.source).toBe('imported')
+    expect(entry?.url).toBe('/api/3d/files/11')
+    expect(entry?.config).toEqual({ scale: 1 })
+  })
+
+  it('导入模型脏配置返回跳过标记', () => {
+    const baseRow = {
+      ...base,
+      id: 8,
+      name: '坏模型',
+      fileId: 12,
+      width: null,
+      depth: null,
+      height: null,
+    }
+    expect(importedModelToLibraryEntry({ ...baseRow, configJson: '{bad' })).toEqual({
+      entry: null,
+      skipped: true,
+    })
+    expect(
+      importedModelToLibraryEntry({ ...baseRow, configJson: JSON.stringify({ scale: -1 }) }),
+    ).toEqual({ entry: null, skipped: true })
   })
 })

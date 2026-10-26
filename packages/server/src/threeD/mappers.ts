@@ -146,14 +146,21 @@ export function systemModelToLibraryEntry(
   return { entry, skipped: false }
 }
 
-export function importedModelToLibraryEntry(row: ImportedModel) {
-  return {
+export function importedModelToLibraryEntry(
+  row: ImportedModel,
+): { entry: Record<string, unknown> | null; skipped: boolean } {
+  const config = parseJsonSafe(importedConfigSchema, row.configJson)
+  if (!config) {
+    return { entry: null, skipped: true }
+  }
+  const entry: Record<string, unknown> = {
     id: `imported-${row.id}`,
     label: row.name,
     category: 'device',
     source: 'imported',
     url: fileUrl(row.fileId),
     ...(row.width != null && row.depth != null ? { footprint: [row.width, row.depth] } : {}),
-    config: parseJson(importedConfigSchema, row.configJson),
+    config,
   }
+  return { entry, skipped: false }
 }
