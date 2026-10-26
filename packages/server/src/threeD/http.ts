@@ -12,7 +12,7 @@ export function sendError(
 export function parseId(raw: string): number | null {
   if (!/^\d+$/.test(raw)) return null
   const id = Number(raw)
-  return Number.isSafeInteger(id) && id > 0 ? id : null
+  return Number.isSafeInteger(id) && id > 0 && id <= 2147483647 ? id : null
 }
 
 export function isPrismaError(err: unknown, code: string): boolean {

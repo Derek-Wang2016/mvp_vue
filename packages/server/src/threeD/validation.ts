@@ -122,7 +122,7 @@ export const importedConfigSchema = z
 
 export const categoryInputSchema = z.object({
   name: z.string().trim().min(1).max(40),
-  sortOrder: z.number().int().optional(),
+  sortOrder: z.number().int().min(-2147483648).max(2147483647).optional(),
 })
 
 const systemModelBaseShape = {
@@ -133,12 +133,12 @@ const systemModelBaseShape = {
     .max(64)
     .regex(/^[a-z0-9][a-z0-9-]*$/, 'key 只能包含小写字母、数字和连字符'),
   name: z.string().trim().min(1).max(80),
-  categoryId: z.number().int().positive().nullable().optional(),
+  categoryId: z.number().int().positive().max(2147483647).nullable().optional(),
   width: z.number().positive().finite().nullable().optional(),
   depth: z.number().positive().finite().nullable().optional(),
   height: z.number().positive().finite().nullable().optional(),
-  fileId: z.number().int().positive().nullable().optional(),
-  thumbnailFileId: z.number().int().positive().nullable().optional(),
+  fileId: z.number().int().positive().max(2147483647).nullable().optional(),
+  thumbnailFileId: z.number().int().positive().max(2147483647).nullable().optional(),
 }
 
 const roomSystemModelInputSchema = z.object({
@@ -153,7 +153,7 @@ const roomSystemModelInputSchema = z.object({
 const deviceSystemModelInputSchema = z.object({
   ...systemModelBaseShape,
   kind: z.literal('device'),
-  fileId: z.number().int().positive('设备模型必须提供 fileId'),
+  fileId: z.number().int().positive('设备模型必须提供 fileId').max(2147483647),
   config: deviceConfigSchema,
 })
 
@@ -166,19 +166,21 @@ export type SystemModelInput = z.infer<typeof systemModelInputSchema>
 
 export const importedModelInputSchema = z.object({
   name: z.string().trim().min(1).max(80),
-  categoryId: z.number().int().positive().nullable().optional(),
-  fileId: z.number().int().positive(),
-  thumbnailFileId: z.number().int().positive().nullable().optional(),
+  categoryId: z.number().int().positive().max(2147483647).nullable().optional(),
+  fileId: z.number().int().positive().max(2147483647),
+  thumbnailFileId: z.number().int().positive().max(2147483647).nullable().optional(),
   width: z.number().positive().finite().nullable().optional(),
   depth: z.number().positive().finite().nullable().optional(),
   height: z.number().positive().finite().nullable().optional(),
   config: importedConfigSchema.default({}),
 })
 
+export type ImportedModelInput = z.infer<typeof importedModelInputSchema>
+
 export const sceneMetaSchema = z.object({
   name: z.string().trim().min(1).max(120),
   description: z.string().trim().max(500).nullable().optional(),
-  thumbnailFileId: z.number().int().positive().nullable().optional(),
+  thumbnailFileId: z.number().int().positive().max(2147483647).nullable().optional(),
 })
 
 const sceneDocumentShape = z

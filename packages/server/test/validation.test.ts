@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   deviceConfigSchema,
+  importedModelInputSchema,
   normalizeSceneJson,
   roomConfigSchema,
   systemModelInputSchema,
@@ -116,6 +117,19 @@ describe('systemModelInputSchema', () => {
     ).toBe(false)
   })
 
+  it('拒绝超出 32 位整数的 fileId', () => {
+    const res = systemModelInputSchema.safeParse({
+      key: 'device-x',
+      name: 'X',
+      kind: 'device',
+      fileId: 1e300,
+      config: { deviceKind: 'bed', tagPrefix: 'BED' },
+    })
+    expect(res.success).toBe(false)
+    if (res.success) return
+    expect(zodError(res.error).field).toBe('fileId')
+  })
+
   it('zodError 保留请求字段名 config', () => {
     const res = systemModelInputSchema.safeParse({
       key: 'room-x',
@@ -129,6 +143,15 @@ describe('systemModelInputSchema', () => {
     expect(res.success).toBe(false)
     if (res.success) return
     expect(zodError(res.error).field).toBe('config.bedLayout.count')
+  })
+})
+
+describe('importedModelInputSchema', () => {
+  it('拒绝超出 32 位整数的 fileId', () => {
+    const res = importedModelInputSchema.safeParse({ name: '呼吸机', fileId: 1e300 })
+    expect(res.success).toBe(false)
+    if (res.success) return
+    expect(zodError(res.error).field).toBe('fileId')
   })
 })
 

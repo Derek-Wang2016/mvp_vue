@@ -1,9 +1,22 @@
 import type { FastifyInstance } from 'fastify'
 import type { Prisma, PrismaClient } from '@prisma/client'
-import { importedModelInputSchema, zodError } from './validation.js'
+import { importedModelInputSchema, zodError, type ImportedModelInput } from './validation.js'
 import { formatImportedModel } from './mappers.js'
 import { isPrismaError, parseId, sendError } from './http.js'
 import { categoryRefError, modelFileError, thumbnailRefError } from './refs.js'
+
+function toRowData(input: ImportedModelInput) {
+  return {
+    name: input.name,
+    categoryId: input.categoryId ?? null,
+    fileId: input.fileId,
+    thumbnailFileId: input.thumbnailFileId ?? null,
+    width: input.width ?? null,
+    depth: input.depth ?? null,
+    height: input.height ?? null,
+    configJson: JSON.stringify(input.config),
+  }
+}
 
 async function validateRefs(
   prisma: PrismaClient,
@@ -79,16 +92,7 @@ export function registerImportedModelRoutes(app: FastifyInstance, prisma: Prisma
     }
     try {
       const row = await prisma.importedModel.create({
-        data: {
-          name: parsed.data.name,
-          categoryId: parsed.data.categoryId ?? null,
-          fileId: parsed.data.fileId,
-          thumbnailFileId: parsed.data.thumbnailFileId ?? null,
-          width: parsed.data.width ?? null,
-          depth: parsed.data.depth ?? null,
-          height: parsed.data.height ?? null,
-          configJson: JSON.stringify(parsed.data.config),
-        },
+        data: toRowData(parsed.data),
         include: { category: true },
       })
       reply.status(201).send(formatImportedModel(row))
@@ -121,16 +125,7 @@ export function registerImportedModelRoutes(app: FastifyInstance, prisma: Prisma
     try {
       const row = await prisma.importedModel.update({
         where: { id },
-        data: {
-          name: parsed.data.name,
-          categoryId: parsed.data.categoryId ?? null,
-          fileId: parsed.data.fileId,
-          thumbnailFileId: parsed.data.thumbnailFileId ?? null,
-          width: parsed.data.width ?? null,
-          depth: parsed.data.depth ?? null,
-          height: parsed.data.height ?? null,
-          configJson: JSON.stringify(parsed.data.config),
-        },
+        data: toRowData(parsed.data),
         include: { category: true },
       })
       reply.send(formatImportedModel(row))
