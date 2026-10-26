@@ -148,7 +148,7 @@
 
 ## 5. configJson 结构
 
-`configJson` 由 zod 校验。未知键保留（passthrough），方便后续扩展而不破坏旧记录。校验失败返回 `400`，`field` 使用点路径（例如 `configJson.bedLayout.count`）。
+`configJson` 是数据库列；API 请求与响应中的字段名为 `config`，由 zod 校验。未知顶层键保留（passthrough），方便后续扩展而不破坏旧记录。校验失败返回 `400`，`field` 使用点路径（例如 `config.bedLayout.count`）。
 
 ### 5.1 房间模板（`kind = "room"`）
 
