@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { PROP_LABEL } from '../../propertyPanel/shared'
+import ImageLibraryDialog from '../../ImageLibraryDialog.vue'
 import type { ComponentPropertyFieldsProps } from '../types'
 
 const props = defineProps<ComponentPropertyFieldsProps>()
+const libraryOpen = ref(false)
 </script>
 
 <template>
@@ -15,5 +18,15 @@ const props = defineProps<ComponentPropertyFieldsProps>()
       :value="(comp.props.src as string) ?? ''"
       @change="props.updateProps({ src: ($event.target as HTMLInputElement).value })"
     />
+    <button
+      type="button"
+      class="mt-1.5 px-2 py-1 text-[11px] rounded border border-white/15 text-slate-200 hover:bg-white/10"
+      @click="libraryOpen = true"
+    >从图库选择</button>
   </label>
+  <ImageLibraryDialog
+    v-if="libraryOpen"
+    @close="libraryOpen = false"
+    @select="(url: string) => { props.updateProps({ src: url }); libraryOpen = false }"
+  />
 </template>
