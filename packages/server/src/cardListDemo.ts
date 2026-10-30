@@ -41,8 +41,11 @@ export interface CardListApiResponse {
 }
 
 const TARGET_TOTAL = 47
-/** 空床总数上限（随机分布在全列表，不集中末尾） */
+/** 空床总数上限（位置固定在生成床位中，避免布局抖动） */
 const TARGET_EMPTY_TOTAL = 4
+/** 生成床位中固定为空床的下标，保证房号床号布局不随重启变化；首条生成床位即空床，首页可见 */
+const EMPTY_GENERATED_INDICES = [0, 9, 20, 33] as const
+const DAY_MS = 86400000
 
 /** 精简真实样本（8 条，均为典型字段组合） */
 export const CARD_LIST_SEED: CardListBedItem[] = [
@@ -226,20 +229,19 @@ function allocHisPatientId(ids: ExtraGenIds): string {
   }
 }
 
-function shuffleInPlace<T>(arr: T[]): void {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    const tmp = arr[i]!
-    arr[i] = arr[j]!
-    arr[j] = tmp
-  }
+function pickOne<T>(items: readonly T[]): T {
+  return items[Math.floor(Math.random() * items.length)]!
 }
 
-/** 随机挑选 count 个互不重复的下标（用于空床位置） */
-function pickRandomIndices(total: number, count: number): Set<number> {
-  const indices = Array.from({ length: total }, (_, i) => i)
-  shuffleInPlace(indices)
-  return new Set(indices.slice(0, Math.min(count, total)))
+function randomInt(min: number, max: number): number {
+  return min + Math.floor(Math.random() * (max - min + 1))
+}
+
+function pickStatusName(): (typeof STATUS_NAMES)[number] {
+  const roll = Math.random()
+  if (roll < 0.1) return '病危'
+  if (roll < 0.4) return '病重'
+  return ''
 }
 
 /** 有患者床位：过敏 / 饮食要求不得为空，从种子值中随机选取 */
@@ -311,9 +313,9 @@ function generateExtraItem(
   const bedId = 100 + i
   const room = ROOMS[i % ROOMS.length]
   const bedNo = String(28 + i)
-  const statusName = STATUS_NAMES[i % STATUS_NAMES.length]
-  const tend = TEND_LEVELS[i % TEND_LEVELS.length]
-  const age = `${20 + (i % 60)}岁`
+  const statusName = pickStatusName()
+  const tend = pickOne(TEND_LEVELS)
+  const age = `${randomInt(18, 89)}岁`
 
   return {
     bedId,
@@ -329,29 +331,29 @@ function generateExtraItem(
     patientPkId,
     hisPatientId,
     patientName,
-    sexName: SEX_NAMES[i % SEX_NAMES.length],
+    sexName: pickOne(SEX_NAMES),
     age,
     patientStatus: STATUS_CODES[statusName] ?? null,
     patientStatusName: statusName,
-    admissHospitalDate: BASE_ADMIT - i * 86400000,
-    admissWardDate: i % 3 === 0 ? null : BASE_WARD,
+    admissHospitalDate: BASE_ADMIT - randomInt(0, 20) * DAY_MS,
+    admissWardDate: Math.random() < 0.3 ? null : BASE_WARD - randomInt(0, 5) * DAY_MS,
     doctor: null,
     nurse: null,
     tend: tend.tend,
     tendName: tend.tendName,
-    drugFeedback: pickSeedDrugFeedback(i),
-    dietLevelName: pickSeedDietLevel(i),
+    drugFeedback: pickSeedDrugFeedback(randomInt(0, SEED_DRUG_FEEDBACK.length - 1)),
+    dietLevelName: pickSeedDietLevel(randomInt(0, SEED_DIET_LEVEL.length - 1)),
     payTypeName: PAY_TYPE,
-    safeTakeCare: i % 4 === 0 ? null : SAFE_CARE,
-    isolationTypeName: ISOLATIONS[i % ISOLATIONS.length],
-    diagnose: DIAGNOSES[i % DIAGNOSES.length],
-    patientUpdateTime: BASE_ADMIT + i * 60000,
+    safeTakeCare: Math.random() < 0.25 ? null : SAFE_CARE,
+    isolationTypeName: pickOne(ISOLATIONS),
+    diagnose: pickOne(DIAGNOSES),
+    patientUpdateTime: BASE_ADMIT - randomInt(0, 3) * 3600000,
   }
 }
 
 let cachedPool: CardListBedItem[] | null = null
 
-/** 构建 47 条数据集（8 条种子 + 39 条生成）；空床 ≤4 且随机分布，过敏信息取自种子 */
+/** 构建 47 条数据集（8 条种子 + 39 条生成）；房号床号固定，患者信息随机生成 */
 export function buildCardListPool(): CardListBedItem[] {
   if (cachedPool) return cachedPool.map(cloneItem)
 
@@ -363,7 +365,9 @@ export function buildCardListPool(): CardListBedItem[] {
   const genEmpty = Math.max(0, TARGET_EMPTY_TOTAL - seedEmpty)
   const genOccupied = need - genEmpty
   const uniqueNames = allocateUniquePatientNames(genOccupied, usedNames)
-  const emptySlots = pickRandomIndices(need, genEmpty)
+  const emptySlots = new Set<number>(
+    EMPTY_GENERATED_INDICES.filter((index) => index < need).slice(0, genEmpty),
+  )
 
   const idState: ExtraGenIds = {
     nextPkId: usedPkIds.size > 0 ? Math.max(...usedPkIds) + 1 : 1,
@@ -389,7 +393,6 @@ export function buildCardListPool(): CardListBedItem[] {
 
   fillStaffForOccupiedBeds(pool)
   fillClinicalFieldsForOccupied(pool)
-  shuffleInPlace(pool)
   cachedPool = pool
   return pool.map(cloneItem)
 }

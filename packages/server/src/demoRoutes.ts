@@ -9,6 +9,7 @@ import {
 } from './mapStatsDemo.js'
 import { buildCardListResponse, buildCardResponse } from './cardListDemo.js'
 import { buildWardKvSingleResponse, buildWardKvMultiResponse } from './wardKvStatsDemo.js'
+import { buildRoomStateResponse } from './roomStateDemo.js'
 
 function extractByPath(obj: unknown, path: string): unknown {
   const clean = path.startsWith('$') ? path.slice(1) : path
@@ -168,6 +169,10 @@ export function registerDemoRoutes(app: FastifyInstance, prisma: PrismaClient) {
 
   app.get('/api/demo/ward-kv-multi', async (_req, reply) => {
     reply.send(buildWardKvMultiResponse())
+  })
+
+  app.get('/api/demo/room-states', async (_req, reply) => {
+    reply.send(buildRoomStateResponse())
   })
 
   /** @deprecated 请用 /api/demo/map-stats?level=country；保留兼容旧页面 */
