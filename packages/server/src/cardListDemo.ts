@@ -40,11 +40,13 @@ export interface CardListApiResponse {
   msg: string
 }
 
-const TARGET_TOTAL = 47
-/** 空床总数上限（位置固定在生成床位中，避免布局抖动） */
-const TARGET_EMPTY_TOTAL = 4
-/** 生成床位中固定为空床的下标，保证房号床号布局不随重启变化；首条生成床位即空床，首页可见 */
-const EMPTY_GENERATED_INDICES = [0, 9, 20, 33] as const
+export interface CardListRoom {
+  roomId: number
+  wardroomNum: string
+  wardroomName: string
+}
+
+const TARGET_TOTAL = 162
 const DAY_MS = 86400000
 
 /** 精简真实样本（8 条，均为典型字段组合） */
@@ -160,6 +162,8 @@ const DIAGNOSES = [
 const ISOLATIONS = ['一级隔离', '飞沫传染', '特殊传染', '空气传染', null]
 const SAFE_CARE = '防跌倒,防坠床,全流,肢体约束,预防下肢静脉血栓'
 const PAY_TYPE = '市公医职工(5%)'
+const DOCTOR_NAMES = ['张华军', '李荣光', '黄博文', '杜佳', '方建国', '周明轩', '陈思远', '吴博文']
+const NURSE_NAMES = ['欧文李月', '宋昕芷', '尹诗涵', '林晓彤', '赵雅婷', '孙佳怡', '何雨桐', '郭静雯']
 
 /** 种子中的过敏信息（生成数据从此随机抽取，保证非空） */
 const SEED_DRUG_FEEDBACK: string[] = [
@@ -351,50 +355,113 @@ function generateExtraItem(
   }
 }
 
-let cachedPool: CardListBedItem[] | null = null
+let cachedBedLayout: CardListBedItem[] | null = null
 
-/** 构建 47 条数据集（8 条种子 + 39 条生成）；房号床号固定，患者信息随机生成 */
-export function buildCardListPool(): CardListBedItem[] {
-  if (cachedPool) return cachedPool.map(cloneItem)
+/**
+ * 床位和病房结构是稳定的：保留已有样本病房，并补齐为两人房；
+ * 其余病房均为三人房。患者资料在每次请求时按当前分钟重新生成。
+ */
+function buildBedLayout(): CardListBedItem[] {
+  if (cachedBedLayout) return cachedBedLayout.map(cloneItem)
 
-  const seed = CARD_LIST_SEED.map(cloneItem)
-  const { names: usedNames, pkIds: usedPkIds, hisIds: usedHisIds } = collectSeedOccupied(seed)
-
-  const need = TARGET_TOTAL - seed.length
-  const seedEmpty = seed.filter((x) => !isOccupiedBed(x)).length
-  const genEmpty = Math.max(0, TARGET_EMPTY_TOTAL - seedEmpty)
-  const genOccupied = need - genEmpty
-  const uniqueNames = allocateUniquePatientNames(genOccupied, usedNames)
-  const emptySlots = new Set<number>(
-    EMPTY_GENERATED_INDICES.filter((index) => index < need).slice(0, genEmpty),
-  )
-
-  const idState: ExtraGenIds = {
-    nextPkId: usedPkIds.size > 0 ? Math.max(...usedPkIds) + 1 : 1,
-    usedHisIds: new Set(usedHisIds),
-    hisSeq: 1,
+  const rooms = new Map<number, CardListBedItem[]>()
+  for (const item of CARD_LIST_SEED) {
+    const beds = rooms.get(item.roomId) ?? []
+    beds.push(cloneItem(item))
+    rooms.set(item.roomId, beds)
   }
 
-  const pool: CardListBedItem[] = [...seed]
-  let nameIdx = 0
-  for (let j = 0; j < need; j++) {
-    const bedId = 100 + j
-    const room = ROOMS[j % ROOMS.length]
-    const bedNo = String(28 + j)
-    if (emptySlots.has(j)) {
-      pool.push(emptyBedTemplate(bedId, room.roomId, bedNo, `${bedNo}床`, room.wardroomNum, room.wardroomName))
-      continue
+  const layout: CardListBedItem[] = []
+  for (const beds of rooms.values()) {
+    layout.push(...beds)
+    const room = beds[0]!
+    for (let bedIndex = beds.length; bedIndex < 2; bedIndex++) {
+      const bedNo = `${room.wardroomNum}-${bedIndex + 1}`
+      layout.push(emptyBedTemplate(
+        500 + room.roomId * 10 + bedIndex,
+        room.roomId,
+        bedNo,
+        `${bedNo}床`,
+        room.wardroomNum,
+        room.wardroomName,
+      ))
     }
-    const patientName = uniqueNames[nameIdx++]!
-    const patientPkId = allocPatientPkId(idState, usedPkIds)
-    const hisPatientId = allocHisPatientId(idState)
-    pool.push(generateExtraItem(j, patientName, patientPkId, hisPatientId))
   }
 
-  fillStaffForOccupiedBeds(pool)
-  fillClinicalFieldsForOccupied(pool)
-  cachedPool = pool
-  return pool.map(cloneItem)
+  for (let roomId = 11; layout.length < TARGET_TOTAL; roomId++) {
+    const wardroomNum = String(roomId)
+    for (let bedIndex = 1; bedIndex <= 3 && layout.length < TARGET_TOTAL; bedIndex++) {
+      const bedNo = `${wardroomNum}-${bedIndex}`
+      layout.push(emptyBedTemplate(
+        1000 + roomId * 10 + bedIndex,
+        roomId,
+        bedNo,
+        `${bedNo}床`,
+        wardroomNum,
+        `${wardroomNum}房`,
+      ))
+    }
+  }
+
+  cachedBedLayout = layout.map((bed, index) => {
+    const bedNo = String(index + 1)
+    return { ...bed, bedNo, bedName: `${bedNo}床` }
+  })
+  return cachedBedLayout.map(cloneItem)
+}
+
+function createDynamicPatientInfo(bed: CardListBedItem, index: number, patientName: string, snapshot: number): CardListBedItem {
+  const variation = index + snapshot
+  const statusName = STATUS_NAMES[variation % STATUS_NAMES.length]!
+  const tend = pickOne(TEND_LEVELS)
+  const now = Date.now()
+
+  return {
+    ...bed,
+    patientPkId: snapshot * TARGET_TOTAL + index + 1,
+    hisPatientId: `D${snapshot}${String(index + 1).padStart(3, '0')}`,
+    patientName,
+    sexName: SEX_NAMES[variation % SEX_NAMES.length]!,
+    age: `${20 + (variation % 60)}岁`,
+    patientStatus: STATUS_CODES[statusName] ?? null,
+    patientStatusName: statusName,
+    admissHospitalDate: now - (7 + (variation % 90)) * 86400000,
+    admissWardDate: now - (1 + (variation % 30)) * 86400000,
+    doctor: DOCTOR_NAMES[variation % DOCTOR_NAMES.length]!,
+    nurse: NURSE_NAMES[variation % NURSE_NAMES.length]!,
+    tend: tend.tend,
+    tendName: tend.tendName,
+    drugFeedback: pickSeedDrugFeedback(variation),
+    dietLevelName: pickSeedDietLevel(variation),
+    payTypeName: PAY_TYPE,
+    safeTakeCare: variation % 4 === 0 ? null : SAFE_CARE,
+    isolationTypeName: ISOLATIONS[variation % ISOLATIONS.length]!,
+    diagnose: DIAGNOSES[variation % DIAGNOSES.length]!,
+    patientUpdateTime: now,
+  }
+}
+
+/** 构建 162 个固定床位：两人房 6 间、三人房 50 间；每间病房均满床。 */
+export function buildCardListPool(): CardListBedItem[] {
+  const layout = buildBedLayout()
+  const snapshot = Math.floor(Date.now() / 60000)
+  const patientNames = allocateUniquePatientNames(layout.length, new Set())
+  return layout.map((bed, index) => createDynamicPatientInfo(bed, index, patientNames[index]!, snapshot))
+}
+
+/** 返回与卡片列表共享的固定病房信息。 */
+export function buildCardListRooms(): CardListRoom[] {
+  const rooms = new Map<number, CardListRoom>()
+  for (const bed of buildBedLayout()) {
+    if (!rooms.has(bed.roomId)) {
+      rooms.set(bed.roomId, {
+        roomId: bed.roomId,
+        wardroomNum: bed.wardroomNum,
+        wardroomName: bed.wardroomName,
+      })
+    }
+  }
+  return [...rooms.values()]
 }
 
 export function parseCardListQuery(query: Record<string, unknown>):

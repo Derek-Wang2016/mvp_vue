@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { PageComponent } from '@mvp-vue/schema'
-import { isEditorLocked } from '@mvp-vue/schema'
+import { componentSupportsDataSource, isEditorLocked } from '@mvp-vue/schema'
 import { useEditorStore } from '../../stores/editorStore'
 import { getEditorDef } from '../registry/registry'
 import { PROP_LABEL, PROP_HINT, PROP_SECTION } from './shared'
@@ -23,7 +23,12 @@ const store = useEditorStore()
 const tab = ref<'props' | 'data'>('props')
 
 const def = computed(() => getEditorDef(props.comp.type))
+const supportsDataSource = computed(() => componentSupportsDataSource(props.comp.type))
 const effectiveTargetIds = computed(() => props.targetIds ?? [props.comp.id])
+
+watch(supportsDataSource, (supports) => {
+  if (!supports) tab.value = 'props'
+}, { immediate: true })
 
 const editableTargetIds = computed(() =>
   effectiveTargetIds.value.filter((id) => {
@@ -72,7 +77,7 @@ function toggleLock() {
         属性
       </span>
       <button
-        v-if="!batch"
+        v-if="!batch && supportsDataSource"
         type="button"
         class="p-1 rounded border transition-colors"
         :class="isLocked
@@ -133,7 +138,7 @@ function toggleLock() {
     </div>
 
     <!-- Data Tab（批量模式不显示） -->
-    <div v-if="!batch && tab === 'data'" class="space-y-3" :class="fieldsDisabled ? 'opacity-50 pointer-events-none' : ''">
+    <div v-if="!batch && supportsDataSource && tab === 'data'" class="space-y-3" :class="fieldsDisabled ? 'opacity-50 pointer-events-none' : ''">
       <label class="block">
         <span :class="PROP_LABEL">绑定数据源</span>
         <select

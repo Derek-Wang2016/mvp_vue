@@ -1,6 +1,23 @@
 // ===== 组件类型 =====
 export type ComponentType = 'text' | 'image' | 'icon' | 'rectangle' | 'ellipse' | 'line' | 'bar-chart' | 'line-chart' | 'pie-chart' | 'table' | 'iframe' | 'video' | 'datetime' | 'analog-clock' | 'page-nav-button' | 'card-list' | 'card' | 'key-value-tag' | 'map' | 'editable-text'
 
+/** 支持绑定页面数据源的组件类型。 */
+export const DATA_SOURCE_COMPONENT_TYPES: readonly ComponentType[] = [
+  'text',
+  'bar-chart',
+  'line-chart',
+  'pie-chart',
+  'table',
+  'card-list',
+  'card',
+  'key-value-tag',
+  'map',
+]
+
+export function componentSupportsDataSource(type: ComponentType): boolean {
+  return DATA_SOURCE_COMPONENT_TYPES.includes(type)
+}
+
 export {
   type MapLevel,
   type MapDisplayMode,

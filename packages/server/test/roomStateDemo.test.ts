@@ -1,20 +1,24 @@
 import { describe, expect, it } from 'vitest'
-import {
-  DOOR_LAMP_STATES,
-  DOOR_STATES,
-  ROOM_STATE_ROOMS,
-  buildRoomStateResponse,
-} from '../src/roomStateDemo.js'
+import { buildCardListRooms } from '../src/cardListDemo.js'
+import { DOOR_LAMP_STATES, DOOR_STATES, buildRoomStateResponse } from '../src/roomStateDemo.js'
 
 describe('buildRoomStateResponse', () => {
-  it('按房间数组返回门灯与门状态', () => {
+  it('返回与卡片列表一致的病房及门状态', () => {
     const response = buildRoomStateResponse()
+    const cardListRooms = buildCardListRooms()
 
     expect(response.code).toBe(0)
     expect(response.msg).toBe('')
-    expect(response.data).toHaveLength(ROOM_STATE_ROOMS.length)
-    expect(response.data.map((item) => item.roomName)).toContain('301 病房')
+    expect(response.data).toHaveLength(cardListRooms.length)
+    expect(response.data.map(({ roomId, roomNo, roomName }) => ({ roomId, roomNo, roomName })))
+      .toEqual(cardListRooms.map(({ roomId, wardroomNum, wardroomName }) => ({
+        roomId,
+        roomNo: wardroomNum,
+        roomName: wardroomName,
+      })))
     for (const item of response.data) {
+      expect(typeof item.roomId).toBe('number')
+      expect(typeof item.roomNo).toBe('string')
       expect(typeof item.roomName).toBe('string')
       expect(typeof item.doorLamp).toBe('string')
       expect(typeof item.door).toBe('string')
@@ -23,9 +27,9 @@ describe('buildRoomStateResponse', () => {
 
   it('房间名唯一，取值限定在约定枚举内', () => {
     const response = buildRoomStateResponse()
-    const names = response.data.map((item) => item.roomName)
+    const roomIds = response.data.map((item) => item.roomId)
 
-    expect(new Set(names).size).toBe(names.length)
+    expect(new Set(roomIds).size).toBe(roomIds.length)
     for (const item of response.data) {
       expect(DOOR_LAMP_STATES).toContain(item.doorLamp)
       expect(DOOR_STATES).toContain(item.door)

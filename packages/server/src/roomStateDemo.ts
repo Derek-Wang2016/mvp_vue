@@ -1,3 +1,5 @@
+import { buildCardListRooms } from './cardListDemo.js'
+
 /** 门灯取值，与三色门灯模型状态组 doorLamp 的取值 id 一致 */
 export const DOOR_LAMP_STATES = ['green', 'yellow', 'red', 'off'] as const
 export type DoorLampState = (typeof DOOR_LAMP_STATES)[number]
@@ -6,33 +8,9 @@ export type DoorLampState = (typeof DOOR_LAMP_STATES)[number]
 export const DOOR_STATES = ['open', 'close'] as const
 export type DoorState = (typeof DOOR_STATES)[number]
 
-/** 与 seed 场景 hospital-ward 的房间名一致，便于按房间名过滤 */
-export const ROOM_STATE_ROOMS = [
-  '101 病房',
-  '102 病房',
-  '105 病房',
-  '106 病房',
-  '201 病房',
-  '202 病房',
-  '203 病房',
-  '204 病房',
-  '205 病房',
-  '206 病房',
-  '301 病房',
-  '302 病房',
-  '303 病房',
-  '304 病房',
-  '305 病房',
-  '306 病房',
-  '401 病房',
-  '402 病房',
-  '403 病房',
-  '404 病房',
-  '405 病房',
-  '406 病房',
-] as const
-
 export interface RoomState {
+  roomId: number
+  roomNo: string
   roomName: string
   doorLamp: DoorLampState
   door: DoorState
@@ -70,8 +48,10 @@ const DOOR_WEIGHTS = [
 export function buildRoomStateResponse(
   random: () => number = Math.random,
 ): RoomStateApiResponse {
-  const data: RoomState[] = ROOM_STATE_ROOMS.map((roomName) => ({
-    roomName,
+  const data: RoomState[] = buildCardListRooms().map((room) => ({
+    roomId: room.roomId,
+    roomNo: room.wardroomNum,
+    roomName: room.wardroomName,
     doorLamp: pickWeighted(random, DOOR_LAMP_WEIGHTS),
     door: pickWeighted(random, DOOR_WEIGHTS),
   }))

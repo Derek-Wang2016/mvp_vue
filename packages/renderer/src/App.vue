@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, provide } from 'vue'
 import type { PageSchema } from '@mvp-vue/schema'
 import {
+  componentSupportsDataSource,
   DEFAULT_PAGE_WIDTH,
   DEFAULT_PAGE_HEIGHT,
   DEFAULT_GRADIENT_COLOR_TO,
@@ -58,6 +59,19 @@ const pageWidth = computed(() => {
 const pageHeight = computed(() => {
   const s = schema.value as (PageSchema & { pageHeight?: number }) | null
   return s?.height ?? s?.pageHeight ?? DEFAULT_PAGE_HEIGHT
+})
+
+/** 仅加载被支持数据连接的组件实际引用的数据源，避免无效轮询。 */
+const activeDataSources = computed(() => {
+  const page = schema.value
+  if (!page) return []
+
+  const usedIds = new Set(
+    page.components
+      .filter((comp) => componentSupportsDataSource(comp.type) && !!comp.dataSourceId)
+      .map((comp) => comp.dataSourceId!),
+  )
+  return (page.dataSources ?? []).filter((dataSource) => usedIds.has(dataSource.id))
 })
 
 // ---- Page Navigation ----
@@ -275,7 +289,7 @@ watch([schema, fullscreenMode, pageWidth, pageHeight], () => {
           <!-- DataProvider wraps all components -->
           <DataProvider
             :key="`page-${pageId}`"
-            :dataSources="schema.dataSources ?? []"
+            :dataSources="activeDataSources"
           >
             <!-- Components -->
             <template v-for="comp in schema.components" :key="comp.id">

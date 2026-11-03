@@ -8,6 +8,7 @@ interface PoolItem {
   wardroomNum: string
   wardroomName: string
   patientName: string | null
+  tend: string | null
 }
 
 function layoutOf(pool: PoolItem[]) {
@@ -41,33 +42,35 @@ describe('card-list 房号床号固定', () => {
     expect(after).toEqual(before)
   })
 
-  it('床位数量不变，且每个床位的房间与床号唯一', async () => {
+  it('床位数量固定，且每个房间的床位数符合两人房或三人房配置', async () => {
     const pool = await loadPool()
-    expect(pool).toHaveLength(47)
+    expect(pool).toHaveLength(162)
 
     const keys = pool.map((item) => `${item.roomId}:${item.bedNo}`)
     expect(new Set(keys).size).toBe(keys.length)
+
+    const roomCounts = new Map<number, number>()
+    for (const item of pool) {
+      roomCounts.set(item.roomId, (roomCounts.get(item.roomId) ?? 0) + 1)
+    }
+    expect([...roomCounts.values()].every((count) => count === 2 || count === 3)).toBe(true)
   })
 
-  it('有患者的床位仍返回患者信息', async () => {
+  it('每个床位均返回随机患者信息和护理等级', async () => {
     const pool = await loadPool()
-    const occupied = pool.filter((item) => item.patientName != null)
-    expect(occupied.length).toBeGreaterThan(0)
-    for (const item of occupied) {
+    for (const item of pool) {
       expect(item.patientName).not.toBe('')
+      expect(['1', '2', '3']).toContain(item.tend)
     }
   })
 
-  it('部分床位房号床号正常但患者信息为空', async () => {
+  it('床号为连续数字，且床位名称与床号一致', async () => {
     const pool = await loadPool()
-    const empty = pool.filter((item) => item.patientName == null)
 
-    expect(empty.length).toBe(4)
-    for (const item of empty) {
-      expect(item.bedNo).not.toBe('')
+    for (const item of pool) {
+      expect(item.bedNo).toMatch(/^\d+$/)
       expect(item.wardroomName).not.toBe('')
       expect(item.bedName).toBe(`${item.bedNo}床`)
     }
-    expect(pool.slice(0, 10).some((item) => item.patientName == null)).toBe(true)
   })
 })
