@@ -60,7 +60,8 @@ describe('运行时模型库接口', () => {
     const res = await ctx.app.inject({ url: '/api/3d/model-library' })
     expect(res.statusCode).toBe(200)
     const body = res.json()
-    expect(body.system).toHaveLength(2)
+    expect(body.system).toHaveLength(1)
+    expect(body.devices).toEqual([])
     expect(body.imported).toHaveLength(1)
 
     const roomEntry = body.system.find((entry: { id: string }) => entry.id === 'room-ward')
@@ -68,11 +69,6 @@ describe('运行时模型库接口', () => {
     expect(roomEntry.label).toBe('病房')
     expect(roomEntry.render).toBe('shell')
     expect(roomEntry.footprint).toEqual([4.2, 5])
-
-    const bedEntry = body.system.find((entry: { id: string }) => entry.id === 'device-bed')
-    expect(bedEntry.category).toBe('device')
-    expect(bedEntry.url).toBe(`/api/3d/files/${fileId}`)
-    expect(bedEntry.kind).toBe('bed')
 
     expect(body.imported[0].source).toBe('imported')
     expect(body.imported[0].id).toMatch(/^imported-\d+$/)
@@ -84,7 +80,7 @@ describe('运行时模型库接口', () => {
     expect(res.headers['x-skipped-models']).toBeUndefined()
   })
 
-  it('无文件的设备模型被跳过并写入响应头', async () => {
+  it('旧系统设备不再作为系统模型输出', async () => {
     await ctx.prisma.systemModel.create({
       data: {
         key: 'device-no-file',
@@ -99,10 +95,10 @@ describe('运行时模型库接口', () => {
     const body = res.json()
     expect(body.system).toEqual([])
     expect(body.imported).toEqual([])
-    expect(res.headers['x-skipped-models']).toBe('device-no-file')
+    expect(res.headers['x-skipped-models']).toBeUndefined()
   })
 
-  it('脏 key 编码后写入跳过响应头，不触发头注入也不被逗号拆分', async () => {
+  it('旧系统设备不影响跳过响应头', async () => {
     const dirtyKey = 'dirty\r\nX-Injected: 1,设备'
     await ctx.prisma.systemModel.create({
       data: {
@@ -115,15 +111,11 @@ describe('运行时模型库接口', () => {
 
     const res = await ctx.app.inject({ url: '/api/3d/model-library' })
     expect(res.statusCode).toBe(200)
-    const header = res.headers['x-skipped-models']
-    expect(header).toBe(encodeURIComponent(dirtyKey))
-    expect(String(header)).not.toContain('\r')
-    expect(String(header)).not.toContain('\n')
-    expect(String(header).split(',')).toHaveLength(1)
+    expect(res.headers['x-skipped-models']).toBeUndefined()
     expect(res.headers['x-injected']).toBeUndefined()
   })
 
-  it('脏系统行与脏导入行同时存在时按查询顺序拼接，正常导入条目不含 kind', async () => {
+  it('旧系统设备被忽略，脏导入行仍写入跳过响应头', async () => {
     const uploaded = await uploadGlb(ctx, 'monitor.glb', 'library-combo')
     const fileId = uploaded.json().id
     const good = await ctx.app.inject({
@@ -152,9 +144,7 @@ describe('运行时模型库接口', () => {
     expect(body.imported).toHaveLength(1)
     expect(body.imported[0].id).toBe(`imported-${good.json().id}`)
     expect(body.imported[0]).not.toHaveProperty('kind')
-    expect(res.headers['x-skipped-models']).toBe(
-      `device-dirty-system,imported-${dirtyImported.id}`,
-    )
+    expect(res.headers['x-skipped-models']).toBe(`imported-${dirtyImported.id}`)
   })
 
   it('脏导入模型被跳过，正常导入行仍输出', async () => {

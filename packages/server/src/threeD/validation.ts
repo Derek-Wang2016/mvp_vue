@@ -19,6 +19,8 @@ const metricSchema = z.object({
   value: z.string(),
 })
 
+const tagsSchema = z.array(z.string().trim().min(1).max(40)).max(20).optional()
+
 const stateValueSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
@@ -100,6 +102,7 @@ export const roomConfigSchema = ensureSerializable(
       floorColor: z.string().min(1).optional(),
       doorColor: z.string().min(1).optional(),
       showName: z.boolean().optional(),
+      tags: tagsSchema,
     })
     .passthrough(),
 )
@@ -119,6 +122,7 @@ export const deviceConfigSchema = ensureSerializable(
       footprint: vec2Schema.optional(),
       castShadow: z.boolean().optional(),
       receiveShadow: z.boolean().optional(),
+      tags: tagsSchema,
     })
     .passthrough(),
 )
@@ -132,6 +136,7 @@ export const importedConfigSchema = ensureSerializable(
       castShadow: z.boolean().optional(),
       receiveShadow: z.boolean().optional(),
       labelOffset: vec3Schema.optional(),
+      tags: tagsSchema,
     })
     .passthrough(),
 )
@@ -192,6 +197,8 @@ export const importedModelInputSchema = z.object({
 })
 
 export type ImportedModelInput = z.infer<typeof importedModelInputSchema>
+export const deviceModelInputSchema = importedModelInputSchema
+export type DeviceModelInput = z.infer<typeof deviceModelInputSchema>
 
 export const sceneMetaSchema = z.object({
   name: z.string().trim().min(1).max(120),

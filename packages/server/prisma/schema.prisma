@@ -62,6 +62,7 @@ model ModelCategory {
   updatedAt      DateTime        @updatedAt
   systemModels   SystemModel[]
   importedModels ImportedModel[]
+  deviceModels   DeviceModel[]
 }
 
 /// 3D 二进制文件（GLB / 图片），按 sha256 去重
@@ -77,6 +78,8 @@ model AssetFile {
   systemModelThumbnails   SystemModel[]   @relation("SystemModelThumbnail")
   importedModelFiles      ImportedModel[] @relation("ImportedModelFile")
   importedModelThumbnails ImportedModel[] @relation("ImportedModelThumbnail")
+  deviceModelFiles        DeviceModel[]   @relation("DeviceModelFile")
+  deviceModelThumbnails   DeviceModel[]   @relation("DeviceModelThumbnail")
   sceneThumbnails         Scene[]         @relation("SceneThumbnail")
 }
 
@@ -118,6 +121,26 @@ model ImportedModel {
   category        ModelCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   file            AssetFile      @relation("ImportedModelFile", fields: [fileId], references: [id], onDelete: Restrict)
   thumbnail       AssetFile?     @relation("ImportedModelThumbnail", fields: [thumbnailFileId], references: [id], onDelete: Restrict)
+
+  @@index([categoryId])
+}
+
+/// 可跨场景复用的设备模型；配置与导入模型完全一致
+model DeviceModel {
+  id              Int            @id @default(autoincrement())
+  name            String
+  categoryId      Int?
+  fileId          Int
+  thumbnailFileId Int?
+  width           Float?
+  depth           Float?
+  height          Float?
+  configJson      String         @default("{}")
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  category        ModelCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  file            AssetFile      @relation("DeviceModelFile", fields: [fileId], references: [id], onDelete: Restrict)
+  thumbnail       AssetFile?     @relation("DeviceModelThumbnail", fields: [thumbnailFileId], references: [id], onDelete: Restrict)
 
   @@index([categoryId])
 }

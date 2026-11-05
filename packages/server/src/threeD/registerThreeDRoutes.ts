@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import type { PrismaClient } from '@prisma/client'
 import { registerCategoryRoutes } from './categories.js'
+import { registerDeviceModelRoutes } from './deviceModels.js'
 import { registerFileRoutes } from './files.js'
 import { CorruptConfigError } from './http.js'
 import { registerImportedModelRoutes } from './importedModels.js'
@@ -25,6 +26,7 @@ export function registerThreeDRoutes(app: FastifyInstance, prisma: PrismaClient)
     })
 
     registerCategoryRoutes(scope, prisma)
+    registerDeviceModelRoutes(scope, prisma)
     registerFileRoutes(scope, prisma)
     registerImportedModelRoutes(scope, prisma)
     registerModelLibraryRoutes(scope, prisma)

@@ -1,16 +1,27 @@
-import type { ImportedModel, ModelCategory, Scene, SystemModel } from '@prisma/client'
+import type {
+  DeviceModel,
+  ImportedModel,
+  ModelCategory,
+  Scene,
+  SystemModel,
+} from '@prisma/client'
 import type { z } from 'zod'
 import { CorruptConfigError } from './http.js'
 import { deviceConfigSchema, importedConfigSchema, roomConfigSchema } from './validation.js'
 
 type SystemModelWithCategory = SystemModel & { category: ModelCategory | null }
 type ImportedModelWithCategory = ImportedModel & { category: ModelCategory | null }
+type DeviceModelWithCategory = DeviceModel & { category: ModelCategory | null }
 type SystemModelLibraryRow = Pick<
   SystemModel,
   'id' | 'key' | 'name' | 'kind' | 'width' | 'depth' | 'height' | 'fileId' | 'configJson'
 >
 type ImportedModelLibraryRow = Pick<
   ImportedModel,
+  'id' | 'name' | 'fileId' | 'width' | 'depth' | 'configJson'
+>
+type DeviceModelLibraryRow = Pick<
+  DeviceModel,
   'id' | 'name' | 'fileId' | 'width' | 'depth' | 'configJson'
 >
 type SceneMetaRow = Pick<
@@ -98,6 +109,23 @@ export function formatImportedModel(row: ImportedModelWithCategory) {
   }
 }
 
+export function formatDeviceModel(row: DeviceModelWithCategory) {
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category ? { id: row.category.id, name: row.category.name } : null,
+    fileId: row.fileId,
+    fileUrl: fileUrl(row.fileId),
+    thumbnailFileId: row.thumbnailFileId,
+    thumbnailUrl: fileUrl(row.thumbnailFileId),
+    width: row.width,
+    depth: row.depth,
+    height: row.height,
+    config: parseJson(importedConfigSchema, row.configJson),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }
+}
 export function formatSceneMeta(row: SceneMetaRow) {
   return {
     id: row.id,
@@ -182,4 +210,27 @@ export function importedModelToLibraryEntry(
     config,
   }
   return { entry, skipped: false }
+}
+
+export function deviceModelToLibraryEntry(
+  row: DeviceModelLibraryRow,
+): { entry: Record<string, unknown> | null; skipped: boolean } {
+  const config = parseJsonSafe(importedConfigSchema, row.configJson)
+  if (!config) {
+    return { entry: null, skipped: true }
+  }
+  return {
+    entry: {
+      id: `device-${row.id}`,
+      label: row.name,
+      category: 'device',
+      source: 'device',
+      url: fileUrl(row.fileId),
+      ...(row.width != null && row.depth != null
+        ? { footprint: [row.width, row.depth] }
+        : {}),
+      config,
+    },
+    skipped: false,
+  }
 }

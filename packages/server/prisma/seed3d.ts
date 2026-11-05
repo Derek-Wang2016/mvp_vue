@@ -216,11 +216,45 @@ async function main() {
           configJson,
         }
 
-        await tx.systemModel.upsert({
-          where: { key: entry.id },
-          update: data,
-          create: data,
-        })
+        if (isRoom) {
+          await tx.systemModel.upsert({
+            where: { key: entry.id },
+            update: data,
+            create: data,
+          })
+        } else {
+          const existing = await tx.deviceModel.findFirst({
+            where: {
+              name: entry.label,
+              fileId: data.fileId!,
+            },
+          })
+          if (existing) {
+            await tx.deviceModel.update({
+              where: { id: existing.id },
+              data: {
+                name: entry.label,
+                categoryId: data.categoryId,
+                width: data.width,
+                depth: data.depth,
+                height: data.height,
+                configJson,
+              },
+            })
+          } else {
+            await tx.deviceModel.create({
+              data: {
+                name: entry.label,
+                categoryId: data.categoryId,
+                fileId: data.fileId!,
+                width: data.width,
+                depth: data.depth,
+                height: data.height,
+                configJson,
+              },
+            })
+          }
+        }
         seededModels += 1
       }
 

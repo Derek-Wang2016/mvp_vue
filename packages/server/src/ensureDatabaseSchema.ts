@@ -68,6 +68,23 @@ const IMPORTED_MODEL_SQL = `CREATE TABLE IF NOT EXISTS "ImportedModel" (
   CONSTRAINT "ImportedModel_thumbnailFileId_fkey" FOREIGN KEY ("thumbnailFileId") REFERENCES "AssetFile" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 )`
 
+const DEVICE_MODEL_SQL = `CREATE TABLE IF NOT EXISTS "DeviceModel" (
+  "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "name" TEXT NOT NULL,
+  "categoryId" INTEGER,
+  "fileId" INTEGER NOT NULL,
+  "thumbnailFileId" INTEGER,
+  "width" REAL,
+  "depth" REAL,
+  "height" REAL,
+  "configJson" TEXT NOT NULL DEFAULT '{}',
+  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "DeviceModel_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "ModelCategory" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT "DeviceModel_fileId_fkey" FOREIGN KEY ("fileId") REFERENCES "AssetFile" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT "DeviceModel_thumbnailFileId_fkey" FOREIGN KEY ("thumbnailFileId") REFERENCES "AssetFile" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+)`
+
 const SCENE_SQL = `CREATE TABLE IF NOT EXISTS "Scene" (
   "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
   "name" TEXT NOT NULL,
@@ -159,6 +176,24 @@ const STEPS: { id: string; sql: string }[] = [
   {
     id: '2026-10-26-3d-imported-model-category-index',
     sql: `CREATE INDEX IF NOT EXISTS "ImportedModel_categoryId_idx" ON "ImportedModel"("categoryId")`,
+  },
+  {
+    id: '2026-11-04-3d-device-model',
+    sql: DEVICE_MODEL_SQL,
+  },
+  {
+    id: '2026-11-04-3d-device-model-category-index',
+    sql: `CREATE INDEX IF NOT EXISTS "DeviceModel_categoryId_idx" ON "DeviceModel"("categoryId")`,
+  },
+  {
+    id: '2026-11-04-3d-migrate-system-devices',
+    sql: `INSERT INTO "DeviceModel" (
+      "name", "categoryId", "fileId", "thumbnailFileId", "width", "depth", "height", "configJson"
+    )
+    SELECT
+      "name", "categoryId", "fileId", "thumbnailFileId", "width", "depth", "height", "configJson"
+    FROM "SystemModel"
+    WHERE "kind" = 'device' AND "fileId" IS NOT NULL`,
   },
   {
     id: '2026-10-26-3d-scene',

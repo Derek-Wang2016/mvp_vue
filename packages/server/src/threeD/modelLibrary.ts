@@ -1,14 +1,16 @@
 import type { FastifyInstance } from 'fastify'
 import type { PrismaClient } from '@prisma/client'
 import {
+  deviceModelToLibraryEntry,
   importedModelToLibraryEntry,
   systemModelToLibraryEntry,
 } from './mappers.js'
 
 export function registerModelLibraryRoutes(app: FastifyInstance, prisma: PrismaClient) {
   app.get('/api/3d/model-library', async (_req, reply) => {
-    const [systemRows, importedRows] = await Promise.all([
+    const [systemRows, deviceRows, importedRows] = await Promise.all([
       prisma.systemModel.findMany({
+        where: { kind: 'room' },
         select: {
           id: true,
           key: true,
@@ -21,6 +23,17 @@ export function registerModelLibraryRoutes(app: FastifyInstance, prisma: PrismaC
           configJson: true,
         },
         orderBy: [{ kind: 'asc' }, { id: 'asc' }],
+      }),
+      prisma.deviceModel.findMany({
+        select: {
+          id: true,
+          name: true,
+          fileId: true,
+          width: true,
+          depth: true,
+          configJson: true,
+        },
+        orderBy: { id: 'asc' },
       }),
       prisma.importedModel.findMany({
         select: {
@@ -36,6 +49,7 @@ export function registerModelLibraryRoutes(app: FastifyInstance, prisma: PrismaC
     ])
 
     const system: Array<Record<string, unknown>> = []
+    const devices: Array<Record<string, unknown>> = []
     const imported: Array<Record<string, unknown>> = []
     const skipped: string[] = []
 
@@ -43,6 +57,12 @@ export function registerModelLibraryRoutes(app: FastifyInstance, prisma: PrismaC
       const mapped = systemModelToLibraryEntry(row)
       if (mapped.entry) system.push(mapped.entry)
       else if (mapped.skipped) skipped.push(row.key)
+    }
+
+    for (const row of deviceRows) {
+      const mapped = deviceModelToLibraryEntry(row)
+      if (mapped.entry) devices.push(mapped.entry)
+      else if (mapped.skipped) skipped.push(`device-${row.id}`)
     }
 
     for (const row of importedRows) {
@@ -58,6 +78,6 @@ export function registerModelLibraryRoutes(app: FastifyInstance, prisma: PrismaC
     if (skippedHeader) {
       reply.header('X-Skipped-Models', skippedHeader)
     }
-    reply.send({ system, imported })
+    reply.send({ system, devices, imported })
   })
 }
