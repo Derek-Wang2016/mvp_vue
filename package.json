@@ -4,6 +4,7 @@
   "description": "轻量级 Web 可视化大屏平台 — Vue 3 重构版（工作目录）",
   "scripts": {
     "dev:editor": "pnpm -F @mvp-vue/editor dev",
+    "dev:hmi": "pnpm -F @mvp-vue/hmi dev",
     "dev:renderer": "pnpm -F @mvp-vue/renderer dev",
     "dev:server": "pnpm -F @mvp-vue/server dev",
     "build:editor": "pnpm -F @mvp-vue/editor build",

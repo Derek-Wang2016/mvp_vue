@@ -145,6 +145,15 @@ model DeviceModel {
   @@index([categoryId])
 }
 
+/// LVGL HMI 屏：设备可读的卡片 JSON，sample 仅编辑器预览使用
+model HmiScreen {
+  id         Int      @id @default(autoincrement())
+  name       String
+  schemaJson String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
 /// 3D 场景（整份 SceneDocument v2 快照）
 model Scene {
   id              Int         @id @default(autoincrement())

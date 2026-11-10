@@ -199,6 +199,16 @@ const STEPS: { id: string; sql: string }[] = [
     id: '2026-10-26-3d-scene',
     sql: SCENE_SQL,
   },
+  {
+    id: '2026-11-10-hmi-screen',
+    sql: `CREATE TABLE IF NOT EXISTS "HmiScreen" (
+      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+      "name" TEXT NOT NULL,
+      "schemaJson" TEXT NOT NULL,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  },
 ]
 
 export async function ensureDatabaseSchema(prisma: PrismaClient): Promise<string[]> {

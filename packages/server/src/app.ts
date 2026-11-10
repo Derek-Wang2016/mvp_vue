@@ -9,6 +9,7 @@ import { registerHostedImageRoutes } from './hostedImageRoutes.js'
 import { registerCustomIconRoutes } from './customIconRoutes.js'
 import { registerDemoRoutes } from './demoRoutes.js'
 import { registerThreeDRoutes } from './threeD/registerThreeDRoutes.js'
+import { registerHmiScreenRoutes } from './routes/hmiScreens.js'
 
 export async function buildApp(
   prisma: PrismaClient,
@@ -33,6 +34,7 @@ export async function buildApp(
   registerHostedImageRoutes(app, prisma)
   registerCustomIconRoutes(app, prisma)
   registerThreeDRoutes(app, prisma)
+  registerHmiScreenRoutes(app, prisma)
   registerDemoRoutes(app, prisma)
 
   return app
