@@ -154,6 +154,17 @@ model HmiScreen {
   updatedAt  DateTime @updatedAt
 }
 
+/// 床头卡装饰图，按 sha256 去重，与三维 AssetFile 分开
+model HmiFile {
+  id        Int      @id @default(autoincrement())
+  name      String
+  mime      String
+  size      Int
+  sha256    String   @unique
+  data      Bytes
+  createdAt DateTime @default(now())
+}
+
 /// 3D 场景（整份 SceneDocument v2 快照）
 model Scene {
   id              Int         @id @default(autoincrement())

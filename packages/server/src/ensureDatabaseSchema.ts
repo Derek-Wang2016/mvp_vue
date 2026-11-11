@@ -200,6 +200,22 @@ const STEPS: { id: string; sql: string }[] = [
     sql: SCENE_SQL,
   },
   {
+    id: '2026-11-11-hmi-file',
+    sql: `CREATE TABLE IF NOT EXISTS "HmiFile" (
+      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+      "name" TEXT NOT NULL,
+      "mime" TEXT NOT NULL,
+      "size" INTEGER NOT NULL,
+      "sha256" TEXT NOT NULL,
+      "data" BLOB NOT NULL,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  },
+  {
+    id: '2026-11-11-hmi-file-sha',
+    sql: `CREATE UNIQUE INDEX IF NOT EXISTS "HmiFile_sha256_key" ON "HmiFile"("sha256")`,
+  },
+  {
     id: '2026-11-10-hmi-screen',
     sql: `CREATE TABLE IF NOT EXISTS "HmiScreen" (
       "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,

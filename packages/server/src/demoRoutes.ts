@@ -10,6 +10,7 @@ import {
 import { buildCardListResponse, buildCardResponse } from './cardListDemo.js'
 import { buildWardKvSingleResponse, buildWardKvMultiResponse } from './wardKvStatsDemo.js'
 import { buildRoomStateResponse } from './roomStateDemo.js'
+import { buildHmiPatientResponse } from './hmiPatientDemo.js'
 
 function extractByPath(obj: unknown, path: string): unknown {
   const clean = path.startsWith('$') ? path.slice(1) : path
@@ -144,6 +145,12 @@ export function registerDemoRoutes(app: FastifyInstance, prisma: PrismaClient) {
       reply.status(502).send({ error: message })
     }
   })
+
+  const sendHmiPatient = async (_req: unknown, reply: { send: (body: unknown) => unknown }) => {
+    reply.send(buildHmiPatientResponse())
+  }
+  app.get('/api/demo/hmi-patient', sendHmiPatient)
+  app.post('/api/demo/hmi-patient', sendHmiPatient)
 
   app.get('/api/demo/card-list', async (req, reply) => {
     const result = buildCardListResponse(req.query as Record<string, unknown>)
