@@ -615,70 +615,75 @@ export const useEditorStore = defineStore('editor', () => {
     triggerRef(components)
   }
 
-  /** 水平等距：在选区外框内按相邻组件外缘相等间距重排（左缘 min(x)，右缘 max(x+w)） */
+  /**
+   * 在首尾图元之间等分间距。
+   * 水平：最左图元左缘到最右图元右缘；垂直：最上图元上缘到最下图元下缘。
+   * 首尾坐标保持不动，只平移中间图元，相邻外缘间距相同（间距可以为负）。
+   */
+  function distributeOrigins(
+    units: AlignUnit[],
+    axis: 'x' | 'y',
+  ): Map<string, { x: number; y: number }> | null {
+    const sorted = [...units].sort((a, b) => a.bounds[axis] - b.bounds[axis])
+    if (sorted.length < 3) return null
+
+    const sizeKey = axis === 'x' ? 'w' : 'h'
+    const first = sorted[0]!
+    const last = sorted[sorted.length - 1]!
+    const spanStart = first.bounds[axis]
+    const spanEnd = last.bounds[axis] + last.bounds[sizeKey]
+    const totalSize = sorted.reduce((sum, unit) => sum + unit.bounds[sizeKey], 0)
+    const gap = (spanEnd - spanStart - totalSize) / (sorted.length - 1)
+    if (!Number.isFinite(gap)) return null
+
+    const targetOriginByKey = new Map<string, { x: number; y: number }>()
+    let cursor = spanStart
+    sorted.forEach((unit, index) => {
+      const isEnd = index === 0 || index === sorted.length - 1
+      const origin = isEnd ? unit.bounds[axis] : Math.round(cursor)
+      targetOriginByKey.set(
+        unit.key,
+        axis === 'x'
+          ? { x: origin, y: unit.bounds.y }
+          : { x: unit.bounds.x, y: origin },
+      )
+      cursor += unit.bounds[sizeKey] + gap
+    })
+
+    const changed = sorted.some((unit) => {
+      const target = targetOriginByKey.get(unit.key)!
+      return target.x !== unit.bounds.x || target.y !== unit.bounds.y
+    })
+    if (!changed) return null
+    return targetOriginByKey
+  }
+
+  /** 水平等距：最左图元左缘到最右图元右缘，中间图元间距相等 */
   function distributeSelectedComponentsHorizontal() {
     const ids = selectedIds.value
     if (ids.length < 2 || hasLockedInSelection(ids)) return
 
     const units = buildAlignUnits(components.value, ids)
-    if (units.length < 2) return
+    const targetOriginByKey = distributeOrigins(units, 'x')
+    if (!targetOriginByKey) return
 
-    const sorted = [...units].sort((a, b) => a.bounds.x - b.bounds.x)
-    const leftBound = Math.min(...units.map((u) => u.bounds.x))
-    const rightBound = Math.max(...units.map((u) => u.bounds.x + u.bounds.w))
-    const totalWidth = sorted.reduce((s, u) => s + u.bounds.w, 0)
-    const gap = (rightBound - leftBound - totalWidth) / (sorted.length - 1)
-    if (!Number.isFinite(gap)) return
-
-    const targetOriginByKey = new Map<string, { x: number; y: number }>()
-    const step = Math.max(0, gap)
-    let cursor = leftBound
-    for (const u of sorted) {
-      targetOriginByKey.set(u.key, { x: Math.round(cursor), y: u.bounds.y })
-      cursor += u.bounds.w + step
-    }
-
-    const posById = memberPositionsFromUnitOrigins(components.value, units, targetOriginByKey)
-    const changed = sorted.some((u) => {
-      const target = targetOriginByKey.get(u.key)!
-      return target.x !== u.bounds.x || target.y !== u.bounds.y
-    })
-    if (!changed) return
-
-    applyComponentPositions(posById)
+    applyComponentPositions(
+      memberPositionsFromUnitOrigins(components.value, units, targetOriginByKey),
+    )
   }
 
-  /** 垂直等距：在选区外框内按相邻组件外缘相等间距重排（上缘 min(y)，下缘 max(y+h)） */
+  /** 垂直等距：最上图元上缘到最下图元下缘，中间图元间距相等 */
   function distributeSelectedComponentsVertical() {
     const ids = selectedIds.value
     if (ids.length < 2 || hasLockedInSelection(ids)) return
 
     const units = buildAlignUnits(components.value, ids)
-    if (units.length < 2) return
+    const targetOriginByKey = distributeOrigins(units, 'y')
+    if (!targetOriginByKey) return
 
-    const sorted = [...units].sort((a, b) => a.bounds.y - b.bounds.y)
-    const topBound = Math.min(...units.map((u) => u.bounds.y))
-    const bottomBound = Math.max(...units.map((u) => u.bounds.y + u.bounds.h))
-    const totalHeight = sorted.reduce((s, u) => s + u.bounds.h, 0)
-    const gap = (bottomBound - topBound - totalHeight) / (sorted.length - 1)
-    if (!Number.isFinite(gap)) return
-
-    const targetOriginByKey = new Map<string, { x: number; y: number }>()
-    const step = Math.max(0, gap)
-    let cursor = topBound
-    for (const u of sorted) {
-      targetOriginByKey.set(u.key, { x: u.bounds.x, y: Math.round(cursor) })
-      cursor += u.bounds.h + step
-    }
-
-    const posById = memberPositionsFromUnitOrigins(components.value, units, targetOriginByKey)
-    const changed = sorted.some((u) => {
-      const target = targetOriginByKey.get(u.key)!
-      return target.x !== u.bounds.x || target.y !== u.bounds.y
-    })
-    if (!changed) return
-
-    applyComponentPositions(posById)
+    applyComponentPositions(
+      memberPositionsFromUnitOrigins(components.value, units, targetOriginByKey),
+    )
   }
 
   function setComponentRotate(id: string, rotate: number, recordHistory = true) {
