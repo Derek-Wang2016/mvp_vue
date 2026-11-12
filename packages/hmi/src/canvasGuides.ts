@@ -15,14 +15,6 @@ function at(values: readonly number[], index: number) {
   return values[index] ?? 0
 }
 
-function pickOnePerAxis(lines: AlignHit[]): AlignHit[] {
-  const pick = (axis: GuideAxis) => {
-    const list = lines.filter((line) => line.axis === axis)
-    return list.find((line) => line.center) ?? list[0] ?? null
-  }
-  return [pick('x'), pick('y')].filter((line): line is AlignHit => line != null)
-}
-
 export function alignEdges(moving: Box[], others: Box[], threshold: number): AlignHit[] {
   const lines: AlignHit[] = []
   const seen = new Set<string>()
@@ -51,7 +43,7 @@ export function alignEdges(moving: Box[], others: Box[], threshold: number): Ali
       }
     }
   }
-  return pickOnePerAxis(lines)
+  return lines
 }
 
 /** 边或中线靠近标尺参考线或其它对象时吸附。 */
@@ -70,12 +62,12 @@ export function snapDrag(rawDx: number, rawDy: number, scale: number, moving: Bo
     const delta = target - (edge + raw)
     const abs = Math.abs(delta)
     if (abs >= threshold) return
-    if (axis === 'x' && ((center && !bestDxCenter) || (abs < bestDxAbs && center === bestDxCenter))) {
+    if (axis === 'x' && (abs < bestDxAbs || (abs === bestDxAbs && center && !bestDxCenter))) {
       bestDxAbs = abs
       bestDx = delta
       bestDxCenter = center
     }
-    if (axis === 'y' && ((center && !bestDyCenter) || (abs < bestDyAbs && center === bestDyCenter))) {
+    if (axis === 'y' && (abs < bestDyAbs || (abs === bestDyAbs && center && !bestDyCenter))) {
       bestDyAbs = abs
       bestDy = delta
       bestDyCenter = center

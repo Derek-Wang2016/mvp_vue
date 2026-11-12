@@ -3,11 +3,15 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useHmiStore } from '../stores/hmiStore'
 import { clampTranslation, screenBoxes } from '../geometry'
+import type { HmiShape } from '../types'
 import { snapDrag, type Box } from '../canvasGuides'
 import Stage from './Stage.vue'
 import HmiRulers from './HmiRulers.vue'
 
-const emit = defineEmits<{ contextmenu: [event: MouseEvent, key: string] }>()
+const emit = defineEmits<{
+  contextmenu: [event: MouseEvent, key: string]
+  notice: [message: string | null]
+}>()
 const props = defineProps<{ showGrid: boolean; showPosition: boolean }>()
 
 const store = useHmiStore()
@@ -22,7 +26,11 @@ let observer: ResizeObserver | null = null
 const boxes = computed(() => screenBoxes(doc.value))
 const selectedBoxes = computed(() => boxes.value.filter((box) => selectedKeys.value.includes(box.key)))
 const otherBoxes = computed<Box[]>(() => boxes.value
-  .filter((box) => !selectedKeys.value.includes(box.key))
+  .filter((box) => {
+    if (selectedKeys.value.includes(box.key)) return false
+    const fullBleed = box.x <= 1 && box.y <= 1 && box.w >= doc.value.screen.w - 2 && box.h >= doc.value.screen.h - 2
+    return !fullBleed
+  })
   .map((box) => ({ x: box.x, y: box.y, r: box.x + box.w, b: box.y + box.h })))
 
 function zoomToFit() {
@@ -243,6 +251,36 @@ function handleStyle(dir: string) {
   return style
 }
 
+const PALETTE_MIME = 'application/x-hmi-component'
+
+function isPaletteDrag(dt: DataTransfer): boolean {
+  return Array.from(dt.types).includes(PALETTE_MIME) || Array.from(dt.types).includes('text/plain')
+}
+
+function onPaletteDragOver(event: DragEvent) {
+  const dt = event.dataTransfer
+  if (!dt || !isPaletteDrag(dt)) return
+  event.preventDefault()
+  dt.dropEffect = 'copy'
+}
+
+function onPaletteDrop(event: DragEvent) {
+  const dt = event.dataTransfer
+  if (!dt) return
+  const raw = dt.getData(PALETTE_MIME) || dt.getData('text/plain')
+  const [kind, type] = raw.split(':')
+  if (kind !== 'shape' && kind !== 'card') return
+  event.preventDefault()
+  const rect = canvasRef.value?.getBoundingClientRect()
+  if (!rect) return
+  const x = Math.max(0, Math.min(doc.value.screen.w - 8, (event.clientX - rect.left) / scale.value))
+  const y = Math.max(0, Math.min(doc.value.screen.h - 8, (event.clientY - rect.top) / scale.value))
+  const error = kind === 'card'
+    ? store.addCard(x, y)
+    : store.addShape(type as HmiShape['type'], x, y)
+  emit('notice', error)
+}
+
 function onWheel(event: WheelEvent) {
   if (!event.ctrlKey && !event.metaKey) return
   event.preventDefault()
@@ -265,6 +303,9 @@ function onWheel(event: WheelEvent) {
     <div
       ref="containerRef"
       class="canvas-zoom-container editor-scrollbar relative min-h-0 min-w-0 flex-1 overflow-auto bg-slate-950"
+      @dragenter="onPaletteDragOver"
+      @dragover="onPaletteDragOver"
+      @drop="onPaletteDrop"
       @wheel="onWheel"
     >
       <div :style="{ width: (doc.screen.w * scale + 48) + 'px', height: (doc.screen.h * scale + 48) + 'px' }" class="relative">

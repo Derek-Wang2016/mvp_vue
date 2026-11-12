@@ -86,3 +86,42 @@ export async function deleteScreen(id: number) {
   const res = await fetch(`${getApiBase()}/api/hmi/screens/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('delete failed')
 }
+
+export interface HostedImageItem {
+  id: number
+  name: string
+  mime: string
+  url: string
+  createdAt: string
+}
+
+export function hostedImageUrl(id: number): string {
+  return `${getApiBase()}/api/images/${id}`
+}
+
+export async function listHostedImages(): Promise<HostedImageItem[]> {
+  const res = await fetch(`${getApiBase()}/api/images`)
+  if (!res.ok) throw new Error('加载图片库失败')
+  return res.json() as Promise<HostedImageItem[]>
+}
+
+export async function uploadHostedImage(name: string, dataUrl: string): Promise<HostedImageItem> {
+  const res = await fetch(`${getApiBase()}/api/images`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, dataUrl }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: string }
+    throw new Error(err.error ?? '上传失败')
+  }
+  return res.json() as Promise<HostedImageItem>
+}
+
+export async function deleteHostedImage(id: number): Promise<void> {
+  const res = await fetch(`${getApiBase()}/api/images/${id}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: string }
+    throw new Error(err.error ?? '删除失败')
+  }
+}

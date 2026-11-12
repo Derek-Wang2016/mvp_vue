@@ -4,6 +4,18 @@ import { bindingCount } from '../resolve'
 import { cardKey, clampTranslation, screenBoxes, shapeKey } from '../geometry'
 import { currentPage, LIMITS, type HmiCard, type HmiDocument, type HmiItem, type HmiPage, type HmiShape, type Selection } from '../types'
 
+/** 横向列宽按 12 份等分，例如 1 列是 12，2 列是 6、6。 */
+function equalColumnSpans(count: number): number[] {
+  const n = Math.max(1, count)
+  const base = Math.floor(LIMITS.cols / n)
+  let extra = LIMITS.cols - base * n
+  return Array.from({ length: n }, () => {
+    const span = base + (extra > 0 ? 1 : 0)
+    if (extra > 0) extra -= 1
+    return span
+  })
+}
+
 export const useHmiStore = defineStore('hmi', {
   state: () => ({
     screenId: null as number | null,
@@ -84,6 +96,12 @@ export const useHmiStore = defineStore('hmi', {
       this.doc.active = name
       this.clearSelection()
     },
+    patchPage(patch: Partial<Pick<HmiPage, 'bg' | 'bgImage' | 'bgOpa'>>) {
+      const name = this.doc.active
+      const page = this.doc.pages[name]
+      if (!page) return
+      this.doc.pages[name] = { ...page, ...patch }
+    },
     addPage(name: string): string | null {
       const pageName = name.trim()
       if (!pageName) return '请填写页面名称'
@@ -104,43 +122,45 @@ export const useHmiStore = defineStore('hmi', {
       this.selection = null
       this.selectedKeys = []
     },
-    addShape(type: HmiShape['type']): string | null {
+    addShape(type: HmiShape['type'], x = 40, y = 80): string | null {
       if (type === 'line' && this.page.shapes.filter((shape) => shape.type === 'line').length >= LIMITS.lines) {
         return `线条最多 ${LIMITS.lines} 条`
       }
-      const { w, h } = this.doc.screen
+      const { w } = this.doc.screen
+      const px = Math.round(x)
+      const py = Math.round(y)
       if (type === 'line') {
-        this.page.shapes.push({ type, x1: 40, y1: 80, x2: Math.min(w, 400), y2: 80, width: 1, color: '#7EC8E3' })
+        this.page.shapes.push({ type, x1: px, y1: py, x2: Math.min(w, px + 360), y2: py, width: 1, color: '#7EC8E3' })
       } else if (type === 'image') {
-        this.page.shapes.push({ type, x: 40, y: 80, w: 64, h: 64, src: 'assets/logo.png' })
+        this.page.shapes.push({ type, x: px, y: py, w: 64, h: 64, src: 'assets/logo.png' })
       } else if (type === 'icon') {
-        this.page.shapes.push({ type, x: 40, y: 80, w: 40, h: 40, prop: 'TEND_NAME' })
+        this.page.shapes.push({ type, x: px, y: py, w: 40, h: 40, prop: 'TEND_NAME' })
       } else if (type === 'block') {
         this.page.shapes.push({
-          type, x: 40, y: 80, w: 320, h: 180,
+          type, x: px, y: py, w: 320, h: 180,
           bg: '#EBF7FC', color: '#222222', font: 'default',
           radius: 8, border_w: 1, border_color: '#7EC8E3',
           key: '', params: '{}',
         })
       } else if (type === 'button') {
         this.page.shapes.push({
-          type, x: 40, y: 80, w: 160, h: 56,
+          type, x: px, y: py, w: 160, h: 56,
           text: '按钮', color: '#FFFFFF', font: 'default', icon_pos: 'left',
           bg: '#0E3A5F', radius: 8,
           action: 'page', page: 'index',
         })
       } else {
-        this.page.shapes.push({ type, x: 40, y: 80, w: 200, h: 80, bg: type === 'circle' ? '#EBF7FC' : '#0E3A5F', radius: 0 })
+        this.page.shapes.push({ type, x: px, y: py, w: 200, h: 80, bg: type === 'circle' ? '#EBF7FC' : '#0E3A5F', radius: 0 })
       }
       this.selection = { kind: 'shape', index: this.page.shapes.length - 1 }
       this.selectedKeys = [shapeKey(this.page.shapes.length - 1)]
       return null
     },
-    addCard(): string | null {
+    addCard(x = 40, y = 80): string | null {
       const card: HmiCard = {
-        x: 40, y: 80, w: 240, h: 120,
+        x: Math.round(x), y: Math.round(y), w: 240, h: 120,
         bg: '#EBF7FC', radius: 10,
-        cols: 1, rows: 1, gap: 0,
+        cols: LIMITS.cols, rows: 1, gap: 0,
         items: [],
       }
       this.page.cards.push(card)
@@ -149,18 +169,83 @@ export const useHmiStore = defineStore('hmi', {
       return null
     },
     addItem(type: HmiItem['type']): string | null {
+      if (type === 'value') return '请在对话框里填写 KEY 和位置'
+      return this.insertItem(type, {})
+    },
+    insertItem(
+      type: HmiItem['type'],
+      options: { prop?: string; place?: 'row-before' | 'row-after' | 'col-before' | 'col-after' },
+    ): string | null {
       const cardIndex = this.selection?.kind === 'item' ? this.selection.card : this.selection?.kind === 'card' ? this.selection.index : -1
       if (cardIndex < 0) return '先选中一张卡片'
       const card = this.page.cards[cardIndex]
       if (!card) return '先选中一张卡片'
       if (type !== 'label' && bindingCount(this.doc) >= LIMITS.bindings) return `绑定字段最多 ${LIMITS.bindings} 个`
+      const anchor = this.selection?.kind === 'item' ? card.items[this.selection.index] : card.items[card.items.length - 1]
+      const anchorRow = anchor?.row ?? 0
+      const anchorCol = anchor?.col ?? 0
+      const place = options.place ?? 'row-after'
+      const vertical = place === 'row-before' || place === 'row-after'
+      const insertAt = vertical
+        ? (place === 'row-before' ? anchorRow : anchorRow + (anchor ? 1 : 0))
+        : (place === 'col-before' ? anchorCol : anchorCol + (anchor ? 1 : 0))
+      if (anchor && vertical) {
+        for (const item of card.items) {
+          if ((item.row ?? 0) >= insertAt) item.row = (item.row ?? 0) + 1
+        }
+      }
+      let placedCol = anchorCol
+      let placedSpan = anchor?.colspan ?? LIMITS.cols
+      if (vertical) {
+        const rows = Math.max(card.rows ?? 1, card.row_h?.length ?? 1) + (anchor ? 1 : 0)
+        card.rows = Math.max(rows, insertAt + 1)
+        if (card.row_h?.length && anchor) {
+          const height = card.row_h[Math.min(insertAt, card.row_h.length - 1)] ?? 0
+          const next = card.row_h.slice()
+          next.splice(insertAt, 0, height)
+          card.row_h = next
+        }
+      } else {
+        const groups = new Map<number, HmiItem[]>()
+        for (const item of card.items) {
+          const key = item.col ?? 0
+          const list = groups.get(key) ?? []
+          list.push(item)
+          groups.set(key, list)
+        }
+        const ordered = [...groups.keys()].sort((a, b) => a - b).map((key) => groups.get(key)!)
+        const anchorKey = anchor?.col ?? ordered[ordered.length - 1]?.[0]?.col
+        let groupIndex = ordered.findIndex((group) => (group[0]?.col ?? 0) === anchorKey)
+        if (groupIndex < 0) groupIndex = ordered.length
+        const at = place === 'col-before' ? groupIndex : groupIndex + (anchor ? 1 : 0)
+        ordered.splice(at, 0, [])
+        const spans = equalColumnSpans(ordered.length)
+        let cursor = 0
+        ordered.forEach((group, index) => {
+          const span = spans[index] ?? 1
+          for (const item of group) {
+            item.col = cursor
+            item.colspan = span
+          }
+          if (index === at) {
+            placedCol = cursor
+            placedSpan = span
+          }
+          cursor += span
+        })
+        card.cols = LIMITS.cols
+        card.col_w = undefined
+      }
       const item: HmiItem = type === 'label'
-        ? { type, text: '标题', font: 'default', color: '#333333', align: 'center' }
+        ? { type, text: '文字', font: 'default', color: '#333333', align: 'center' }
         : type === 'qrcode'
-          ? { type, prop: 'QRCODE', size: 140, align: 'center' }
+          ? { type, prop: options.prop || 'QRCODE', align: 'center' }
           : type === 'split'
-            ? { type, prop: 'SAFETAKECARE', split: ',', font: '33', color: '#FFFFFF', item_h: 73, gap: 8, default_color: '#7C7C7C' }
-            : { type, prop: 'PATIENT_NAME', font: 'status', color: '#222222', align: 'center' }
+            ? { type, prop: options.prop || 'SAFETAKECARE', split: ',', font: '33', color: '#FFFFFF', item_h: 73, gap: 8, default_color: '#7C7C7C' }
+            : { type, prop: options.prop || 'PATIENT_NAME', font: 'status', color: '#222222', align: 'center' }
+      item.row = vertical ? insertAt : anchorRow
+      item.col = vertical ? 0 : placedCol
+      item.colspan = vertical ? (card.cols ?? LIMITS.cols) : placedSpan
       card.items.push(item)
       this.selection = { kind: 'item', card: cardIndex, index: card.items.length - 1 }
       return null
@@ -361,7 +446,7 @@ export const useHmiStore = defineStore('hmi', {
     patchCard(index: number, patch: Partial<HmiCard>) {
       const card = this.page.cards[index]
       if (!card) return
-      if ((patch.cols ?? card.cols ?? 1) > LIMITS.tracks || (patch.rows ?? card.rows ?? 1) > LIMITS.tracks) return
+      if ((patch.cols ?? card.cols ?? 1) > LIMITS.cols || (patch.rows ?? card.rows ?? 1) > LIMITS.tracks) return
       Object.assign(card, patch)
     },
     patchItem(cardIndex: number, index: number, patch: Partial<HmiItem>) {
@@ -451,6 +536,9 @@ function asPage(value: unknown): HmiPage | null {
   return {
     shapes: page.shapes,
     cards: page.cards.map((card) => ({ ...card, items: card.items ?? [] })),
+    bg: page.bg,
+    bgImage: page.bgImage,
+    bgOpa: page.bgOpa,
   }
 }
 

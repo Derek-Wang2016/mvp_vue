@@ -4,6 +4,11 @@ import { deleteHostedImage, hostedImageUrl, listHostedImages, uploadHostedImage,
 import { getApiBase } from '../config'
 import ConfirmDialog from './ConfirmDialog.vue'
 
+const props = withDefaults(defineProps<{
+  /** 为 false 时只浏览、上传、删除和复制链接，不把图片选进组件 */
+  selectable?: boolean
+}>(), { selectable: true })
+
 const emit = defineEmits<{
   close: []
   select: [url: string]
@@ -88,7 +93,7 @@ onMounted(() => { void load() })
   <div class="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center" @mousedown.self="emit('close')">
     <div class="w-[720px] max-w-[94vw] max-h-[80vh] flex flex-col rounded-lg bg-[#121a26] border border-white/10 shadow-xl">
       <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
-        <p class="text-sm text-slate-200">图片库</p>
+        <p class="text-sm text-slate-200">{{ props.selectable ? '图片库' : '图片管理' }}</p>
         <div class="flex items-center gap-2">
           <button
             type="button"
@@ -106,12 +111,12 @@ onMounted(() => { void load() })
         <p v-else-if="items.length === 0" class="text-xs text-slate-500">还没有图片，点击上传。</p>
         <div v-else class="grid grid-cols-4 gap-3">
           <div v-for="item in items" :key="item.id" class="rounded-md border border-white/10 bg-white/[0.03] p-2">
-            <button type="button" class="block w-full h-24 bg-black/30 rounded" @click="emit('select', absoluteUrl(item))">
+            <button type="button" class="block w-full h-24 bg-black/30 rounded" @click="props.selectable ? emit('select', absoluteUrl(item)) : copyLink(item)">
               <img :src="hostedImageUrl(item.id)" :alt="item.name" class="w-full h-full object-contain" />
             </button>
             <p class="mt-1 text-[11px] text-slate-300 truncate" :title="item.name">{{ item.name }}</p>
             <div class="mt-1 flex gap-2 text-[11px]">
-              <button type="button" class="text-indigo-300 hover:text-indigo-200" @click="emit('select', absoluteUrl(item))">使用</button>
+              <button v-if="props.selectable" type="button" class="text-indigo-300 hover:text-indigo-200" @click="emit('select', absoluteUrl(item))">使用</button>
               <button type="button" class="text-slate-400 hover:text-slate-200" @click="copyLink(item)">{{ copiedId === item.id ? '已复制' : '复制链接' }}</button>
               <button type="button" class="text-rose-300 hover:text-rose-200" @click="pendingDelete = item">删除</button>
             </div>

@@ -12,6 +12,7 @@ import PropertyPanel from './components/PropertyPanel.vue'
 import OpenDialog from './components/OpenDialog.vue'
 import ViewJsonDialog from './components/ViewJsonDialog.vue'
 import ColorPickerDialog from './components/ColorPickerDialog.vue'
+import ImageLibraryDialog from './components/ImageLibraryDialog.vue'
 
 const store = useEditorStore()
 const {
@@ -25,6 +26,7 @@ const saveMsg = ref('')
 const lastSavedAt = ref<string | null>(null)
 const dialogOpen = ref(false)
 const jsonDialogOpen = ref(false)
+const imageLibraryOpen = ref(false)
 const showGrid = ref(true)
 const showComponentPosition = ref(false)
 const pageOptions = ref<PageListItem[]>([])
@@ -651,6 +653,9 @@ const alignBtnClass = (enabled: boolean) =>
 
       <!-- file ops：固定在右侧，状态提示不占按钮宽度 -->
       <div class="ml-auto flex items-center gap-2 shrink-0">
+      <button class="text-slate-400 hover:text-slate-200 text-xs px-2.5 py-1 rounded-md border border-white/10 bg-white/5 hover:bg-white/10 transition-colors" @click="imageLibraryOpen = true">
+        图片
+      </button>
       <button class="text-slate-400 hover:text-slate-200 text-xs px-2.5 py-1 rounded-md border border-white/10 bg-white/5 hover:bg-white/10 transition-colors" @click="jsonDialogOpen = true">
         JSON
       </button>
@@ -700,6 +705,7 @@ const alignBtnClass = (enabled: boolean) =>
     </div>
 
     <!-- Dialogs -->
+    <ImageLibraryDialog v-if="imageLibraryOpen" :selectable="false" @close="imageLibraryOpen = false" />
     <OpenDialog v-if="dialogOpen" @close="handleOpenDialogClose" />
     <ViewJsonDialog :open="jsonDialogOpen" @close="jsonDialogOpen = false" />
     <ColorPickerDialog />

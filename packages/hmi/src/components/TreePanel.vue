@@ -14,7 +14,8 @@ function shapeLabel(shape: HmiShape, index: number) {
 }
 
 function itemLabel(item: HmiCard['items'][number]) {
-  if (item.type === 'label') return item.text || '标题'
+  if (item.type === 'label') return item.text || '文字'
+  if (item.type === 'value') return item.prop || '数据'
   return item.prop || item.type
 }
 
@@ -24,7 +25,7 @@ function on(kind: Selection) {
 </script>
 
 <template>
-  <div class="space-y-3 text-sm">
+  <div class="space-y-2 text-xs">
     <section>
       <div class="mb-1 text-slate-500">形状</div>
       <button

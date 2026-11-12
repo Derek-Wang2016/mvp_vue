@@ -3,17 +3,20 @@ import { computed, ref } from 'vue'
 import { ICON_OPTIONS } from '../icons/catalog'
 import { LVGL_SYMBOLS, lvglSymbolName } from '../icons/lvglSymbols'
 import TablerImport from './TablerImport.vue'
-import { iconId } from '../resolve'
+import { iconId, qrSide } from '../resolve'
 import { resolveIcon } from '../icons/lvglSvg'
-import type { HmiCard, HmiItem, HmiShape, Selection } from '../types'
+import type { HmiCard, HmiItem, HmiPage, HmiShape, Selection } from '../types'
 import { getApiBase } from '../config'
 import ColorField from './ColorField.vue'
+import NumberField from './NumberField.vue'
 
 const props = defineProps<{
   selection: Selection | null
   shape?: HmiShape
   card?: HmiCard
   item?: HmiItem
+  screen: { w: number; h: number }
+  page: HmiPage
   colors?: Record<string, string>
   icons?: Record<string, string>
   library?: Record<string, string>
@@ -23,6 +26,8 @@ const emit = defineEmits<{
   patchShape: [patch: Partial<HmiShape>]
   patchCard: [patch: Partial<HmiCard>]
   patchItem: [patch: Partial<HmiItem>]
+  patchScreen: [w: number, h: number]
+  patchPage: [patch: Partial<Pick<HmiPage, 'bg' | 'bgImage' | 'bgOpa'>>]
   patchColors: [colors: Record<string, string>]
   patchIcons: [icons: Record<string, string>]
   patchLibrary: [library: Record<string, string>]
@@ -41,6 +46,7 @@ const colorName = ref('')
 const colorImport = ref('')
 const colorImportMsg = ref('')
 const dictTab = ref<'color' | 'icon'>('color')
+const pageTab = ref<'size' | 'page' | 'dict'>('page')
 
 async function uploadImage(event: Event) {
   const input = event.target as HTMLInputElement
@@ -245,7 +251,28 @@ function colorTable(parsed: unknown): Record<string, string> | null {
 </script>
 
 <template>
-  <div v-if="!selection" class="p-3 text-sm">
+  <div v-if="!selection" class="space-y-2 p-2.5 text-[11px]">
+    <div class="mb-3 grid grid-cols-3 gap-1 rounded border border-slate-700 p-1">
+      <button type="button" class="rounded py-1 text-xs" :class="pageTab === 'size' ? 'bg-slate-700 text-slate-100' : 'text-slate-400'" @click="pageTab = 'size'">尺寸</button>
+      <button type="button" class="rounded py-1 text-xs" :class="pageTab === 'page' ? 'bg-slate-700 text-slate-100' : 'text-slate-400'" @click="pageTab = 'page'">页面</button>
+      <button type="button" class="rounded py-1 text-xs" :class="pageTab === 'dict' ? 'bg-slate-700 text-slate-100' : 'text-slate-400'" @click="pageTab = 'dict'">字典</button>
+    </div>
+    <div v-if="pageTab === 'size'" class="space-y-2">
+      <p class="text-xs text-slate-500">整个屏幕共用这一组宽高。</p>
+      <label class="block">宽<NumberField :value="screen.w" @change="emit('patchScreen', num(($event.target as HTMLInputElement).value), screen.h)" /></label>
+      <label class="block">高<NumberField :value="screen.h" @change="emit('patchScreen', screen.w, num(($event.target as HTMLInputElement).value))" /></label>
+    </div>
+    <div v-else-if="pageTab === 'page'" class="space-y-2">
+      <p class="text-xs text-slate-500">当前页的底色和铺满图片。不用再放一张满屏矩形。</p>
+      <ColorField plain label="背景色" :model-value="page.bg ?? ''" @update="emit('patchPage', { bg: $event || undefined })" />
+      <label class="block">图片路径
+        <input class="field" :value="page.bgImage ?? ''" placeholder="assets/bg.png 或图片链接" @change="emit('patchPage', { bgImage: ($event.target as HTMLInputElement).value.trim() || undefined })" />
+      </label>
+      <label class="block">透明度 0–100
+        <NumberField min="0" max="100" :value="page.bgOpa ?? 100" @change="emit('patchPage', { bgOpa: Math.max(0, Math.min(100, num(($event.target as HTMLInputElement).value))) })" />
+      </label>
+    </div>
+    <template v-else>
     <div class="mb-3 grid grid-cols-2 gap-1 rounded border border-slate-700 p-1">
       <button type="button" class="rounded py-1 text-xs" :class="dictTab === 'color' ? 'bg-slate-700 text-slate-100' : 'text-slate-400'" @click="dictTab = 'color'">颜色</button>
       <button type="button" class="rounded py-1 text-xs" :class="dictTab === 'icon' ? 'bg-slate-700 text-slate-100' : 'text-slate-400'" @click="dictTab = 'icon'">图标</button>
@@ -296,28 +323,29 @@ function colorTable(parsed: unknown): Record<string, string> | null {
       </div>
       <TablerImport v-if="tablerOpen" @add="addLibraryIcon" @close="tablerOpen = false" />
     </div>
+    </template>
   </div>
-  <div v-else-if="shape" class="space-y-2 p-3 text-sm">
+  <div v-else-if="shape" class="space-y-2 p-2.5 text-[11px]">
     <label class="flex items-center gap-2">锁定
       <input type="checkbox" :checked="!!shape.locked" @change="emit('patchShape', { locked: ($event.target as HTMLInputElement).checked })" />
     </label>
     <div class="text-slate-400">{{ shape.type }}</div>
     <template v-if="shape.type === 'line'">
       <div class="grid grid-cols-2 gap-2">
-        <label>x1<input class="field" type="number" :value="shape.x1" @input="emit('patchShape', { x1: num(($event.target as HTMLInputElement).value) })" /></label>
-        <label>y1<input class="field" type="number" :value="shape.y1" @input="emit('patchShape', { y1: num(($event.target as HTMLInputElement).value) })" /></label>
-        <label>x2<input class="field" type="number" :value="shape.x2" @input="emit('patchShape', { x2: num(($event.target as HTMLInputElement).value) })" /></label>
-        <label>y2<input class="field" type="number" :value="shape.y2" @input="emit('patchShape', { y2: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>x1<NumberField :value="shape.x1" @input="emit('patchShape', { x1: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>y1<NumberField :value="shape.y1" @input="emit('patchShape', { y1: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>x2<NumberField :value="shape.x2" @input="emit('patchShape', { x2: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>y2<NumberField :value="shape.y2" @input="emit('patchShape', { y2: num(($event.target as HTMLInputElement).value) })" /></label>
       </div>
-      <label class="block">线宽<input class="field" type="number" :value="shape.width ?? 1" @input="emit('patchShape', { width: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label class="block">线宽<NumberField :value="shape.width ?? 1" @input="emit('patchShape', { width: num(($event.target as HTMLInputElement).value) })" /></label>
       <ColorField label="颜色" :model-value="shape.color ?? ''" @update="emit('patchShape', { color: $event })" />
     </template>
     <template v-else-if="shape.type === 'icon'">
       <div class="grid grid-cols-2 gap-2">
-        <label>x<input class="field" type="number" :value="shape.x" @input="emit('patchShape', { x: num(($event.target as HTMLInputElement).value) })" /></label>
-        <label>y<input class="field" type="number" :value="shape.y" @input="emit('patchShape', { y: num(($event.target as HTMLInputElement).value) })" /></label>
-        <label>宽<input class="field" type="number" :value="shape.w" @input="emit('patchShape', { w: num(($event.target as HTMLInputElement).value) })" /></label>
-        <label>高<input class="field" type="number" :value="shape.h" @input="emit('patchShape', { h: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>x<NumberField :value="shape.x" @input="emit('patchShape', { x: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>y<NumberField :value="shape.y" @input="emit('patchShape', { y: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>宽<NumberField :value="shape.w" @input="emit('patchShape', { w: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>高<NumberField :value="shape.h" @input="emit('patchShape', { h: num(($event.target as HTMLInputElement).value) })" /></label>
       </div>
       <label class="block">来源
         <select class="field" :value="shape.mode === 'static' ? 'static' : 'field'" @change="emit('patchShape', ($event.target as HTMLSelectElement).value === 'static' ? { mode: 'static', icon: shape.icon || 'care-1', color: shape.color || '#FFFFFF' } : { mode: 'field' })">
@@ -340,22 +368,22 @@ function colorTable(parsed: unknown): Record<string, string> | null {
     </template>
     <template v-else-if="shape.type === 'block'">
       <div class="grid grid-cols-2 gap-2">
-        <label>x<input class="field" type="number" :value="shape.x" @input="emit('patchShape', { x: num(($event.target as HTMLInputElement).value) })" /></label>
-        <label>y<input class="field" type="number" :value="shape.y" @input="emit('patchShape', { y: num(($event.target as HTMLInputElement).value) })" /></label>
-        <label>宽<input class="field" type="number" :value="shape.w" @input="emit('patchShape', { w: num(($event.target as HTMLInputElement).value) })" /></label>
-        <label>高<input class="field" type="number" :value="shape.h" @input="emit('patchShape', { h: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>x<NumberField :value="shape.x" @input="emit('patchShape', { x: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>y<NumberField :value="shape.y" @input="emit('patchShape', { y: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>宽<NumberField :value="shape.w" @input="emit('patchShape', { w: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>高<NumberField :value="shape.h" @input="emit('patchShape', { h: num(($event.target as HTMLInputElement).value) })" /></label>
       </div>
       <ColorField label="底色" :model-value="shape.bg ?? ''" @update="emit('patchShape', { bg: $event })" />
       <ColorField label="文字颜色" :model-value="shape.color ?? ''" @update="emit('patchShape', { color: $event })" />
       <label class="block">字号<input class="field" :value="shape.font ?? 'default'" @input="emit('patchShape', { font: ($event.target as HTMLInputElement).value })" /></label>
-      <label class="block">圆角<input class="field" type="number" :value="shape.radius ?? 0" @input="emit('patchShape', { radius: num(($event.target as HTMLInputElement).value) })" /></label>
-      <label class="block">边框宽<input class="field" type="number" :value="shape.border_w ?? 0" @input="emit('patchShape', { border_w: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label class="block">圆角<NumberField :value="shape.radius ?? 0" @input="emit('patchShape', { radius: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label class="block">边框宽<NumberField :value="shape.border_w ?? 0" @input="emit('patchShape', { border_w: num(($event.target as HTMLInputElement).value) })" /></label>
       <ColorField label="边框色" :model-value="shape.border_color ?? ''" @update="emit('patchShape', { border_color: $event })" />
-      <label class="block">阴影宽<input class="field" type="number" :value="shape.shadow?.width ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, width: num(($event.target as HTMLInputElement).value) } })" /></label>
+      <label class="block">阴影宽<NumberField :value="shape.shadow?.width ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, width: num(($event.target as HTMLInputElement).value) } })" /></label>
       <ColorField label="阴影色" :model-value="shape.shadow?.color ?? ''" @update="emit('patchShape', { shadow: { ...shape.shadow, color: $event } })" />
       <div class="grid grid-cols-2 gap-2">
-        <label>阴影 ofs_x<input class="field" type="number" :value="shape.shadow?.ofs_x ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, ofs_x: num(($event.target as HTMLInputElement).value) } })" /></label>
-        <label>阴影 ofs_y<input class="field" type="number" :value="shape.shadow?.ofs_y ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, ofs_y: num(($event.target as HTMLInputElement).value) } })" /></label>
+        <label>阴影 ofs_x<NumberField :value="shape.shadow?.ofs_x ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, ofs_x: num(($event.target as HTMLInputElement).value) } })" /></label>
+        <label>阴影 ofs_y<NumberField :value="shape.shadow?.ofs_y ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, ofs_y: num(($event.target as HTMLInputElement).value) } })" /></label>
       </div>
       <label class="block">功能 KEY
         <input class="field" maxlength="39" :value="shape.key ?? ''" placeholder="例如 PATIENT_LIST" @input="emit('patchShape', { key: ($event.target as HTMLInputElement).value })" />
@@ -372,10 +400,10 @@ function colorTable(parsed: unknown): Record<string, string> | null {
     </template>
     <template v-else-if="shape.type === 'button'">
       <div class="grid grid-cols-2 gap-2">
-        <label>x<input class="field" type="number" :value="shape.x" @input="emit('patchShape', { x: num(($event.target as HTMLInputElement).value) })" /></label>
-        <label>y<input class="field" type="number" :value="shape.y" @input="emit('patchShape', { y: num(($event.target as HTMLInputElement).value) })" /></label>
-        <label>宽<input class="field" type="number" :value="shape.w" @input="emit('patchShape', { w: num(($event.target as HTMLInputElement).value) })" /></label>
-        <label>高<input class="field" type="number" :value="shape.h" @input="emit('patchShape', { h: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>x<NumberField :value="shape.x" @input="emit('patchShape', { x: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>y<NumberField :value="shape.y" @input="emit('patchShape', { y: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>宽<NumberField :value="shape.w" @input="emit('patchShape', { w: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>高<NumberField :value="shape.h" @input="emit('patchShape', { h: num(($event.target as HTMLInputElement).value) })" /></label>
       </div>
       <label class="block">文字<input class="field" maxlength="39" :value="shape.text ?? ''" @input="emit('patchShape', { text: ($event.target as HTMLInputElement).value })" /></label>
       <label class="block">SVG 图标
@@ -401,14 +429,14 @@ function colorTable(parsed: unknown): Record<string, string> | null {
       </label>
       <ColorField label="文字颜色" :model-value="shape.color ?? '#FFFFFF'" @update="emit('patchShape', { color: $event })" />
       <ColorField label="底色" :model-value="shape.bg ?? ''" @update="emit('patchShape', { bg: $event })" />
-      <label class="block">圆角<input class="field" type="number" :value="shape.radius ?? 0" @input="emit('patchShape', { radius: num(($event.target as HTMLInputElement).value) })" /></label>
-      <label class="block">边框宽<input class="field" type="number" :value="shape.border_w ?? 0" @input="emit('patchShape', { border_w: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label class="block">圆角<NumberField :value="shape.radius ?? 0" @input="emit('patchShape', { radius: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label class="block">边框宽<NumberField :value="shape.border_w ?? 0" @input="emit('patchShape', { border_w: num(($event.target as HTMLInputElement).value) })" /></label>
       <ColorField label="边框色" :model-value="shape.border_color ?? ''" @update="emit('patchShape', { border_color: $event })" />
-      <label class="block">阴影宽<input class="field" type="number" :value="shape.shadow?.width ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, width: num(($event.target as HTMLInputElement).value) } })" /></label>
+      <label class="block">阴影宽<NumberField :value="shape.shadow?.width ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, width: num(($event.target as HTMLInputElement).value) } })" /></label>
       <ColorField label="阴影色" :model-value="shape.shadow?.color ?? ''" @update="emit('patchShape', { shadow: { ...shape.shadow, color: $event } })" />
       <div class="grid grid-cols-2 gap-2">
-        <label>阴影 ofs_x<input class="field" type="number" :value="shape.shadow?.ofs_x ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, ofs_x: num(($event.target as HTMLInputElement).value) } })" /></label>
-        <label>阴影 ofs_y<input class="field" type="number" :value="shape.shadow?.ofs_y ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, ofs_y: num(($event.target as HTMLInputElement).value) } })" /></label>
+        <label>阴影 ofs_x<NumberField :value="shape.shadow?.ofs_x ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, ofs_x: num(($event.target as HTMLInputElement).value) } })" /></label>
+        <label>阴影 ofs_y<NumberField :value="shape.shadow?.ofs_y ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, ofs_y: num(($event.target as HTMLInputElement).value) } })" /></label>
       </div>
       <label class="block">类型
         <select class="field" :value="shape.action" @change="emit('patchShape', { action: ($event.target as HTMLSelectElement).value as 'page' | 'function' })">
@@ -428,28 +456,28 @@ function colorTable(parsed: unknown): Record<string, string> | null {
     </template>
     <template v-else>
       <div class="grid grid-cols-2 gap-2">
-        <label>x<input class="field" type="number" :value="shape.x" @input="emit('patchShape', { x: num(($event.target as HTMLInputElement).value) })" /></label>
-        <label>y<input class="field" type="number" :value="shape.y" @input="emit('patchShape', { y: num(($event.target as HTMLInputElement).value) })" /></label>
-        <label>宽<input class="field" type="number" :value="shape.w" @input="emit('patchShape', { w: num(($event.target as HTMLInputElement).value) })" /></label>
-        <label>高<input class="field" type="number" :value="shape.h" @input="emit('patchShape', { h: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>x<NumberField :value="shape.x" @input="emit('patchShape', { x: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>y<NumberField :value="shape.y" @input="emit('patchShape', { y: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>宽<NumberField :value="shape.w" @input="emit('patchShape', { w: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>高<NumberField :value="shape.h" @input="emit('patchShape', { h: num(($event.target as HTMLInputElement).value) })" /></label>
       </div>
       <ColorField v-if="shape.type !== 'image'" label="底色" :model-value="shape.bg ?? ''" @update="emit('patchShape', { bg: $event })" />
-      <label v-if="shape.type === 'rect'" class="block">圆角<input class="field" type="number" :value="shape.radius ?? 0" @input="emit('patchShape', { radius: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label v-if="shape.type === 'rect'" class="block">圆角<NumberField :value="shape.radius ?? 0" @input="emit('patchShape', { radius: num(($event.target as HTMLInputElement).value) })" /></label>
       <template v-if="shape.type !== 'image'">
-        <label class="block">边框宽<input class="field" type="number" :value="shape.border_w ?? 0" @input="emit('patchShape', { border_w: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label class="block">边框宽<NumberField :value="shape.border_w ?? 0" @input="emit('patchShape', { border_w: num(($event.target as HTMLInputElement).value) })" /></label>
         <ColorField label="边框色" :model-value="shape.border_color ?? ''" @update="emit('patchShape', { border_color: $event })" />
-        <label class="block">阴影宽<input class="field" type="number" :value="shape.shadow?.width ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, width: num(($event.target as HTMLInputElement).value) } })" /></label>
+        <label class="block">阴影宽<NumberField :value="shape.shadow?.width ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, width: num(($event.target as HTMLInputElement).value) } })" /></label>
         <ColorField label="阴影色" :model-value="shape.shadow?.color ?? ''" @update="emit('patchShape', { shadow: { ...shape.shadow, color: $event } })" />
         <div class="grid grid-cols-2 gap-2">
-          <label>阴影 ofs_x<input class="field" type="number" :value="shape.shadow?.ofs_x ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, ofs_x: num(($event.target as HTMLInputElement).value) } })" /></label>
-          <label>阴影 ofs_y<input class="field" type="number" :value="shape.shadow?.ofs_y ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, ofs_y: num(($event.target as HTMLInputElement).value) } })" /></label>
+          <label>阴影 ofs_x<NumberField :value="shape.shadow?.ofs_x ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, ofs_x: num(($event.target as HTMLInputElement).value) } })" /></label>
+          <label>阴影 ofs_y<NumberField :value="shape.shadow?.ofs_y ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, ofs_y: num(($event.target as HTMLInputElement).value) } })" /></label>
         </div>
       </template>
       <template v-else>
         <label class="block">src<input class="field" :value="shape.src" @input="emit('patchShape', { src: ($event.target as HTMLInputElement).value })" /></label>
         <label class="block">url<input class="field" :value="shape.url ?? ''" @input="emit('patchShape', { url: ($event.target as HTMLInputElement).value })" /></label>
         <ColorField label="染色" :model-value="shape.color ?? ''" @update="emit('patchShape', { color: $event })" />
-        <label class="block">不透明度 0–100<input class="field" type="number" min="0" max="100" placeholder="100" :value="shape.opa ?? ''" @input="emit('patchShape', { opa: ($event.target as HTMLInputElement).value === '' ? undefined : Math.max(0, Math.min(100, num(($event.target as HTMLInputElement).value))) })" /></label>
+        <label class="block">不透明度 0–100<NumberField min="0" max="100" placeholder="100" :value="shape.opa ?? ''" @input="emit('patchShape', { opa: ($event.target as HTMLInputElement).value === '' ? undefined : Math.max(0, Math.min(100, num(($event.target as HTMLInputElement).value))) })" /></label>
         <p class="text-xs text-slate-500">留空按原图显示。填写颜色后整张 PNG 染成这一种颜色，透明像素保持不动。不透明度缺省 100，0 为完全透明。可写 #RRGGBB 或 color.字段名。</p>
         <label class="btn inline-flex cursor-pointer">
           上传图片
@@ -459,40 +487,40 @@ function colorTable(parsed: unknown): Record<string, string> | null {
       </template>
     </template>
   </div>
-  <div v-else-if="card && selection?.kind === 'card'" class="space-y-2 p-3 text-sm">
+  <div v-else-if="card && selection?.kind === 'card'" class="space-y-2 p-2.5 text-[11px]">
     <label class="flex items-center gap-2">锁定
       <input type="checkbox" :checked="!!card.locked" @change="emit('patchCard', { locked: ($event.target as HTMLInputElement).checked })" />
     </label>
     <div class="text-slate-400">卡片</div>
     <div class="grid grid-cols-2 gap-2">
-      <label>x<input class="field" type="number" :value="card.x" @input="emit('patchCard', { x: num(($event.target as HTMLInputElement).value) })" /></label>
-      <label>y<input class="field" type="number" :value="card.y" @input="emit('patchCard', { y: num(($event.target as HTMLInputElement).value) })" /></label>
-      <label>宽<input class="field" type="number" :value="card.w" @input="emit('patchCard', { w: num(($event.target as HTMLInputElement).value) })" /></label>
-      <label>高<input class="field" type="number" :value="card.h" @input="emit('patchCard', { h: num(($event.target as HTMLInputElement).value) })" /></label>
-      <label>列<input class="field" type="number" min="1" max="8" :value="card.cols ?? 1" @input="emit('patchCard', { cols: num(($event.target as HTMLInputElement).value) })" /></label>
-      <label>行<input class="field" type="number" min="1" max="8" :value="card.rows ?? 1" @input="emit('patchCard', { rows: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label>x<NumberField :value="card.x" @input="emit('patchCard', { x: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label>y<NumberField :value="card.y" @input="emit('patchCard', { y: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label>宽<NumberField :value="card.w" @input="emit('patchCard', { w: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label>高<NumberField :value="card.h" @input="emit('patchCard', { h: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label>列<NumberField min="1" max="12" :value="card.cols ?? 1" @input="emit('patchCard', { cols: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label>行<NumberField min="1" max="24" :value="card.rows ?? 1" @input="emit('patchCard', { rows: num(($event.target as HTMLInputElement).value) })" /></label>
     </div>
-    <label class="block">间距<input class="field" type="number" :value="card.gap ?? 0" @input="emit('patchCard', { gap: num(($event.target as HTMLInputElement).value) })" /></label>
+    <label class="block">间距<NumberField :value="card.gap ?? 0" @input="emit('patchCard', { gap: num(($event.target as HTMLInputElement).value) })" /></label>
     <label class="block">列宽，逗号分隔，0 表示平分<input class="field" :value="(card.col_w ?? []).join(',')" @input="emit('patchCard', { col_w: list(($event.target as HTMLInputElement).value) })" /></label>
     <label class="block">行高，逗号分隔，0 表示平分<input class="field" :value="(card.row_h ?? []).join(',')" @input="emit('patchCard', { row_h: list(($event.target as HTMLInputElement).value) })" /></label>
     <ColorField label="底色，留空透明" :model-value="card.bg ?? ''" @update="emit('patchCard', { bg: $event })" />
-    <label class="block">圆角<input class="field" type="number" :value="card.radius ?? 0" @input="emit('patchCard', { radius: num(($event.target as HTMLInputElement).value) })" /></label>
-    <label class="block">边框宽<input class="field" type="number" :value="card.border_w ?? 0" @input="emit('patchCard', { border_w: num(($event.target as HTMLInputElement).value) })" /></label>
+    <label class="block">圆角<NumberField :value="card.radius ?? 0" @input="emit('patchCard', { radius: num(($event.target as HTMLInputElement).value) })" /></label>
+    <label class="block">边框宽<NumberField :value="card.border_w ?? 0" @input="emit('patchCard', { border_w: num(($event.target as HTMLInputElement).value) })" /></label>
     <ColorField label="边框色" :model-value="card.border_color ?? ''" @update="emit('patchCard', { border_color: $event })" />
-    <label class="block">阴影宽<input class="field" type="number" :value="card.shadow?.width ?? 0" @input="emit('patchCard', { shadow: { ...card.shadow, width: num(($event.target as HTMLInputElement).value) } })" /></label>
+    <label class="block">阴影宽<NumberField :value="card.shadow?.width ?? 0" @input="emit('patchCard', { shadow: { ...card.shadow, width: num(($event.target as HTMLInputElement).value) } })" /></label>
     <ColorField label="阴影色" :model-value="card.shadow?.color ?? ''" @update="emit('patchCard', { shadow: { ...card.shadow, color: $event } })" />
     <div class="grid grid-cols-2 gap-2">
-      <label>阴影 ofs_x<input class="field" type="number" :value="card.shadow?.ofs_x ?? 0" @input="emit('patchCard', { shadow: { ...card.shadow, ofs_x: num(($event.target as HTMLInputElement).value) } })" /></label>
-      <label>阴影 ofs_y<input class="field" type="number" :value="card.shadow?.ofs_y ?? 0" @input="emit('patchCard', { shadow: { ...card.shadow, ofs_y: num(($event.target as HTMLInputElement).value) } })" /></label>
+      <label>阴影 ofs_x<NumberField :value="card.shadow?.ofs_x ?? 0" @input="emit('patchCard', { shadow: { ...card.shadow, ofs_x: num(($event.target as HTMLInputElement).value) } })" /></label>
+      <label>阴影 ofs_y<NumberField :value="card.shadow?.ofs_y ?? 0" @input="emit('patchCard', { shadow: { ...card.shadow, ofs_y: num(($event.target as HTMLInputElement).value) } })" /></label>
     </div>
   </div>
-  <div v-else-if="item" class="space-y-2 p-3 text-sm">
+  <div v-else-if="item" class="space-y-2 p-2.5 text-[11px]">
     <div class="text-slate-400">{{ item.type }}</div>
     <div class="grid grid-cols-2 gap-2">
-      <label>列<input class="field" type="number" :value="item.col ?? 0" @input="emit('patchItem', { col: num(($event.target as HTMLInputElement).value) })" /></label>
-      <label>行<input class="field" type="number" :value="item.row ?? 0" @input="emit('patchItem', { row: num(($event.target as HTMLInputElement).value) })" /></label>
-      <label>跨列<input class="field" type="number" :value="item.colspan ?? 1" @input="emit('patchItem', { colspan: num(($event.target as HTMLInputElement).value) })" /></label>
-      <label>跨行<input class="field" type="number" :value="item.rowspan ?? 1" @input="emit('patchItem', { rowspan: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label>列<NumberField :value="item.col ?? 0" @input="emit('patchItem', { col: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label>行<NumberField :value="item.row ?? 0" @input="emit('patchItem', { row: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label>跨列<NumberField :value="item.colspan ?? 1" @input="emit('patchItem', { colspan: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label>跨行<NumberField :value="item.rowspan ?? 1" @input="emit('patchItem', { rowspan: num(($event.target as HTMLInputElement).value) })" /></label>
     </div>
     <label v-if="item.type === 'label'" class="block">文字<input class="field" maxlength="127" :value="item.text ?? ''" @input="emit('patchItem', { text: ($event.target as HTMLInputElement).value })" /></label>
     <template v-if="item.type !== 'label'">
@@ -505,12 +533,12 @@ function colorTable(parsed: unknown): Record<string, string> | null {
       <label class="block">format<input class="field" :value="item.format ?? ''" @input="emit('patchItem', { format: ($event.target as HTMLInputElement).value })" /></label>
       <label class="block">遮罩符号<input class="field" maxlength="4" placeholder="如 *" :value="item.mask ?? ''" @input="emit('patchItem', { mask: ($event.target as HTMLInputElement).value })" /></label>
       <div class="grid grid-cols-2 gap-2">
-        <label>从第几个字<input class="field" type="number" min="1" placeholder="2" :value="item.mask_at ?? ''" @input="emit('patchItem', { mask_at: num(($event.target as HTMLInputElement).value) || undefined })" /></label>
-        <label>遮罩字数<input class="field" type="number" min="1" placeholder="1" :value="item.mask_n ?? ''" @input="emit('patchItem', { mask_n: num(($event.target as HTMLInputElement).value) || undefined })" /></label>
+        <label>从第几个字<NumberField min="1" placeholder="2" :value="item.mask_at ?? ''" @input="emit('patchItem', { mask_at: num(($event.target as HTMLInputElement).value) || undefined })" /></label>
+        <label>遮罩字数<NumberField min="1" placeholder="1" :value="item.mask_n ?? ''" @input="emit('patchItem', { mask_n: num(($event.target as HTMLInputElement).value) || undefined })" /></label>
       </div>
       <p class="text-xs text-slate-500">填写符号后生效。缺省从第 2 个字起遮 1 个，例如赵一鸣显示为赵*鸣。</p>
-      <label class="block">左侧内边距<input class="field" type="number" :value="item.pad_x ?? 0" @input="emit('patchItem', { pad_x: num(($event.target as HTMLInputElement).value) })" /></label>
-      <label class="block">标题间距<input class="field" type="number" :value="item.gap ?? 0" @input="emit('patchItem', { gap: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label class="block">左侧内边距<NumberField :value="item.pad_x ?? 0" @input="emit('patchItem', { pad_x: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label class="block">标题间距<NumberField :value="item.gap ?? 0" @input="emit('patchItem', { gap: num(($event.target as HTMLInputElement).value) })" /></label>
     </template>
     <template v-if="item.type === 'label' || item.type === 'value' || item.type === 'split'">
       <label class="block">字体<input class="field" :value="item.font ?? ''" @input="emit('patchItem', { font: ($event.target as HTMLInputElement).value })" /></label>
@@ -526,8 +554,8 @@ function colorTable(parsed: unknown): Record<string, string> | null {
         <option value="end">end</option>
       </select>
     </label>
-    <template v-if="item.type === 'qrcode'">
-      <label class="block">边长<input class="field" type="number" :value="item.size ?? 140" @input="emit('patchItem', { size: num(($event.target as HTMLInputElement).value) })" /></label>
+    <template v-if="item.type === 'qrcode' && card">
+      <p class="text-xs text-slate-500">边长 {{ qrSide(card, item) }}，取格子短边的 90%。</p>
     </template>
     <template v-if="item.type === 'split'">
       <label class="block">方向
@@ -537,8 +565,8 @@ function colorTable(parsed: unknown): Record<string, string> | null {
         </select>
       </label>
       <label class="block">分隔符<input class="field" maxlength="1" :value="item.split ?? ','" @input="emit('patchItem', { split: ($event.target as HTMLInputElement).value })" /></label>
-      <label class="block">{{ item.flow === 'row' ? '列宽' : '块高' }}<input class="field" type="number" :value="item.item_h ?? 73" @input="emit('patchItem', { item_h: num(($event.target as HTMLInputElement).value) })" /></label>
-      <label class="block">块间距<input class="field" type="number" :value="item.gap ?? 8" @input="emit('patchItem', { gap: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label class="block">{{ item.flow === 'row' ? '列宽' : '块高' }}<NumberField :value="item.item_h ?? 73" @input="emit('patchItem', { item_h: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label class="block">块间距<NumberField :value="item.gap ?? 8" @input="emit('patchItem', { gap: num(($event.target as HTMLInputElement).value) })" /></label>
       <ColorField label="默认底色" :model-value="item.default_color ?? '#7C7C7C'" @update="emit('patchItem', { default_color: $event })" />
       <p class="text-xs text-slate-500">每块底色按文字查页面颜色字典，没有则用默认底色。</p>
     </template>
@@ -546,5 +574,6 @@ function colorTable(parsed: unknown): Record<string, string> | null {
 </template>
 
 <style scoped>
-.field { margin-top: 4px; width: 100%; border-radius: 4px; border: 1px solid rgb(51 65 85); background: rgb(15 23 42); padding: 4px 8px; }
+.field { margin-top: 4px; width: 100%; border-radius: 6px; border: 1px solid rgb(255 255 255 / 0.15); background: rgb(255 255 255 / 0.08); padding: 6px 10px; font-size: 12px; color: rgb(241 245 249); outline: none; }
+.field:focus { border-color: rgb(129 140 248 / 0.5); box-shadow: 0 0 0 1px rgb(129 140 248 / 0.3); }
 </style>

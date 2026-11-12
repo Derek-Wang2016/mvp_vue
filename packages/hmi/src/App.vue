@@ -6,10 +6,44 @@ import { createPublication, createScreen, deletePublication, deleteScreen, getSc
 import { createDefaultDocument } from './defaultDocument'
 import { bindingCount, deviceJson, withCareColor } from './resolve'
 import { getApiBase } from './config'
-import { currentPage, LIMITS, type HmiDocument, type HmiShape } from './types'
+import { currentPage, LIMITS, type HmiDocument } from './types'
+
+const canvasPalette: { kind: 'shape' | 'card'; type: string; label: string; icon: string }[] = [
+  { kind: 'shape', type: 'rect', label: '矩形', icon: 'rectangle' },
+  { kind: 'shape', type: 'circle', label: '圆形', icon: 'circle' },
+  { kind: 'shape', type: 'line', label: '线条', icon: 'line' },
+  { kind: 'shape', type: 'image', label: '图片', icon: 'photo' },
+  { kind: 'shape', type: 'icon', label: '图标', icon: 'icons' },
+  { kind: 'shape', type: 'button', label: '按钮', icon: 'click' },
+  { kind: 'shape', type: 'block', label: '功能块', icon: 'box' },
+  { kind: 'card', type: 'card', label: '卡片', icon: 'layout-cards' },
+]
+
+const cardPalette: { type: 'label' | 'value' | 'qrcode' | 'split'; label: string; icon: string }[] = [
+  { type: 'label', label: '文字', icon: 'heading' },
+  { type: 'value', label: '数据', icon: '123' },
+  { type: 'qrcode', label: '二维码', icon: 'qrcode' },
+  { type: 'split', label: '拆分', icon: 'separator' },
+]
+
+function onPaletteDragStart(event: DragEvent, kind: 'shape' | 'card', type: string) {
+  const payload = `${kind}:${type}`
+  event.dataTransfer?.setData('application/x-hmi-component', payload)
+  event.dataTransfer?.setData('text/plain', payload)
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'copy'
+}
 import TreePanel from './components/TreePanel.vue'
 import HmiCanvas from './components/HmiCanvas.vue'
 import PropertyPanel from './components/PropertyPanel.vue'
+import ImageLibraryDialog from './components/ImageLibraryDialog.vue'
+import { icons } from '@iconify-json/tabler'
+
+function tabler(name: string): string {
+  const alias = icons.aliases?.[name]
+  const icon = icons.icons[alias?.parent ?? name]
+  if (!icon?.body) return ''
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icon.body}</svg>`
+}
 
 const store = useHmiStore()
 store.migrate()
@@ -22,6 +56,10 @@ const saving = ref(false)
 const open = ref(false)
 const screens = ref<HmiListItem[]>([])
 const showJson = ref(false)
+const showImages = ref(false)
+const insertData = ref(false)
+const insertKey = ref('')
+const insertPlace = ref<'row-before' | 'row-after' | 'col-before' | 'col-after'>('col-after')
 const showSample = ref(false)
 const sampleText = ref('')
 const confirmDelete = ref<HmiListItem | null>(null)
@@ -235,12 +273,9 @@ function importDoc(text: string) {
 }
 
 function resizeScreen(w: number, h: number) {
-  doc.value.screen = { w, h }
-  const bg = page.value.shapes[0]
-  if (bg && bg.type === 'rect') {
-    bg.w = w
-    bg.h = h
-  }
+  const width = Math.max(1, Math.round(w) || doc.value.screen.w)
+  const height = Math.max(1, Math.round(h) || doc.value.screen.h)
+  doc.value.screen = { w: width, h: height }
 }
 
 function addPage() {
@@ -251,6 +286,23 @@ function addPage() {
   }
   newPageName.value = ''
   showAddPage.value = false
+}
+
+function openInsertData() {
+  if (!selectedCard.value) return
+  insertKey.value = ''
+  insertPlace.value = 'col-after'
+  insertData.value = true
+}
+
+function confirmInsertData() {
+  const key = insertKey.value.trim()
+  if (!key) {
+    msg.value = '请填写 KEY'
+    return
+  }
+  note(store.insertItem('value', { prop: key, place: insertPlace.value }))
+  insertData.value = false
 }
 
 function removePage() {
@@ -264,66 +316,90 @@ function removePage() {
     <header class="flex flex-wrap items-center gap-2 border-b border-slate-700 px-3 py-2">
       <span class="text-sm text-slate-400">LVGL HMI</span>
       <input v-model="name" class="w-48 rounded border border-slate-600 bg-slate-950 px-2 py-1 text-sm" />
-      <label class="text-xs text-slate-400">宽
-        <input class="ml-1 w-16 rounded border border-slate-600 bg-slate-950 px-1" type="number" :value="doc.screen.w" @change="resizeScreen(Number(($event.target as HTMLInputElement).value), doc.screen.h)" />
-      </label>
-      <label class="text-xs text-slate-400">高
-        <input class="ml-1 w-16 rounded border border-slate-600 bg-slate-950 px-1" type="number" :value="doc.screen.h" @change="resizeScreen(doc.screen.w, Number(($event.target as HTMLInputElement).value))" />
-      </label>
       <label class="text-xs text-slate-400">页面
         <select class="ml-1 rounded border border-slate-600 bg-slate-950 px-1 py-1" :value="doc.active" @change="store.showPage(($event.target as HTMLSelectElement).value)">
           <option v-for="pageName in pageNames" :key="pageName" :value="pageName">{{ pageName }}</option>
         </select>
       </label>
-      <button class="btn" @click="showAddPage = true">添加页面</button>
-      <button v-if="doc.active !== 'index'" class="btn text-rose-300" @click="confirmDropPage = true">删除页面</button>
-      <button class="btn" @click="store.reset()">新建</button>
-      <button class="btn" @click="openList">打开</button>
-      <button class="btn" :disabled="saving" @click="save">保存</button>
-      <button class="btn" @click="showPublish = true">发布</button>
-      <button class="btn" @click="openPublications">发布管理</button>
-      <button class="btn" @click="showJson = true">设备 JSON</button>
-      <button class="btn" @click="editSample">样例数据</button>
-      <button class="btn" :class="showGrid ? 'text-sky-300' : ''" @click="showGrid = !showGrid">网格</button>
-      <button class="btn" :class="showPosition ? 'text-sky-300' : ''" @click="showPosition = !showPosition">位置</button>
+      <button class="icon-btn" title="添加页面" @click="showAddPage = true" v-html="tabler('file-plus')" />
+      <button v-if="doc.active !== 'index'" class="icon-btn text-rose-300" title="删除页面" @click="confirmDropPage = true" v-html="tabler('file-minus')" />
+      <button class="icon-btn" title="新建" @click="store.reset()" v-html="tabler('file')" />
+      <button class="icon-btn" title="打开" @click="openList" v-html="tabler('folder-open')" />
+      <button class="icon-btn" :title="saving ? '保存中' : '保存'" :disabled="saving" @click="save" v-html="tabler('device-floppy')" />
+      <button class="icon-btn" title="发布" @click="showPublish = true" v-html="tabler('upload')" />
+      <button class="icon-btn" title="发布管理" @click="openPublications" v-html="tabler('list-details')" />
+      <button class="icon-btn" title="图片" @click="showImages = true" v-html="tabler('photo')" />
+      <button class="icon-btn" title="设备 JSON" @click="showJson = true" v-html="tabler('braces')" />
+      <button class="icon-btn" title="样例数据" @click="editSample" v-html="tabler('database')" />
+      <button class="icon-btn" :class="showGrid ? 'text-sky-300' : ''" title="网格" @click="showGrid = !showGrid" v-html="tabler('grid-dots')" />
+      <button class="icon-btn" :class="showPosition ? 'text-sky-300' : ''" title="位置" @click="showPosition = !showPosition" v-html="tabler('crosshair')" />
       <span class="text-xs text-slate-500">卡片 {{ page.cards.length }} · 绑定 {{ bindingCount(doc) }}/{{ LIMITS.bindings }}</span>
-      <template v-if="canAlign">
-        <span class="mx-1 h-4 w-px bg-slate-700" />
-        <button class="btn" title="左对齐" @click="store.align('left')">左</button>
-        <button class="btn" title="右对齐" @click="store.align('right')">右</button>
-        <button class="btn" title="上对齐" @click="store.align('top')">上</button>
-        <button class="btn" title="下对齐" @click="store.align('bottom')">下</button>
-        <button class="btn" title="垂直居中" @click="store.align('centerX')">垂直居中</button>
-        <button class="btn" title="水平居中" @click="store.align('centerY')">水平居中</button>
-        <button class="btn" title="水平等距" @click="store.distribute('x')">水平等距</button>
-        <button class="btn" title="垂直等距" @click="store.distribute('y')">垂直等距</button>
-      </template>
+      <span class="mx-1 h-4 w-px bg-slate-700" />
+      <button class="icon-btn" title="左对齐" :disabled="!canAlign" @click="store.align('left')" v-html="tabler('layout-align-left')" />
+      <button class="icon-btn" title="右对齐" :disabled="!canAlign" @click="store.align('right')" v-html="tabler('layout-align-right')" />
+      <button class="icon-btn" title="上对齐" :disabled="!canAlign" @click="store.align('top')" v-html="tabler('layout-align-top')" />
+      <button class="icon-btn" title="下对齐" :disabled="!canAlign" @click="store.align('bottom')" v-html="tabler('layout-align-bottom')" />
+      <button class="icon-btn" title="垂直居中" :disabled="!canAlign" @click="store.align('centerX')" v-html="tabler('layout-align-center')" />
+      <button class="icon-btn" title="水平居中" :disabled="!canAlign" @click="store.align('centerY')" v-html="tabler('layout-align-middle')" />
+      <button class="icon-btn" title="等宽" :disabled="!canAlign" @click="store.align('equalW')" v-html="tabler('layout-columns')" />
+      <button class="icon-btn" title="等高" :disabled="!canAlign" @click="store.align('equalH')" v-html="tabler('layout-rows')" />
+      <button class="icon-btn" title="水平等距" :disabled="!canAlign" @click="store.distribute('x')" v-html="tabler('layout-distribute-horizontal')" />
+      <button class="icon-btn" title="垂直等距" :disabled="!canAlign" @click="store.distribute('y')" v-html="tabler('layout-distribute-vertical')" />
       <span class="text-xs text-emerald-400">{{ msg }}</span>
     </header>
     <div class="flex min-h-0 flex-1">
       <aside class="flex w-64 flex-col border-r border-slate-700">
-        <div class="flex flex-wrap gap-1 border-b border-slate-700 p-2">
-          <button class="btn" @click="note(store.addShape('rect'))">矩形</button>
-          <button class="btn" @click="note(store.addShape('circle'))">圆形</button>
-          <button class="btn" @click="note(store.addShape('line'))">线条</button>
-          <button class="btn" @click="note(store.addShape('image'))">图片</button>
-          <button class="btn" @click="note(store.addShape('icon'))">图标</button>
-          <button class="btn" @click="note(store.addShape('button'))">按钮</button>
-          <button class="btn" @click="note(store.addShape('block'))">功能块</button>
-          <button class="btn" @click="note(store.addCard())">卡片</button>
-          <button class="btn" @click="note(store.addItem('label'))">标题</button>
-          <button class="btn" @click="note(store.addItem('value'))">数值</button>
-          <button class="btn" @click="note(store.addItem('qrcode'))">二维码</button>
-          <button class="btn" @click="store.clearSelection()">字典</button>
-          <button class="btn" @click="note(store.addItem('split'))">拆分</button>
-          <button class="btn text-rose-300" @click="store.removeSelected()">删除</button>
+        <div class="border-b border-slate-700 p-2">
+          <p class="mb-1 text-[10px] text-slate-500">拖到画布</p>
+          <div class="grid grid-cols-3 gap-1">
+            <button
+              v-for="item in canvasPalette"
+              :key="item.type"
+              type="button"
+              class="palette-item cursor-grab active:cursor-grabbing"
+              draggable="true"
+              title="拖到画布上放置"
+              @dragstart="onPaletteDragStart($event, item.kind, item.type)"
+            >
+              <span v-html="tabler(item.icon)" />
+              <span>{{ item.label }}</span>
+            </button>
+          </div>
+          <p class="mb-1 mt-2 text-[10px] text-slate-500">放入选中的卡片</p>
+          <div class="grid grid-cols-3 gap-1">
+            <button
+              v-for="item in cardPalette"
+              :key="item.type"
+              type="button"
+              class="palette-item"
+              :disabled="!selectedCard"
+              :title="item.type === 'value' ? (selectedCard ? '填写 KEY 和插入位置' : '先选中一张卡片') : '放入当前卡片'"
+              @click="item.type === 'value' ? openInsertData() : note(store.addItem(item.type))"
+            >
+              <span v-html="tabler(item.icon)" />
+              <span>{{ item.label }}</span>
+            </button>
+          </div>
+          <div class="mt-3 border-t border-slate-700 pt-2">
+            <p class="mb-1 text-[10px] text-slate-500">操作</p>
+            <div class="grid grid-cols-3 gap-1">
+              <button type="button" class="palette-item" title="页面属性" @click="store.clearSelection()">
+                <span v-html="tabler('adjustments-horizontal')" />
+                <span>属性</span>
+              </button>
+              <button type="button" class="palette-item text-rose-300" title="删除选中" @click="store.removeSelected()">
+                <span v-html="tabler('trash')" />
+                <span>删除</span>
+              </button>
+            </div>
+          </div>
         </div>
         <div class="editor-scrollbar min-h-0 flex-1 overflow-auto p-2">
           <TreePanel :shapes="page.shapes" :cards="page.cards" :selection="selection" @select="store.select" />
         </div>
       </aside>
       <main class="flex min-w-0 flex-1">
-        <HmiCanvas :show-grid="showGrid" :show-position="showPosition" @contextmenu="(event, key) => { contextMenu = { x: event.clientX, y: event.clientY, key } }" />
+        <HmiCanvas :show-grid="showGrid" :show-position="showPosition" @notice="note" @contextmenu="(event, key) => { contextMenu = { x: event.clientX, y: event.clientY, key } }" />
       </main>
       <aside class="editor-scrollbar w-72 overflow-auto border-l border-slate-700">
         <div v-if="selection?.kind === 'shape'" class="flex gap-2 p-2">
@@ -339,10 +415,14 @@ function removePage() {
           :shape="selectedShape"
           :card="selectedCard"
           :item="selectedItem"
+          :screen="doc.screen"
+          :page="page"
           :colors="doc.colors"
           :icons="doc.icons"
           :library="doc.library"
           :pages="pageNames"
+          @patch-screen="resizeScreen"
+          @patch-page="store.patchPage"
           @patch-colors="store.setColors"
           @patch-icons="store.setIcons"
           @patch-library="store.setLibrary"
@@ -396,15 +476,36 @@ function removePage() {
         </div>
       </div>
     </div>
+    <ImageLibraryDialog v-if="showImages" @close="showImages = false" />
     <div v-if="showJson" class="overlay" @click.self="showJson = false">
-      <div class="dialog w-[720px]">
-        <div class="mb-2 flex justify-between"><span>version 3：screen、colors、icons、pages。index 为启动页</span>
-          <span class="flex gap-2">
-            <button class="btn" @click="copyJson">复制</button>
-            <button @click="showJson = false">关闭</button>
+      <div class="dialog json-dialog">
+        <div class="mb-2 flex items-center justify-between gap-3">
+          <span class="text-xs text-slate-400">version 3：screen、colors、icons、pages。index 为启动页</span>
+          <span class="flex shrink-0 gap-1">
+            <button type="button" class="icon-btn" title="复制" @click="copyJson" v-html="tabler('copy')" />
+            <button type="button" class="icon-btn" title="关闭" @click="showJson = false" v-html="tabler('x')" />
           </span>
         </div>
-        <textarea class="editor-scrollbar h-96 w-full rounded bg-slate-950 p-2 font-mono text-xs" :value="jsonText" @change="importDoc(($event.target as HTMLTextAreaElement).value)" />
+        <textarea class="editor-scrollbar h-[70vh] w-full rounded bg-slate-950 p-2 font-mono text-xs" :value="jsonText" @change="importDoc(($event.target as HTMLTextAreaElement).value)" />
+      </div>
+    </div>
+    <div v-if="insertData" class="overlay" @click.self="insertData = false">
+      <div class="dialog text-[12px]">
+        <div class="mb-2 text-sm text-slate-200">插入数据</div>
+        <label class="block text-slate-400">KEY
+          <input v-model="insertKey" class="field mt-1" placeholder="例如 PATIENT_NAME" @keyup.enter="confirmInsertData" />
+        </label>
+        <div class="mt-3 grid grid-cols-2 gap-1">
+          <button type="button" class="btn" :class="insertPlace === 'col-before' ? 'text-sky-300' : ''" @click="insertPlace = 'col-before'">左一列</button>
+          <button type="button" class="btn" :class="insertPlace === 'col-after' ? 'text-sky-300' : ''" @click="insertPlace = 'col-after'">右一列</button>
+          <button type="button" class="btn" :class="insertPlace === 'row-before' ? 'text-sky-300' : ''" @click="insertPlace = 'row-before'">上一行</button>
+          <button type="button" class="btn" :class="insertPlace === 'row-after' ? 'text-sky-300' : ''" @click="insertPlace = 'row-after'">下一行</button>
+        </div>
+        <p class="mt-2 text-[11px] text-slate-500">相对当前选中的格子插入，并同步增加行或列。没选中格子时加在末尾。</p>
+        <div class="mt-3 flex justify-end gap-2">
+          <button type="button" class="btn" @click="insertData = false">取消</button>
+          <button type="button" class="btn" @click="confirmInsertData">插入</button>
+        </div>
       </div>
     </div>
     <div v-if="showAddPage" class="overlay" @click.self="showAddPage = false">
@@ -490,9 +591,18 @@ function removePage() {
 <style scoped>
 .btn { border-radius: 4px; background: rgb(30 41 59); padding: 4px 8px; font-size: 12px; }
 .btn:hover { background: rgb(51 65 85); }
+.field { margin-top: 4px; width: 100%; border-radius: 6px; border: 1px solid rgb(255 255 255 / 0.15); background: rgb(255 255 255 / 0.08); padding: 6px 10px; font-size: 12px; color: rgb(241 245 249); outline: none; }
+.palette-item { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 44px; border-radius: 6px; border: 1px solid rgb(255 255 255 / 0.1); background: rgb(255 255 255 / 0.05); padding: 4px 2px; font-size: 11px; color: rgb(203 213 225); }
+.palette-item:hover { background: rgb(51 65 85); color: white; }
+.palette-item:disabled { opacity: 0.35; cursor: not-allowed; }
+.palette-item:disabled:hover { background: rgb(255 255 255 / 0.05); color: rgb(203 213 225); }
+.icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; border-radius: 4px; background: rgb(30 41 59); color: rgb(203 213 225); }
+.icon-btn:hover { background: rgb(51 65 85); color: white; }
+.icon-btn:disabled { opacity: 0.4; }
 .menu { display: block; width: 100%; padding: 6px 12px; text-align: left; font-size: 13px; }
 .menu:hover { background: rgb(255 255 255 / 0.08); }
 .menu:disabled { opacity: 0.4; }
 .overlay { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: rgb(0 0 0 / 0.55); }
 .dialog { width: 420px; border-radius: 8px; border: 1px solid rgb(51 65 85); background: rgb(15 23 42); padding: 16px; }
+.json-dialog { width: min(1100px, 94vw); }
 </style>

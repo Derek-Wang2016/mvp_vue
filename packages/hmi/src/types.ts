@@ -165,10 +165,16 @@ export interface HmiCard {
   locked?: boolean
 }
 
-/** 一屏画面。屏幕尺寸和字典在文档根上，各页共用。 */
+/** 一屏画面。屏幕尺寸在文档根上，各页可有自己的背景。 */
 export interface HmiPage {
   shapes: HmiShape[]
   cards: HmiCard[]
+  /** 页面底色。`#RRGGBB`。 */
+  bg?: string
+  /** 铺满页面的图片路径。相对程序目录，或以 http、/ 开头的地址。 */
+  bgImage?: string
+  /** 背景图不透明度，0–100。缺省 100。 */
+  bgOpa?: number
 }
 
 /** 编辑器文档。设备 JSON 保留 version、screen、colors、icons、pages。index 为启动页。 */
@@ -206,6 +212,7 @@ export const FONT_PX: Record<string, number> = {
 
 export const LIMITS = {
   lines: 16,
-  tracks: 8,
+  tracks: 24,
+  cols: 12,
   bindings: 40,
 }

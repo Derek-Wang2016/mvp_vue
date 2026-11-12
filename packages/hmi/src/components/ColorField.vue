@@ -23,5 +23,6 @@ function pickerValue(value: string | undefined) {
 </template>
 
 <style scoped>
-.field { width: 100%; border-radius: 4px; border: 1px solid rgb(51 65 85); background: rgb(15 23 42); padding: 4px 8px; }
+.field { width: 100%; border-radius: 6px; border: 1px solid rgb(255 255 255 / 0.15); background: rgb(255 255 255 / 0.08); padding: 6px 10px; font-size: 12px; color: rgb(241 245 249); outline: none; }
+.field:focus { border-color: rgb(129 140 248 / 0.5); box-shadow: 0 0 0 1px rgb(129 140 248 / 0.3); }
 </style>

@@ -131,8 +131,13 @@ function draw() {
         gctx.stroke()
       }
       for (const line of guides.value) paintLine(line.axis, line.pos, '#22d3ee')
-      if (props.drag && spanX && spanY) {
-        const moving = [{ x: spanX.start, y: spanY.start, r: spanX.start + spanX.size, b: spanY.start + spanY.size }]
+      if (props.drag) {
+        const moving = props.selected.map((item) => ({
+          x: item.x + drag.dx,
+          y: item.y + drag.dy,
+          r: item.x + item.w + drag.dx,
+          b: item.y + item.h + drag.dy,
+        }))
         for (const line of alignEdges(moving, props.others, 0.6)) paintLine(line.axis, line.pos, '#f43f5e')
       }
     }
@@ -193,6 +198,27 @@ function onRulerDown(axis: GuideAxis, event: PointerEvent) {
   window.addEventListener('pointermove', move)
   window.addEventListener('pointerup', up)
 }
+
+function onGuideDown(id: string, axis: GuideAxis, event: PointerEvent) {
+  if (event.button !== 0) return
+  event.preventDefault()
+  event.stopPropagation()
+  const move = (ev: PointerEvent) => {
+    const next = toDesign(ev.clientX, ev.clientY)
+    const value = axis === 'x' ? next.x : next.y
+    guides.value = guides.value.map((line) => (line.id === id ? { ...line, pos: value } : line))
+  }
+  const up = (ev: PointerEvent) => {
+    window.removeEventListener('pointermove', move)
+    window.removeEventListener('pointerup', up)
+    const root = rootRef.value?.getBoundingClientRect()
+    if (!root) return
+    const back = axis === 'x' ? ev.clientX <= root.left + SIZE : ev.clientY <= root.top + SIZE
+    if (back) guides.value = guides.value.filter((line) => line.id !== id)
+  }
+  window.addEventListener('pointermove', move)
+  window.addEventListener('pointerup', up)
+}
 </script>
 
 <template>
@@ -205,6 +231,22 @@ function onRulerDown(axis: GuideAxis, event: PointerEvent) {
     <div class="flex min-h-0 min-w-0 flex-1">
       <canvas ref="vRef" class="h-full w-[22px] shrink-0 cursor-ew-resize border-r border-white/10 bg-[#0c1522]" @pointerdown="onRulerDown('x', $event)" />
       <slot />
+      <template v-for="line in guides" :key="line.id">
+        <div
+          v-if="line.axis === 'x'"
+          title="拖回左侧标尺可删除"
+          class="absolute z-30 cursor-ew-resize"
+          :style="{ left: `${SIZE + view.originX + line.pos * (view.scale || 1) - 4}px`, top: '0', width: '8px', bottom: '0' }"
+          @pointerdown="onGuideDown(line.id, line.axis, $event)"
+        />
+        <div
+          v-else
+          title="拖回上方标尺可删除"
+          class="absolute z-30 cursor-ns-resize"
+          :style="{ top: `${SIZE + view.originY + line.pos * (view.scale || 1) - 4}px`, left: '0', height: '8px', right: '0' }"
+          @pointerdown="onGuideDown(line.id, line.axis, $event)"
+        />
+      </template>
     </div>
   </div>
 </template>

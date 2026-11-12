@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { currentPage, type HmiButton, type HmiDocument, type HmiIconShape, type HmiImage, type HmiItem, type Selection } from '../types'
+import { currentPage, LIMITS, type HmiButton, type HmiDocument, type HmiIconShape, type HmiImage, type HmiItem, type Selection } from '../types'
 import { cardKey, shapeKey } from '../geometry'
 import { paintSvg, resolveIcon } from '../icons/lvglSvg'
 import { lvglSymbolName } from '../icons/lvglSymbols'
-import { applyMask, fontPx, formatClock, lookupColor, paintColor, sampleValue, textAlign, trackSizes } from '../resolve'
+import { applyMask, fontPx, formatClock, lookupColor, paintColor, qrSide, sampleValue, textAlign, trackSizes } from '../resolve'
 import { getApiBase } from '../config'
+import QrPreview from './QrPreview.vue'
 
 const props = defineProps<{
   doc: HmiDocument
@@ -98,8 +99,8 @@ function lineStyle(shape: { x1: number; y1: number; x2: number; y2: number; widt
 }
 
 function gridStyle(card: { w: number; h: number; cols?: number; rows?: number; gap?: number; col_w?: number[]; row_h?: number[] }) {
-  const cols = Math.min(8, Math.max(1, card.cols ?? (card.col_w?.length || 1)))
-  const rows = Math.min(8, Math.max(1, card.rows ?? (card.row_h?.length || 1)))
+  const cols = Math.min(LIMITS.cols, Math.max(1, card.cols ?? (card.col_w?.length || 1)))
+  const rows = Math.min(LIMITS.tracks, Math.max(1, card.rows ?? (card.row_h?.length || 1)))
   const gap = card.gap ?? 0
   return {
     display: 'grid',
@@ -206,6 +207,13 @@ function imageSrc(shape: HmiImage) {
   return url
 }
 
+function pageImageSrc(path: string | undefined) {
+  const url = path?.trim()
+  if (!url) return ''
+  if (url.startsWith('/')) return `${getApiBase()}${url}`
+  return url
+}
+
 function valueText(prop: string | undefined, format?: string) {
   void now.value
   if (prop === 'CLOCK') return formatClock(new Date(), format)
@@ -220,7 +228,15 @@ function maskedValue(item: HmiItem) {
 </script>
 
 <template>
-  <div class="relative" :style="{ width: doc.screen.w + 'px', height: doc.screen.h + 'px' }">
+  <div class="relative" :style="{ width: doc.screen.w + 'px', height: doc.screen.h + 'px', background: page.bg || '#0b1220' }">
+    <img
+      v-if="pageImageSrc(page.bgImage)"
+      :src="pageImageSrc(page.bgImage)"
+      alt=""
+      draggable="false"
+      class="pointer-events-none absolute inset-0 h-full w-full object-fill"
+      :style="{ opacity: Math.max(0, Math.min(100, page.bgOpa ?? 100)) / 100 }"
+    />
     <template v-for="(shape, index) in page.shapes" :key="'s' + index">
       <div
         v-if="shape.type === 'line'"
@@ -315,10 +331,8 @@ function maskedValue(item: HmiItem) {
             <span v-if="item.title" class="shrink-0 whitespace-nowrap" :style="{ fontSize: fontPx(item.title_font) + 'px', color: paintColor(item.title_color, doc, '#222') }">{{ item.title }}</span>
             <span :style="fontStyle(item)">{{ maskedValue(item) }}</span>
           </span>
-          <div v-else-if="item.type === 'qrcode' && valueText(item.prop)" class="flex flex-col items-center text-[10px] text-slate-800" :style="{ width: (item.size ?? 140) + 'px' }">
-            <div class="grid grid-cols-5 gap-px bg-white p-1">
-              <span v-for="i in 25" :key="i" class="h-2 w-2" :class="(i * 7) % 3 ? 'bg-black' : 'bg-white'" />
-            </div>
+          <div v-else-if="item.type === 'qrcode' && valueText(item.prop)" class="flex items-center justify-center">
+            <QrPreview :text="valueText(item.prop)" :size="qrSide(card, item)" />
           </div>
           <div
             v-else-if="item.type === 'split'"

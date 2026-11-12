@@ -1,6 +1,6 @@
 import { resolveIcon } from './icons/lvglSvg'
 import { lvglSymbolName } from './icons/lvglSymbols'
-import { currentPage, FONT_PX, type HmiDocument, type HmiItem, type HmiPage, type HmiShape } from './types'
+import { currentPage, FONT_PX, LIMITS, type HmiCard, type HmiDocument, type HmiItem, type HmiPage, type HmiShape } from './types'
 
 export function fontPx(name: string | undefined, fallback = 28): number {
   if (!name) return fallback
@@ -49,7 +49,7 @@ export function textAlign(align: HmiItem['align']): 'left' | 'center' | 'right' 
   return 'center'
 }
 
-/** 大于 0 的轨道用指定像素，其余平分去掉间距后的剩余空间。 */
+/** 大于 0 的轨道用指定像素。列宽合计正好为 12 时，按 12 份把卡片宽度等分。其余未指定的轨道平分剩余空间。 */
 export function trackSizes(total: number, count: number, gap: number, specified?: number[]): number[] {
   const n = Math.max(1, count)
   const specs = Array.from({ length: n }, (_, i) => {
@@ -58,9 +58,30 @@ export function trackSizes(total: number, count: number, gap: number, specified?
   })
   const fixed = specs.reduce((sum, value) => sum + value, 0)
   const flexCount = specs.filter((value) => value <= 0).length
-  const rest = Math.max(0, total - fixed - Math.max(0, n - 1) * gap)
+  const gaps = Math.max(0, n - 1) * gap
+  if (flexCount === 0 && fixed === LIMITS.cols) {
+    const inner = Math.max(0, total - gaps)
+    return specs.map((value) => (inner * value) / LIMITS.cols)
+  }
+  const rest = Math.max(0, total - fixed - gaps)
   const each = flexCount > 0 ? rest / flexCount : 0
   return specs.map((value) => (value > 0 ? value : each))
+}
+
+function spanLength(tracks: number[], start: number, span: number, gap: number) {
+  const slice = tracks.slice(Math.max(0, start), Math.max(0, start) + Math.max(1, span))
+  if (slice.length === 0) return 0
+  return slice.reduce((sum, value) => sum + value, 0) + gap * (slice.length - 1)
+}
+
+/** 二维码边长取所在格子短边的 90%，避免贴满格子。 */
+export function qrSide(card: HmiCard, item: HmiItem): number {
+  const cols = Math.min(LIMITS.cols, Math.max(1, card.cols ?? (card.col_w?.length || 1)))
+  const rows = Math.min(LIMITS.tracks, Math.max(1, card.rows ?? (card.row_h?.length || 1)))
+  const gap = card.gap ?? 0
+  const width = spanLength(trackSizes(card.w, cols, gap, card.col_w), item.col ?? 0, item.colspan ?? 1, gap)
+  const height = spanLength(trackSizes(card.h, rows, gap, card.row_h), item.row ?? 0, item.rowspan ?? 1, gap)
+  return Math.max(16, Math.round(Math.min(width, height) * 0.9))
 }
 
 /** 病人接口用 COLORRED/GREEN/BLUE 表示当前护理等级的颜色。 */
@@ -186,12 +207,13 @@ function exportShape(shape: HmiShape, docLibrary?: Record<string, string>): Reco
   }
 }
 
-function exportItem(item: HmiItem): Record<string, unknown> {
+function exportItem(item: HmiItem, card: HmiCard): Record<string, unknown> {
   const next: Record<string, unknown> = { ...item }
   delete next.colors
   delete next.icons
   delete next.icon
   delete next.icon_size
+  if (item.type === 'qrcode') next.size = qrSide(card, item)
   if (!String(next.mask ?? '').trim()) {
     delete next.mask
     delete next.mask_at
@@ -210,13 +232,16 @@ function omitEmpty<T extends Record<string, unknown>>(input: T): T {
 }
 
 function exportPage(page: HmiPage, library?: Record<string, string>) {
-  return {
+  return omitEmpty({
+    bg: page.bg,
+    bgImage: page.bgImage,
+    bgOpa: page.bgOpa,
     shapes: page.shapes.map((shape) => omitEmpty(exportShape(shape, library))),
     cards: page.cards.map((card) => omitEmpty({
       ...card,
-      items: card.items.map((item) => omitEmpty(exportItem(item))),
+      items: card.items.map((item) => omitEmpty(exportItem(item, card))),
     })),
-  }
+  })
 }
 
 export function deviceJson(doc: HmiDocument) {
