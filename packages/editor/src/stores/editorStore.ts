@@ -77,7 +77,7 @@ export const useEditorStore = defineStore('editor', () => {
   // === state ===
   const components = shallowRef<PageComponent[]>([])
   const selectedIds = ref<string[]>([])
-  /** 多选时首个点选的组件 id（Shift 追加不改变；框选取 ids[0]） */
+  /** 多选时首个点选的组件 id（Ctrl/Cmd 追加不改变；框选取 ids[0]） */
   const anchorComponentId = ref<string | null>(null)
   const pageId = ref<number | null>(null)
   const pageScope = ref<PageScope>('draft')

@@ -161,9 +161,23 @@ const lockedGroupOverlays = computed(() => {
 })
 
 // box select
+function handleSelectStart(e: Event) {
+  if (editingCompId.value) return
+  e.preventDefault()
+}
+
+function handleMouseDown(e: MouseEvent) {
+  if (editingCompId.value) return
+  // Chrome 的 Shift 点选看的是 mousedown，pointerdown 的 preventDefault 挡不住
+  e.preventDefault()
+}
+
 function handlePointerDown(e: PointerEvent) {
   const target = e.target as HTMLElement
   if (!target.classList.contains('dnd-canvas') && target.getAttribute('data-grid') !== 'true') return
+  // 框选拖拽会划过文字节点，取消浏览器默认选区
+  e.preventDefault()
+  window.getSelection()?.removeAllRanges()
   const rect = canvasRef.value?.getBoundingClientRect()
   if (!rect) return
   const scale = canvasScale.value
@@ -286,9 +300,14 @@ function handleCompPointerDown(e: PointerEvent, domComp: PageComponent) {
   const target = resolvePointerTarget(domComp, pt.x, pt.y)
   if (isEditorLocked(target)) return
 
-  if (e.shiftKey || e.ctrlKey || e.metaKey) {
+  // 点选时取消浏览器默认选区。多选只用 Ctrl/Cmd
+  e.preventDefault()
+  window.getSelection()?.removeAllRanges()
+
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
     store.selectComponent(target.id, true)
-  } else if (!selectedIds.value.includes(target.id)) {
+  } else if (e.shiftKey || !selectedIds.value.includes(target.id)) {
+    // Shift 不再追加。已在多选中的组件若不强制单选，看起来仍是 Shift 多选
     store.selectComponent(target.id)
   }
 
@@ -499,7 +518,7 @@ function onCtrlKeyUp(e: KeyboardEvent) {
     >
       <div
         ref="canvasRef"
-        class="dnd-canvas border-2 border-slate-400/50 shadow-[0_0_16px_rgba(148,163,184,0.25)]"
+        class="dnd-canvas select-none border-2 border-slate-400/50 shadow-[0_0_16px_rgba(148,163,184,0.25)]"
         :style="{
           width: `${pageWidth}px`,
           height: `${pageHeight}px`,
@@ -512,9 +531,11 @@ function onCtrlKeyUp(e: KeyboardEvent) {
           background: buildGradientBackground(bgColor, bgGradient, bgColorTo),
           touchAction: 'none',
         }"
+        @mousedown="handleMouseDown"
         @pointerdown="handlePointerDown"
         @pointermove="handlePointerMove"
         @pointerup="handlePointerUp"
+        @selectstart="handleSelectStart"
       >
         <!-- bg image -->
         <img

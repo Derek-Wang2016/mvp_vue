@@ -13,6 +13,8 @@ const textStyle = computed(() => {
   if (!props.isEditing) {
     extra.cursor = 'text'
     extra.userSelect = 'none'
+  } else {
+    extra.userSelect = 'text'
   }
   return buildTextComponentStyle(props.comp.props, extra)
 })
