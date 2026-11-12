@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { ICON_OPTIONS } from '../icons/catalog'
+import { LVGL_SYMBOLS, lvglSymbolName } from '../icons/lvglSymbols'
 import TablerImport from './TablerImport.vue'
 import { iconId } from '../resolve'
 import { resolveIcon } from '../icons/lvglSvg'
@@ -16,6 +17,7 @@ const props = defineProps<{
   colors?: Record<string, string>
   icons?: Record<string, string>
   library?: Record<string, string>
+  pages?: string[]
 }>()
 const emit = defineEmits<{
   patchShape: [patch: Partial<HmiShape>]
@@ -57,6 +59,45 @@ async function uploadImage(event: Event) {
   } catch (err) {
     uploadMsg.value = err instanceof Error ? err.message : '上传失败'
   }
+}
+
+function blockParamsError(text: string | undefined): string {
+  const raw = text?.trim() ?? ''
+  if (!raw) return ''
+  try {
+    JSON.parse(raw)
+    return ''
+  } catch {
+    return '参数 JSON 无法解析，发布时不会带上 params'
+  }
+}
+
+function linkShowsLast(text: string | undefined): boolean {
+  const raw = text?.trim()
+  if (!raw) return false
+  try {
+    const parsed = JSON.parse(raw) as { show_last_comm?: unknown }
+    return parsed?.show_last_comm === true
+  } catch {
+    return false
+  }
+}
+
+function setLinkShowsLast(text: string | undefined, on: boolean) {
+  let parsed: Record<string, unknown> = {}
+  const raw = text?.trim()
+  if (raw) {
+    try {
+      const value = JSON.parse(raw) as unknown
+      if (value && typeof value === 'object' && !Array.isArray(value)) parsed = value as Record<string, unknown>
+      else return
+    } catch {
+      return
+    }
+  }
+  if (on) parsed.show_last_comm = true
+  else delete parsed.show_last_comm
+  emit('patchShape', { params: Object.keys(parsed).length ? JSON.stringify(parsed) : '' })
 }
 
 function num(value: string) {
@@ -297,6 +338,94 @@ function colorTable(parsed: unknown): Record<string, string> | null {
         <p class="text-xs text-slate-500">用这个字段的文本查页面图标字典和颜色字典。</p>
       </template>
     </template>
+    <template v-else-if="shape.type === 'block'">
+      <div class="grid grid-cols-2 gap-2">
+        <label>x<input class="field" type="number" :value="shape.x" @input="emit('patchShape', { x: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>y<input class="field" type="number" :value="shape.y" @input="emit('patchShape', { y: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>宽<input class="field" type="number" :value="shape.w" @input="emit('patchShape', { w: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>高<input class="field" type="number" :value="shape.h" @input="emit('patchShape', { h: num(($event.target as HTMLInputElement).value) })" /></label>
+      </div>
+      <ColorField label="底色" :model-value="shape.bg ?? ''" @update="emit('patchShape', { bg: $event })" />
+      <ColorField label="文字颜色" :model-value="shape.color ?? ''" @update="emit('patchShape', { color: $event })" />
+      <label class="block">字号<input class="field" :value="shape.font ?? 'default'" @input="emit('patchShape', { font: ($event.target as HTMLInputElement).value })" /></label>
+      <label class="block">圆角<input class="field" type="number" :value="shape.radius ?? 0" @input="emit('patchShape', { radius: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label class="block">边框宽<input class="field" type="number" :value="shape.border_w ?? 0" @input="emit('patchShape', { border_w: num(($event.target as HTMLInputElement).value) })" /></label>
+      <ColorField label="边框色" :model-value="shape.border_color ?? ''" @update="emit('patchShape', { border_color: $event })" />
+      <label class="block">阴影宽<input class="field" type="number" :value="shape.shadow?.width ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, width: num(($event.target as HTMLInputElement).value) } })" /></label>
+      <ColorField label="阴影色" :model-value="shape.shadow?.color ?? ''" @update="emit('patchShape', { shadow: { ...shape.shadow, color: $event } })" />
+      <div class="grid grid-cols-2 gap-2">
+        <label>阴影 ofs_x<input class="field" type="number" :value="shape.shadow?.ofs_x ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, ofs_x: num(($event.target as HTMLInputElement).value) } })" /></label>
+        <label>阴影 ofs_y<input class="field" type="number" :value="shape.shadow?.ofs_y ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, ofs_y: num(($event.target as HTMLInputElement).value) } })" /></label>
+      </div>
+      <label class="block">功能 KEY
+        <input class="field" maxlength="39" :value="shape.key ?? ''" placeholder="例如 PATIENT_LIST" @input="emit('patchShape', { key: ($event.target as HTMLInputElement).value })" />
+      </label>
+      <label v-if="(shape.key ?? '').trim().toUpperCase() === 'LINK'" class="flex items-center gap-2">显示上次通信时间
+        <input type="checkbox" :checked="linkShowsLast(shape.params)" @change="setLinkShowsLast(shape.params, ($event.target as HTMLInputElement).checked)" />
+      </label>
+      <p v-if="(shape.key ?? '').trim().toUpperCase() === 'LINK'" class="text-xs text-slate-500">默认不显示。打开后参数为 show_last_comm: true。</p>
+      <label class="block">参数 JSON
+        <textarea class="field editor-scrollbar h-28 font-mono" :value="shape.params ?? ''" @input="emit('patchShape', { params: ($event.target as HTMLTextAreaElement).value })" />
+      </label>
+      <p v-if="blockParamsError(shape.params)" class="text-xs text-rose-300">{{ blockParamsError(shape.params) }}</p>
+      <p class="text-xs text-slate-500">这里只画区域。设备按功能 KEY 和参数 JSON 在这块区域里实现功能。</p>
+    </template>
+    <template v-else-if="shape.type === 'button'">
+      <div class="grid grid-cols-2 gap-2">
+        <label>x<input class="field" type="number" :value="shape.x" @input="emit('patchShape', { x: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>y<input class="field" type="number" :value="shape.y" @input="emit('patchShape', { y: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>宽<input class="field" type="number" :value="shape.w" @input="emit('patchShape', { w: num(($event.target as HTMLInputElement).value) })" /></label>
+        <label>高<input class="field" type="number" :value="shape.h" @input="emit('patchShape', { h: num(($event.target as HTMLInputElement).value) })" /></label>
+      </div>
+      <label class="block">文字<input class="field" maxlength="39" :value="shape.text ?? ''" @input="emit('patchShape', { text: ($event.target as HTMLInputElement).value })" /></label>
+      <label class="block">SVG 图标
+        <select class="field" :value="shape.icon ?? ''" @change="emit('patchShape', { icon: ($event.target as HTMLSelectElement).value })">
+          <option value="">无</option>
+          <option v-for="opt in iconChoices" :key="opt.id" :value="opt.id">{{ opt.name }}</option>
+        </select>
+      </label>
+      <label class="block">LVGL 图标
+        <select class="field" :value="lvglSymbolName(shape.symbol)" @change="emit('patchShape', { symbol: ($event.target as HTMLSelectElement).value })">
+          <option value="">无</option>
+          <option v-for="opt in LVGL_SYMBOLS" :key="opt.id" :value="opt.id">{{ opt.name }} {{ opt.id }}</option>
+        </select>
+      </label>
+      <label class="block">字号<input class="field" :value="shape.font ?? 'default'" @input="emit('patchShape', { font: ($event.target as HTMLInputElement).value })" /></label>
+      <label class="block">图标位置
+        <select class="field" :value="shape.icon_pos ?? 'left'" @change="emit('patchShape', { icon_pos: ($event.target as HTMLSelectElement).value as 'left' | 'right' | 'top' | 'bottom' })">
+          <option value="left">左右</option>
+          <option value="right">右左</option>
+          <option value="top">上下</option>
+          <option value="bottom">下上</option>
+        </select>
+      </label>
+      <ColorField label="文字颜色" :model-value="shape.color ?? '#FFFFFF'" @update="emit('patchShape', { color: $event })" />
+      <ColorField label="底色" :model-value="shape.bg ?? ''" @update="emit('patchShape', { bg: $event })" />
+      <label class="block">圆角<input class="field" type="number" :value="shape.radius ?? 0" @input="emit('patchShape', { radius: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label class="block">边框宽<input class="field" type="number" :value="shape.border_w ?? 0" @input="emit('patchShape', { border_w: num(($event.target as HTMLInputElement).value) })" /></label>
+      <ColorField label="边框色" :model-value="shape.border_color ?? ''" @update="emit('patchShape', { border_color: $event })" />
+      <label class="block">阴影宽<input class="field" type="number" :value="shape.shadow?.width ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, width: num(($event.target as HTMLInputElement).value) } })" /></label>
+      <ColorField label="阴影色" :model-value="shape.shadow?.color ?? ''" @update="emit('patchShape', { shadow: { ...shape.shadow, color: $event } })" />
+      <div class="grid grid-cols-2 gap-2">
+        <label>阴影 ofs_x<input class="field" type="number" :value="shape.shadow?.ofs_x ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, ofs_x: num(($event.target as HTMLInputElement).value) } })" /></label>
+        <label>阴影 ofs_y<input class="field" type="number" :value="shape.shadow?.ofs_y ?? 0" @input="emit('patchShape', { shadow: { ...shape.shadow, ofs_y: num(($event.target as HTMLInputElement).value) } })" /></label>
+      </div>
+      <label class="block">类型
+        <select class="field" :value="shape.action" @change="emit('patchShape', { action: ($event.target as HTMLSelectElement).value as 'page' | 'function' })">
+          <option value="page">页面导航</option>
+          <option value="function">功能</option>
+        </select>
+      </label>
+      <label v-if="shape.action !== 'function'" class="block">跳转页面
+        <select class="field" :value="shape.page ?? 'index'" @change="emit('patchShape', { page: ($event.target as HTMLSelectElement).value })">
+          <option v-for="name in pages ?? []" :key="name" :value="name">{{ name }}</option>
+        </select>
+      </label>
+      <label v-else class="block">功能 KEY
+        <input class="field" maxlength="39" :value="shape.key ?? ''" placeholder="例如 CALL_NURSE" @input="emit('patchShape', { key: ($event.target as HTMLInputElement).value })" />
+      </label>
+      <p class="text-xs text-slate-500">这里只占位。功能 KEY 由设备接线。LVGL 图标写 CALL 这种短名，画在文字左边，颜色和字号跟按钮文字一致。</p>
+    </template>
     <template v-else>
       <div class="grid grid-cols-2 gap-2">
         <label>x<input class="field" type="number" :value="shape.x" @input="emit('patchShape', { x: num(($event.target as HTMLInputElement).value) })" /></label>
@@ -319,6 +448,9 @@ function colorTable(parsed: unknown): Record<string, string> | null {
       <template v-else>
         <label class="block">src<input class="field" :value="shape.src" @input="emit('patchShape', { src: ($event.target as HTMLInputElement).value })" /></label>
         <label class="block">url<input class="field" :value="shape.url ?? ''" @input="emit('patchShape', { url: ($event.target as HTMLInputElement).value })" /></label>
+        <ColorField label="染色" :model-value="shape.color ?? ''" @update="emit('patchShape', { color: $event })" />
+        <label class="block">不透明度 0–100<input class="field" type="number" min="0" max="100" placeholder="100" :value="shape.opa ?? ''" @input="emit('patchShape', { opa: ($event.target as HTMLInputElement).value === '' ? undefined : Math.max(0, Math.min(100, num(($event.target as HTMLInputElement).value))) })" /></label>
+        <p class="text-xs text-slate-500">留空按原图显示。填写颜色后整张 PNG 染成这一种颜色，透明像素保持不动。不透明度缺省 100，0 为完全透明。可写 #RRGGBB 或 color.字段名。</p>
         <label class="btn inline-flex cursor-pointer">
           上传图片
           <input class="hidden" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" @change="uploadImage" />
@@ -371,6 +503,12 @@ function colorTable(parsed: unknown): Record<string, string> | null {
       <label class="block">标题字体<input class="field" :value="item.title_font ?? ''" @input="emit('patchItem', { title_font: ($event.target as HTMLInputElement).value })" /></label>
       <ColorField label="标题颜色" :model-value="item.title_color ?? ''" @update="emit('patchItem', { title_color: $event })" />
       <label class="block">format<input class="field" :value="item.format ?? ''" @input="emit('patchItem', { format: ($event.target as HTMLInputElement).value })" /></label>
+      <label class="block">遮罩符号<input class="field" maxlength="4" placeholder="如 *" :value="item.mask ?? ''" @input="emit('patchItem', { mask: ($event.target as HTMLInputElement).value })" /></label>
+      <div class="grid grid-cols-2 gap-2">
+        <label>从第几个字<input class="field" type="number" min="1" placeholder="2" :value="item.mask_at ?? ''" @input="emit('patchItem', { mask_at: num(($event.target as HTMLInputElement).value) || undefined })" /></label>
+        <label>遮罩字数<input class="field" type="number" min="1" placeholder="1" :value="item.mask_n ?? ''" @input="emit('patchItem', { mask_n: num(($event.target as HTMLInputElement).value) || undefined })" /></label>
+      </div>
+      <p class="text-xs text-slate-500">填写符号后生效。缺省从第 2 个字起遮 1 个，例如赵一鸣显示为赵*鸣。</p>
       <label class="block">左侧内边距<input class="field" type="number" :value="item.pad_x ?? 0" @input="emit('patchItem', { pad_x: num(($event.target as HTMLInputElement).value) })" /></label>
       <label class="block">标题间距<input class="field" type="number" :value="item.gap ?? 0" @input="emit('patchItem', { gap: num(($event.target as HTMLInputElement).value) })" /></label>
     </template>

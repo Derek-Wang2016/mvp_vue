@@ -1,5 +1,6 @@
 import { resolveIcon } from './icons/lvglSvg'
-import { FONT_PX, type HmiDocument, type HmiItem } from './types'
+import { lvglSymbolName } from './icons/lvglSymbols'
+import { currentPage, FONT_PX, type HmiDocument, type HmiItem, type HmiPage, type HmiShape } from './types'
 
 export function fontPx(name: string | undefined, fallback = 28): number {
   if (!name) return fallback
@@ -27,6 +28,19 @@ export function formatClock(date: Date, format?: string): string {
     if (token === '%S') return pad(date.getSeconds())
     return week[date.getDay()] ?? ''
   })
+}
+
+/** 按字符遮罩。未配置符号时原样返回。下标从 1 开始，缺省遮第 2 个字符。 */
+export function applyMask(text: string, symbol?: string, at?: number, count?: number): string {
+  const mark = (symbol ?? '').trim()
+  if (!mark) return text
+  const chars = Array.from(text)
+  const start = Math.max(0, (at != null && at > 0 ? Math.floor(at) : 2) - 1)
+  const n = Math.max(1, count != null && count > 0 ? Math.floor(count) : 1)
+  if (start >= chars.length) return text
+  const end = Math.min(chars.length, start + n)
+  for (let i = start; i < end; i++) chars[i] = mark
+  return chars.join('')
 }
 
 export function textAlign(align: HmiItem['align']): 'left' | 'center' | 'right' {
@@ -99,7 +113,66 @@ export function exportIcons(icons: Record<string, string> | undefined, docLibrar
   return out
 }
 
-function exportShape(shape: HmiDocument['shapes'][number], docLibrary?: Record<string, string>): Record<string, unknown> {
+function exportParams(text: string | undefined): unknown {
+  const raw = text?.trim()
+  if (!raw) return undefined
+  try {
+    return JSON.parse(raw) as unknown
+  } catch {
+    return undefined
+  }
+}
+
+function exportShape(shape: HmiShape, docLibrary?: Record<string, string>): Record<string, unknown> {
+  if (shape.type === 'block') {
+    return {
+      type: 'block',
+      x: shape.x,
+      y: shape.y,
+      w: shape.w,
+      h: shape.h,
+      bg: shape.bg,
+      color: shape.color,
+      font: shape.font,
+      radius: shape.radius,
+      border_w: shape.border_w,
+      border_color: shape.border_color,
+      shadow: (shape.shadow?.width ?? 0) > 0 ? shape.shadow : undefined,
+      key: shape.key,
+      params: exportParams(shape.params),
+    }
+  }
+  if (shape.type === 'button') {
+    const svg = resolveIcon(shape.icon, docLibrary)
+    return {
+      type: 'button',
+      x: shape.x,
+      y: shape.y,
+      w: shape.w,
+      h: shape.h,
+      text: shape.text ?? '',
+      svg: svg || undefined,
+      symbol: lvglSymbolName(shape.symbol) || undefined,
+      color: shape.color,
+      font: shape.font,
+      icon_pos: shape.icon_pos === 'right' || shape.icon_pos === 'top' || shape.icon_pos === 'bottom' ? shape.icon_pos : 'left',
+      bg: shape.bg,
+      radius: shape.radius,
+      border_w: shape.border_w,
+      border_color: shape.border_color,
+      shadow: (shape.shadow?.width ?? 0) > 0 ? shape.shadow : undefined,
+      action: shape.action,
+      page: shape.action === 'page' ? shape.page : undefined,
+      key: shape.action === 'function' ? shape.key : undefined,
+    }
+  }
+  if (shape.type === 'image') {
+    const next: Record<string, unknown> = { ...shape }
+    const opa = Number(shape.opa)
+    if (!Number.isFinite(opa) || opa >= 100) delete next.opa
+    else next.opa = Math.max(0, Math.min(100, Math.round(opa)))
+    return next
+  }
   if (shape.type !== 'icon' || shape.mode !== 'static') return { ...shape }
   const svg = resolveIcon(shape.icon, docLibrary)
   return {
@@ -119,6 +192,11 @@ function exportItem(item: HmiItem): Record<string, unknown> {
   delete next.icons
   delete next.icon
   delete next.icon_size
+  if (!String(next.mask ?? '').trim()) {
+    delete next.mask
+    delete next.mask_at
+    delete next.mask_n
+  }
   return next
 }
 
@@ -131,22 +209,36 @@ function omitEmpty<T extends Record<string, unknown>>(input: T): T {
   return out as T
 }
 
-export function deviceJson(doc: HmiDocument) {
+function exportPage(page: HmiPage, library?: Record<string, string>) {
   return {
-    version: 2 as const,
-    colors: doc.colors ?? {},
-    icons: exportIcons(doc.icons, doc.library),
-    shapes: doc.shapes.map((shape) => omitEmpty(exportShape(shape, doc.library))),
-    cards: doc.cards.map((card) => omitEmpty({
+    shapes: page.shapes.map((shape) => omitEmpty(exportShape(shape, library))),
+    cards: page.cards.map((card) => omitEmpty({
       ...card,
       items: card.items.map((item) => omitEmpty(exportItem(item))),
     })),
   }
 }
 
+export function deviceJson(doc: HmiDocument) {
+  const names = ['index', ...Object.keys(doc.pages).filter((name) => name !== 'index')]
+  const pages: Record<string, ReturnType<typeof exportPage>> = {}
+  for (const name of names) {
+    const page = doc.pages[name]
+    if (page) pages[name] = exportPage(page, doc.library)
+  }
+  return {
+    version: 3 as const,
+    screen: doc.screen,
+    colors: doc.colors ?? {},
+    icons: exportIcons(doc.icons, doc.library),
+    pages,
+  }
+}
+
 export function bindingCount(doc: HmiDocument): number {
-  const icons = doc.shapes.filter((shape) => shape.type === 'icon' && shape.mode !== 'static' && shape.prop).length
-  return icons + doc.cards.reduce((sum, card) => sum + card.items.filter((item) => {
+  const page = currentPage(doc)
+  const icons = page.shapes.filter((shape) => shape.type === 'icon' && shape.mode !== 'static' && shape.prop).length
+  return icons + page.cards.reduce((sum, card) => sum + card.items.filter((item) => {
     if (item.type === 'qrcode' || item.type === 'split') return true
     return item.type === 'value' && item.prop !== 'CLOCK'
   }).length, 0)

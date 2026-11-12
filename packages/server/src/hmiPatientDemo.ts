@@ -38,6 +38,7 @@ export function buildHmiPatientResponse() {
   const tend = pick(TEND)
   const [red, green, blue] = CARE_RGB[tend]
   const allergy = [...ALLERGY].sort(() => Math.random() - 0.5).slice(0, 2)
+  const diet = [...DIET].sort(() => Math.random() - 0.5).slice(0, 1 + Math.floor(Math.random() * 3))
   const isolation = [...ISOLATION].sort(() => Math.random() - 0.5).slice(0, 1 + Math.floor(Math.random() * 3))
   const safe = [...SAFE].sort(() => Math.random() - 0.5).slice(0, 6)
   return {
@@ -61,7 +62,7 @@ export function buildHmiPatientResponse() {
         COLORBLUE: blue,
         DRUG_FEEDBACK: allergy.join(','),
         COMMUNICABLE_DISEASES_NAME: isolation.join(','),
-        DIET_LEVEL_NAME: pick(DIET),
+        DIET_LEVEL_NAME: diet.join(','),
         SAFETAKECARE: safe.join(','),
         DIAGNOSE: '腰椎间盘突出',
       },

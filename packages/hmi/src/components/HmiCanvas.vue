@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useHmiStore } from '../stores/hmiStore'
-import { screenBoxes } from '../geometry'
+import { clampTranslation, screenBoxes } from '../geometry'
 import { snapDrag, type Box } from '../canvasGuides'
 import Stage from './Stage.vue'
 import HmiRulers from './HmiRulers.vue'
@@ -120,33 +120,14 @@ function onCanvasDown(event: PointerEvent) {
   beginBox(event, event.shiftKey || event.ctrlKey || event.metaKey)
 }
 
+function limitedDrag(rawDx: number, rawDy: number, moving: { x: number; y: number; r: number; b: number }[]) {
+  const snapped = snapDrag(rawDx, rawDy, scale.value, moving, otherBoxes.value)
+  const boxes = moving.map((box) => ({ x: box.x, y: box.y, w: box.r - box.x, h: box.b - box.y }))
+  return clampTranslation(boxes, snapped.dx, snapped.dy, doc.value.screen.w, doc.value.screen.h)
+}
+
 function onTargetDown(event: PointerEvent, key: string) {
   const additive = event.shiftKey || event.ctrlKey || event.metaKey
-  const already = selectedKeys.value.includes(key)
-  if (key.startsWith('s:') && !already) {
-    const point = clientPoint(event)
-    const startX = event.clientX
-    const startY = event.clientY
-    let moved = false
-    const move = (ev: PointerEvent) => {
-      if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 4) return
-      if (!moved) {
-        moved = true
-        if (point) boxSelect.value = { x1: point.x, y1: point.y, x2: point.x, y2: point.y }
-      }
-      const next = clientPoint(ev)
-      if (next && boxSelect.value) boxSelect.value = { ...boxSelect.value, x2: next.x, y2: next.y }
-    }
-    const up = () => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
-      if (moved) finishBox(additive)
-      else store.selectKey(key, additive)
-    }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
-    return
-  }
   store.selectKey(key, additive)
   if (boxes.value.find((box) => box.key === key)?.locked) return
   const movable = () => selectedBoxes.value.filter((box) => !box.locked)
@@ -154,28 +135,34 @@ function onTargetDown(event: PointerEvent, key: string) {
   const startX = event.clientX
   const startY = event.clientY
   let active = false
+  const finish = (ev: PointerEvent) => {
+    window.removeEventListener('pointermove', move)
+    window.removeEventListener('pointerup', finish)
+    window.removeEventListener('pointercancel', finish)
+    if (active && (ev.type === 'pointerup' || ev.buttons === 0)) {
+      const rawDx = (ev.clientX - startX) / scale.value
+      const rawDy = (ev.clientY - startY) / scale.value
+      const moving = movable().map((box) => ({ x: box.x, y: box.y, r: box.x + box.w, b: box.y + box.h }))
+      const next = limitedDrag(rawDx, rawDy, moving)
+      store.moveSelected(next.dx, next.dy)
+    }
+    store.dragOffset = null
+  }
   const move = (ev: PointerEvent) => {
+    if ((ev.buttons & 1) === 0) {
+      finish(ev)
+      return
+    }
     const rawDx = (ev.clientX - startX) / scale.value
     const rawDy = (ev.clientY - startY) / scale.value
     if (!active && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 4) return
     active = true
     const moving = movable().map((box) => ({ x: box.x, y: box.y, r: box.x + box.w, b: box.y + box.h }))
-    store.dragOffset = snapDrag(rawDx, rawDy, scale.value, moving, otherBoxes.value)
-  }
-  const up = (ev: PointerEvent) => {
-    window.removeEventListener('pointermove', move)
-    window.removeEventListener('pointerup', up)
-    if (active) {
-      const rawDx = (ev.clientX - startX) / scale.value
-      const rawDy = (ev.clientY - startY) / scale.value
-      const moving = movable().map((box) => ({ x: box.x, y: box.y, r: box.x + box.w, b: box.y + box.h }))
-      const next = snapDrag(rawDx, rawDy, scale.value, moving, otherBoxes.value)
-      store.moveSelected(next.dx, next.dy)
-    }
-    store.dragOffset = null
+    store.dragOffset = limitedDrag(rawDx, rawDy, moving)
   }
   window.addEventListener('pointermove', move)
-  window.addEventListener('pointerup', up)
+  window.addEventListener('pointerup', finish)
+  window.addEventListener('pointercancel', finish)
 }
 
 function onMenu(event: MouseEvent, key: string) {
@@ -210,6 +197,17 @@ function onResize(dir: string, event: PointerEvent) {
       h = Math.max(8, origin.h - dy)
       y = origin.y + origin.h - h
     }
+    const screen = doc.value.screen
+    if (x < 0) {
+      w += x
+      x = 0
+    }
+    if (y < 0) {
+      h += y
+      y = 0
+    }
+    w = Math.min(Math.max(8, w), screen.w - x)
+    h = Math.min(Math.max(8, h), screen.h - y)
     store.setBoxRect(box.key, { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) })
   }
   const up = () => {
@@ -294,7 +292,7 @@ function onWheel(event: WheelEvent) {
           />
           <div
             v-if="single && !single.line && !single.locked"
-            class="pointer-events-none absolute"
+            class="pointer-events-none absolute z-20 border border-sky-400"
             :style="{ left: single.x + (dragOffset?.dx ?? 0) + 'px', top: single.y + (dragOffset?.dy ?? 0) + 'px', width: single.w + 'px', height: single.h + 'px' }"
           >
             <button

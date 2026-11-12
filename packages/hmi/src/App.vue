@@ -6,14 +6,16 @@ import { createPublication, createScreen, deletePublication, deleteScreen, getSc
 import { createDefaultDocument } from './defaultDocument'
 import { bindingCount, deviceJson, withCareColor } from './resolve'
 import { getApiBase } from './config'
-import { LIMITS, type HmiDocument, type HmiShape } from './types'
+import { currentPage, LIMITS, type HmiDocument, type HmiShape } from './types'
 import TreePanel from './components/TreePanel.vue'
 import HmiCanvas from './components/HmiCanvas.vue'
 import PropertyPanel from './components/PropertyPanel.vue'
 
 const store = useHmiStore()
+store.migrate()
 store.doc.sample = { ...createDefaultDocument().sample, ...store.doc.sample }
-const { doc, name, selection, screenId, selectedKeys } = storeToRefs(store)
+const { doc, name, selection, screenId, selectedKeys, pageNames } = storeToRefs(store)
+const page = computed(() => currentPage(doc.value))
 
 const msg = ref('')
 const saving = ref(false)
@@ -23,6 +25,9 @@ const showJson = ref(false)
 const showSample = ref(false)
 const sampleText = ref('')
 const confirmDelete = ref<HmiListItem | null>(null)
+const showAddPage = ref(false)
+const newPageName = ref('')
+const confirmDropPage = ref(false)
 const showPublish = ref(false)
 const showPublications = ref(false)
 const publishDescription = ref('')
@@ -46,17 +51,17 @@ const canPaste = computed(() => store.canPaste)
 const lockedMenu = computed(() => {
   const key = contextMenu.value?.key
   if (!key) return false
-  if (key.startsWith('s:')) return !!doc.value.shapes[Number(key.slice(2))]?.locked
-  if (key.startsWith('c:')) return !!doc.value.cards[Number(key.slice(2))]?.locked
+  if (key.startsWith('s:')) return !!page.value.shapes[Number(key.slice(2))]?.locked
+  if (key.startsWith('c:')) return !!page.value.cards[Number(key.slice(2))]?.locked
   return false
 })
-const selectedShape = computed(() => selection.value?.kind === 'shape' ? doc.value.shapes[selection.value.index] : undefined)
+const selectedShape = computed(() => selection.value?.kind === 'shape' ? page.value.shapes[selection.value.index] : undefined)
 const selectedCard = computed(() => {
-  if (selection.value?.kind === 'card') return doc.value.cards[selection.value.index]
-  if (selection.value?.kind === 'item') return doc.value.cards[selection.value.card]
+  if (selection.value?.kind === 'card') return page.value.cards[selection.value.index]
+  if (selection.value?.kind === 'item') return page.value.cards[selection.value.card]
   return undefined
 })
-const selectedItem = computed(() => selection.value?.kind === 'item' ? doc.value.cards[selection.value.card]?.items[selection.value.index] : undefined)
+const selectedItem = computed(() => selection.value?.kind === 'item' ? page.value.cards[selection.value.card]?.items[selection.value.index] : undefined)
 
 function note(error: string | null) {
   msg.value = error ?? ''
@@ -128,6 +133,7 @@ function applySample() {
 }
 
 async function openPublications() {
+  updateNote.value = {}
   showPublications.value = true
   try { publications.value = await listPublications() } catch { msg.value = '无法读取发布列表'; publications.value = [] }
 }
@@ -217,14 +223,9 @@ function importDoc(text: string) {
   try {
     const parsed = JSON.parse(text) as HmiDocument
     store.load(screenId.value ?? 0, name.value, {
-      version: 2,
-      screen: doc.value.screen,
+      ...parsed,
       sample: doc.value.sample,
-      colors: parsed.colors ?? doc.value.colors,
-      icons: parsed.icons ?? doc.value.icons,
       library: parsed.library ?? doc.value.library,
-      shapes: parsed.shapes,
-      cards: parsed.cards,
     })
     if (!screenId.value) store.screenId = null
     msg.value = '已写回'
@@ -235,11 +236,26 @@ function importDoc(text: string) {
 
 function resizeScreen(w: number, h: number) {
   doc.value.screen = { w, h }
-  const bg = doc.value.shapes[0]
+  const bg = page.value.shapes[0]
   if (bg && bg.type === 'rect') {
     bg.w = w
     bg.h = h
   }
+}
+
+function addPage() {
+  const error = store.addPage(newPageName.value)
+  if (error) {
+    msg.value = error
+    return
+  }
+  newPageName.value = ''
+  showAddPage.value = false
+}
+
+function removePage() {
+  store.removePage(doc.value.active)
+  confirmDropPage.value = false
 }
 </script>
 
@@ -254,6 +270,13 @@ function resizeScreen(w: number, h: number) {
       <label class="text-xs text-slate-400">高
         <input class="ml-1 w-16 rounded border border-slate-600 bg-slate-950 px-1" type="number" :value="doc.screen.h" @change="resizeScreen(doc.screen.w, Number(($event.target as HTMLInputElement).value))" />
       </label>
+      <label class="text-xs text-slate-400">页面
+        <select class="ml-1 rounded border border-slate-600 bg-slate-950 px-1 py-1" :value="doc.active" @change="store.showPage(($event.target as HTMLSelectElement).value)">
+          <option v-for="pageName in pageNames" :key="pageName" :value="pageName">{{ pageName }}</option>
+        </select>
+      </label>
+      <button class="btn" @click="showAddPage = true">添加页面</button>
+      <button v-if="doc.active !== 'index'" class="btn text-rose-300" @click="confirmDropPage = true">删除页面</button>
       <button class="btn" @click="store.reset()">新建</button>
       <button class="btn" @click="openList">打开</button>
       <button class="btn" :disabled="saving" @click="save">保存</button>
@@ -263,7 +286,7 @@ function resizeScreen(w: number, h: number) {
       <button class="btn" @click="editSample">样例数据</button>
       <button class="btn" :class="showGrid ? 'text-sky-300' : ''" @click="showGrid = !showGrid">网格</button>
       <button class="btn" :class="showPosition ? 'text-sky-300' : ''" @click="showPosition = !showPosition">位置</button>
-      <span class="text-xs text-slate-500">卡片 {{ doc.cards.length }} · 绑定 {{ bindingCount(doc) }}/{{ LIMITS.bindings }}</span>
+      <span class="text-xs text-slate-500">卡片 {{ page.cards.length }} · 绑定 {{ bindingCount(doc) }}/{{ LIMITS.bindings }}</span>
       <template v-if="canAlign">
         <span class="mx-1 h-4 w-px bg-slate-700" />
         <button class="btn" title="左对齐" @click="store.align('left')">左</button>
@@ -285,6 +308,8 @@ function resizeScreen(w: number, h: number) {
           <button class="btn" @click="note(store.addShape('line'))">线条</button>
           <button class="btn" @click="note(store.addShape('image'))">图片</button>
           <button class="btn" @click="note(store.addShape('icon'))">图标</button>
+          <button class="btn" @click="note(store.addShape('button'))">按钮</button>
+          <button class="btn" @click="note(store.addShape('block'))">功能块</button>
           <button class="btn" @click="note(store.addCard())">卡片</button>
           <button class="btn" @click="note(store.addItem('label'))">标题</button>
           <button class="btn" @click="note(store.addItem('value'))">数值</button>
@@ -294,7 +319,7 @@ function resizeScreen(w: number, h: number) {
           <button class="btn text-rose-300" @click="store.removeSelected()">删除</button>
         </div>
         <div class="editor-scrollbar min-h-0 flex-1 overflow-auto p-2">
-          <TreePanel :shapes="doc.shapes" :cards="doc.cards" :selection="selection" @select="store.select" />
+          <TreePanel :shapes="page.shapes" :cards="page.cards" :selection="selection" @select="store.select" />
         </div>
       </aside>
       <main class="flex min-w-0 flex-1">
@@ -317,6 +342,7 @@ function resizeScreen(w: number, h: number) {
           :colors="doc.colors"
           :icons="doc.icons"
           :library="doc.library"
+          :pages="pageNames"
           @patch-colors="store.setColors"
           @patch-icons="store.setIcons"
           @patch-library="store.setLibrary"
@@ -372,13 +398,32 @@ function resizeScreen(w: number, h: number) {
     </div>
     <div v-if="showJson" class="overlay" @click.self="showJson = false">
       <div class="dialog w-[720px]">
-        <div class="mb-2 flex justify-between"><span>version 2：只有 version、shapes、cards</span>
+        <div class="mb-2 flex justify-between"><span>version 3：screen、colors、icons、pages。index 为启动页</span>
           <span class="flex gap-2">
             <button class="btn" @click="copyJson">复制</button>
             <button @click="showJson = false">关闭</button>
           </span>
         </div>
         <textarea class="editor-scrollbar h-96 w-full rounded bg-slate-950 p-2 font-mono text-xs" :value="jsonText" @change="importDoc(($event.target as HTMLTextAreaElement).value)" />
+      </div>
+    </div>
+    <div v-if="showAddPage" class="overlay" @click.self="showAddPage = false">
+      <div class="dialog">
+        <div class="mb-2">添加页面</div>
+        <input v-model="newPageName" class="w-full rounded border border-slate-600 bg-slate-950 px-2 py-1" placeholder="例如 detail" @keyup.enter="addPage" />
+        <div class="mt-3 flex justify-end gap-2">
+          <button class="btn" @click="showAddPage = false">取消</button>
+          <button class="btn" @click="addPage">添加</button>
+        </div>
+      </div>
+    </div>
+    <div v-if="confirmDropPage" class="overlay" @click.self="confirmDropPage = false">
+      <div class="dialog">
+        <p>删除页面「{{ doc.active }}」？index 会继续作为启动页。</p>
+        <div class="mt-3 flex justify-end gap-2">
+          <button class="btn" @click="confirmDropPage = false">取消</button>
+          <button class="btn text-rose-300" @click="removePage">删除</button>
+        </div>
       </div>
     </div>
     <div v-if="showPublish" class="overlay" @click.self="showPublish = false">

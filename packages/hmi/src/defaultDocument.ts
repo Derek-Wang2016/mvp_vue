@@ -20,9 +20,16 @@ const sample = {
   SAFETAKECARE: '防窒息,防坠床',
 }
 
+export function createBlankDocument(): HmiDocument {
+  const doc = createDefaultDocument()
+  doc.active = 'index'
+  doc.pages = { index: { shapes: [], cards: [] } }
+  return doc
+}
+
 export function createDefaultDocument(): HmiDocument {
   return {
-    version: 2,
+    version: 3,
     screen: { w: 1024, h: 600 },
     sample,
     colors: {
@@ -48,6 +55,9 @@ export function createDefaultDocument(): HmiDocument {
       三级护理: 'care-3',
     },
     library: {},
+    active: 'index',
+    pages: {
+      index: {
     shapes: [
       { type: 'rect', x: 0, y: 0, w: 1024, h: 600, bg: '#33ABE4' },
       { type: 'rect', x: 0, y: 0, w: 1024, h: 54, bg: '#0E3A5F' },
@@ -109,6 +119,8 @@ export function createDefaultDocument(): HmiDocument {
         ],
       },
     ],
+      },
+    },
   }
 }
 

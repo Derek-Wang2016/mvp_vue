@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import type { HmiDocument, HmiIconShape, HmiImage, Selection } from '../types'
+import { currentPage, type HmiButton, type HmiDocument, type HmiIconShape, type HmiImage, type HmiItem, type Selection } from '../types'
 import { cardKey, shapeKey } from '../geometry'
 import { paintSvg, resolveIcon } from '../icons/lvglSvg'
-import { fontPx, formatClock, lookupColor, paintColor, sampleValue, textAlign, trackSizes } from '../resolve'
+import { lvglSymbolName } from '../icons/lvglSymbols'
+import { applyMask, fontPx, formatClock, lookupColor, paintColor, sampleValue, textAlign, trackSizes } from '../resolve'
 import { getApiBase } from '../config'
 
 const props = defineProps<{
@@ -13,6 +14,7 @@ const props = defineProps<{
   drag: { dx: number; dy: number } | null
   showPosition: boolean
 }>()
+const page = computed(() => currentPage(props.doc))
 const emit = defineEmits<{
   select: [selection: Selection | null]
   targetDown: [event: PointerEvent, key: string]
@@ -32,6 +34,17 @@ function selectedShape(index: number) {
 function selectedCard(index: number) {
   return props.selectedKeys.includes(cardKey(index)) || (props.selection?.kind === 'item' && props.selection.card === index)
 }
+function symbolSize(shape: HmiButton): number {
+  if (shape.font) return fontPx(shape.font)
+  return Math.min(48, Math.max(8, shape.h - 16))
+}
+
+function buttonIcon(shape: HmiButton): string {
+  const svg = resolveIcon(shape.icon, props.doc.library)
+  if (!svg) return ''
+  return paintSvg(svg, paintColor(shape.color, props.doc, '#FFFFFF'))
+}
+
 function shapeIcon(shape: HmiIconShape): string {
   if (shape.mode === 'static') {
     const svg = resolveIcon(shape.icon, props.doc.library)
@@ -129,6 +142,7 @@ function dragStyle(key: string, locked = false): Record<string, string> {
 }
 function onTarget(event: PointerEvent, key: string) {
   if (event.button !== 0) return
+  event.preventDefault()
   event.stopPropagation()
   emit('targetDown', event, key)
 }
@@ -153,6 +167,38 @@ function onMenu(event: MouseEvent, key: string) {
   emit('targetMenu', event, key)
 }
 
+function linkShowsLast(text: string | undefined): boolean {
+  const raw = text?.trim()
+  if (!raw) return false
+  try {
+    const parsed = JSON.parse(raw) as { show_last_comm?: unknown }
+    return parsed?.show_last_comm === true
+  } catch {
+    return false
+  }
+}
+
+function imageMaskStyle(shape: HmiImage): Record<string, string> {
+  const color = paintColor(shape.color, props.doc)
+  if (!color) return {}
+  const url = `url("${imageSrc(shape).replace(/"/g, '%22')}")`
+  return {
+    backgroundColor: color,
+    WebkitMaskImage: url,
+    maskImage: url,
+    WebkitMaskSize: '100% 100%',
+    maskSize: '100% 100%',
+    WebkitMaskRepeat: 'no-repeat',
+    maskRepeat: 'no-repeat',
+    WebkitMaskPosition: 'center',
+    maskPosition: 'center',
+  }
+}
+function imageOpacity(shape: HmiImage): number {
+  const opa = shape.opa
+  if (opa == null || !Number.isFinite(opa)) return 1
+  return Math.max(0, Math.min(100, opa)) / 100
+}
 function imageSrc(shape: HmiImage) {
   const url = shape.url?.trim()
   if (!url) return shape.src
@@ -165,11 +211,17 @@ function valueText(prop: string | undefined, format?: string) {
   if (prop === 'CLOCK') return formatClock(new Date(), format)
   return String(sampleValue(props.doc, prop) ?? '')
 }
+
+function maskedValue(item: HmiItem) {
+  const raw = valueText(item.prop, item.format)
+  if (item.type !== 'value') return raw
+  return applyMask(raw, item.mask, item.mask_at, item.mask_n)
+}
 </script>
 
 <template>
   <div class="relative" :style="{ width: doc.screen.w + 'px', height: doc.screen.h + 'px' }">
-    <template v-for="(shape, index) in doc.shapes" :key="'s' + index">
+    <template v-for="(shape, index) in page.shapes" :key="'s' + index">
       <div
         v-if="shape.type === 'line'"
         data-node
@@ -178,14 +230,53 @@ function valueText(prop: string | undefined, format?: string) {
         @contextmenu="onMenu($event, shapeKey(index))"
       />
       <img
-        v-else-if="shape.type === 'image'"
+        v-else-if="shape.type === 'image' && !paintColor(shape.color, doc)"
         :src="imageSrc(shape)"
+        draggable="false"
+        @dragstart.prevent
         alt=""
         data-node
-        :style="{ ...boxStyle(shape), objectFit: 'fill', ...dragStyle(shapeKey(index), !!shape.locked), outline: selectedShape(index) ? '2px solid #38bdf8' : 'none', cursor: shape.locked ? 'default' : 'grab' }"
+        :style="{ ...boxStyle(shape), objectFit: 'fill', opacity: imageOpacity(shape), ...dragStyle(shapeKey(index), !!shape.locked), outline: selectedShape(index) ? '2px solid #38bdf8' : 'none', cursor: shape.locked ? 'default' : 'grab' }"
         @pointerdown="onTarget($event, shapeKey(index))"
         @contextmenu="onMenu($event, shapeKey(index))"
       />
+      <div
+        v-else-if="shape.type === 'image'"
+        data-node
+        :style="{ ...boxStyle(shape), ...imageMaskStyle(shape), opacity: imageOpacity(shape), ...dragStyle(shapeKey(index), !!shape.locked), outline: selectedShape(index) ? '2px solid #38bdf8' : 'none', cursor: shape.locked ? 'default' : 'grab' }"
+        @pointerdown="onTarget($event, shapeKey(index))"
+        @contextmenu="onMenu($event, shapeKey(index))"
+      />
+      <div
+        v-else-if="shape.type === 'block'"
+        data-node
+        class="flex flex-col items-center justify-center px-2"
+        :style="{ ...boxStyle(shape), color: paintColor(shape.color, doc, '#222222'), fontSize: fontPx(shape.font) + 'px', ...dragStyle(shapeKey(index), !!shape.locked), outline: selectedShape(index) ? '2px solid #38bdf8' : 'none', cursor: shape.locked ? 'default' : 'grab' }"
+        @pointerdown="onTarget($event, shapeKey(index))"
+        @contextmenu="onMenu($event, shapeKey(index))"
+      >
+        <span class="truncate font-semibold">{{ shape.key || '功能块' }}</span>
+        <span v-if="(shape.key ?? '').trim().toUpperCase() === 'LINK' && linkShowsLast(shape.params)" class="mt-1 truncate text-[0.7em] opacity-80">上次通信 14:32</span>
+      </div>
+      <div
+        v-else-if="shape.type === 'button'"
+        data-node
+        class="flex items-center justify-center gap-1 px-2"
+        :class="shape.icon_pos === 'right' ? 'flex-row-reverse' : shape.icon_pos === 'top' ? 'flex-col' : shape.icon_pos === 'bottom' ? 'flex-col-reverse' : 'flex-row'"
+        :style="{ ...boxStyle(shape), color: paintColor(shape.color, doc, '#FFFFFF'), fontSize: fontPx(shape.font) + 'px', ...dragStyle(shapeKey(index), !!shape.locked), outline: selectedShape(index) ? '2px solid #38bdf8' : 'none', cursor: shape.locked ? 'default' : 'grab' }"
+        @pointerdown="onTarget($event, shapeKey(index))"
+        @contextmenu="onMenu($event, shapeKey(index))"
+      >
+        <span class="flex shrink-0 items-center justify-center gap-1">
+          <span
+            v-if="lvglSymbolName(shape.symbol)"
+            class="flex items-center justify-center overflow-hidden font-semibold leading-none"
+            :style="{ width: symbolSize(shape) + 'px', height: symbolSize(shape) + 'px', fontSize: Math.max(8, symbolSize(shape) * 0.32) + 'px' }"
+          >{{ lvglSymbolName(shape.symbol) }}</span>
+          <span v-if="buttonIcon(shape)" class="h-6 w-6 [&>svg]:h-full [&>svg]:w-full" v-html="buttonIcon(shape)" />
+        </span>
+        <span class="truncate">{{ shape.text }}</span>
+      </div>
       <div
         v-else-if="shape.type === 'icon'"
         data-node
@@ -205,7 +296,7 @@ function valueText(prop: string | undefined, format?: string) {
     </template>
 
     <div
-      v-for="(card, cardIndex) in doc.cards"
+      v-for="(card, cardIndex) in page.cards"
       :key="'c' + cardIndex"
       data-node
       :style="{ ...boxStyle(card), ...dragStyle(cardKey(cardIndex), !!card.locked), outline: selectedCard(cardIndex) ? '2px solid #38bdf8' : 'none', cursor: card.locked ? 'default' : 'grab' }"
@@ -222,7 +313,7 @@ function valueText(prop: string | undefined, format?: string) {
           <span v-if="item.type === 'label'" :style="fontStyle(item)">{{ item.text }}</span>
           <span v-else-if="item.type === 'value'" class="flex w-full min-w-0 items-center" :style="{ gap: item.title ? `${item.gap ?? 0}px` : '0' }">
             <span v-if="item.title" class="shrink-0 whitespace-nowrap" :style="{ fontSize: fontPx(item.title_font) + 'px', color: paintColor(item.title_color, doc, '#222') }">{{ item.title }}</span>
-            <span :style="fontStyle(item)">{{ valueText(item.prop, item.format) }}</span>
+            <span :style="fontStyle(item)">{{ maskedValue(item) }}</span>
           </span>
           <div v-else-if="item.type === 'qrcode' && valueText(item.prop)" class="flex flex-col items-center text-[10px] text-slate-800" :style="{ width: (item.size ?? 140) + 'px' }">
             <div class="grid grid-cols-5 gap-px bg-white p-1">

@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
-import { createDefaultDocument } from '../defaultDocument'
+import { createBlankDocument, createDefaultDocument } from '../defaultDocument'
 import { bindingCount } from '../resolve'
-import { cardKey, screenBoxes, shapeKey } from '../geometry'
-import { LIMITS, type HmiCard, type HmiDocument, type HmiItem, type HmiShape, type Selection } from '../types'
+import { cardKey, clampTranslation, screenBoxes, shapeKey } from '../geometry'
+import { currentPage, LIMITS, type HmiCard, type HmiDocument, type HmiItem, type HmiPage, type HmiShape, type Selection } from '../types'
 
 export const useHmiStore = defineStore('hmi', {
   state: () => ({
@@ -22,8 +22,17 @@ export const useHmiStore = defineStore('hmi', {
       const clip = state.clipboard
       return !!clip && (clip.shapes.length + clip.cards.length + clip.items.length) > 0
     },
+    page(state): HmiPage {
+      return currentPage(state.doc)
+    },
+    pageNames(state): string[] {
+      return ['index', ...Object.keys(state.doc.pages).filter((name) => name !== 'index')]
+    },
   },
   actions: {
+    migrate() {
+      this.doc = normalize(this.doc)
+    },
     load(id: number, name: string, raw: HmiDocument) {
       this.screenId = id
       this.name = name
@@ -34,9 +43,10 @@ export const useHmiStore = defineStore('hmi', {
     reset() {
       this.screenId = null
       this.name = '未命名屏'
-      this.doc = createDefaultDocument()
+      this.doc = createBlankDocument()
       this.selection = null
       this.selectedKeys = []
+      this.clipboard = null
     },
     select(selection: Selection | null) {
       this.selection = selection
@@ -69,26 +79,61 @@ export const useHmiStore = defineStore('hmi', {
     setLibrary(library: Record<string, string>) {
       this.doc.library = library
     },
+    showPage(name: string) {
+      if (!this.doc.pages[name]) return
+      this.doc.active = name
+      this.clearSelection()
+    },
+    addPage(name: string): string | null {
+      const pageName = name.trim()
+      if (!pageName) return '请填写页面名称'
+      if (this.doc.pages[pageName]) return '页面名称已存在'
+      this.doc.pages = {
+        ...this.doc.pages,
+        [pageName]: { shapes: [], cards: [] },
+      }
+      this.showPage(pageName)
+      return null
+    },
+    removePage(name: string) {
+      if (name === 'index' || !this.doc.pages[name]) return
+      delete this.doc.pages[name]
+      if (this.doc.active === name) this.showPage('index')
+    },
     clearSelection() {
       this.selection = null
       this.selectedKeys = []
     },
     addShape(type: HmiShape['type']): string | null {
-      if (type === 'line' && this.doc.shapes.filter((shape) => shape.type === 'line').length >= LIMITS.lines) {
+      if (type === 'line' && this.page.shapes.filter((shape) => shape.type === 'line').length >= LIMITS.lines) {
         return `线条最多 ${LIMITS.lines} 条`
       }
       const { w, h } = this.doc.screen
       if (type === 'line') {
-        this.doc.shapes.push({ type, x1: 40, y1: 80, x2: Math.min(w, 400), y2: 80, width: 1, color: '#7EC8E3' })
+        this.page.shapes.push({ type, x1: 40, y1: 80, x2: Math.min(w, 400), y2: 80, width: 1, color: '#7EC8E3' })
       } else if (type === 'image') {
-        this.doc.shapes.push({ type, x: 40, y: 80, w: 64, h: 64, src: 'assets/logo.png' })
+        this.page.shapes.push({ type, x: 40, y: 80, w: 64, h: 64, src: 'assets/logo.png' })
       } else if (type === 'icon') {
-        this.doc.shapes.push({ type, x: 40, y: 80, w: 40, h: 40, prop: 'TEND_NAME' })
+        this.page.shapes.push({ type, x: 40, y: 80, w: 40, h: 40, prop: 'TEND_NAME' })
+      } else if (type === 'block') {
+        this.page.shapes.push({
+          type, x: 40, y: 80, w: 320, h: 180,
+          bg: '#EBF7FC', color: '#222222', font: 'default',
+          radius: 8, border_w: 1, border_color: '#7EC8E3',
+          key: '', params: '{}',
+        })
+      } else if (type === 'button') {
+        this.page.shapes.push({
+          type, x: 40, y: 80, w: 160, h: 56,
+          text: '按钮', color: '#FFFFFF', font: 'default', icon_pos: 'left',
+          bg: '#0E3A5F', radius: 8,
+          action: 'page', page: 'index',
+        })
       } else {
-        this.doc.shapes.push({ type, x: 40, y: 80, w: 200, h: 80, bg: type === 'circle' ? '#EBF7FC' : '#0E3A5F', radius: 0 })
+        this.page.shapes.push({ type, x: 40, y: 80, w: 200, h: 80, bg: type === 'circle' ? '#EBF7FC' : '#0E3A5F', radius: 0 })
       }
-      this.selection = { kind: 'shape', index: this.doc.shapes.length - 1 }
-      this.selectedKeys = [shapeKey(this.doc.shapes.length - 1)]
+      this.selection = { kind: 'shape', index: this.page.shapes.length - 1 }
+      this.selectedKeys = [shapeKey(this.page.shapes.length - 1)]
       return null
     },
     addCard(): string | null {
@@ -98,15 +143,15 @@ export const useHmiStore = defineStore('hmi', {
         cols: 1, rows: 1, gap: 0,
         items: [],
       }
-      this.doc.cards.push(card)
-      this.selection = { kind: 'card', index: this.doc.cards.length - 1 }
-      this.selectedKeys = [cardKey(this.doc.cards.length - 1)]
+      this.page.cards.push(card)
+      this.selection = { kind: 'card', index: this.page.cards.length - 1 }
+      this.selectedKeys = [cardKey(this.page.cards.length - 1)]
       return null
     },
     addItem(type: HmiItem['type']): string | null {
       const cardIndex = this.selection?.kind === 'item' ? this.selection.card : this.selection?.kind === 'card' ? this.selection.index : -1
       if (cardIndex < 0) return '先选中一张卡片'
-      const card = this.doc.cards[cardIndex]
+      const card = this.page.cards[cardIndex]
       if (!card) return '先选中一张卡片'
       if (type !== 'label' && bindingCount(this.doc) >= LIMITS.bindings) return `绑定字段最多 ${LIMITS.bindings} 个`
       const item: HmiItem = type === 'label'
@@ -123,16 +168,16 @@ export const useHmiStore = defineStore('hmi', {
     removeSelected() {
       const sel = this.selection
       if (sel?.kind === 'item' && this.selectedKeys.length <= 1) {
-        this.doc.cards[sel.card]?.items.splice(sel.index, 1)
+        this.page.cards[sel.card]?.items.splice(sel.index, 1)
         this.selection = null
         this.selectedKeys = []
         return
       }
       const keys = new Set(this.selectedKeys)
-      const shapeIndexes = this.doc.shapes.map((_, index) => index).filter((index) => keys.has(shapeKey(index)))
-      const cardIndexes = this.doc.cards.map((_, index) => index).filter((index) => keys.has(cardKey(index)))
-      for (const index of shapeIndexes.sort((a, b) => b - a)) this.doc.shapes.splice(index, 1)
-      for (const index of cardIndexes.sort((a, b) => b - a)) this.doc.cards.splice(index, 1)
+      const shapeIndexes = this.page.shapes.map((_, index) => index).filter((index) => keys.has(shapeKey(index)))
+      const cardIndexes = this.page.cards.map((_, index) => index).filter((index) => keys.has(cardKey(index)))
+      for (const index of shapeIndexes.sort((a, b) => b - a)) this.page.shapes.splice(index, 1)
+      for (const index of cardIndexes.sort((a, b) => b - a)) this.page.cards.splice(index, 1)
       this.selection = null
       this.selectedKeys = []
     },
@@ -140,13 +185,13 @@ export const useHmiStore = defineStore('hmi', {
       const keys = new Set(this.selectedKeys)
       const sel = this.selection
       if (sel?.kind === 'item' && keys.size <= 1) {
-        const item = this.doc.cards[sel.card]?.items[sel.index]
+        const item = this.page.cards[sel.card]?.items[sel.index]
         if (!item) return
         this.clipboard = { shapes: [], cards: [], items: [clone(item)] }
         return
       }
-      const shapes = this.doc.shapes.filter((_, index) => keys.has(shapeKey(index))).map((shape) => clone(shape))
-      const cards = this.doc.cards.filter((_, index) => keys.has(cardKey(index))).map((card) => clone(card))
+      const shapes = this.page.shapes.filter((_, index) => keys.has(shapeKey(index))).map((shape) => clone(shape))
+      const cards = this.page.cards.filter((_, index) => keys.has(cardKey(index))).map((card) => clone(card))
       if (shapes.length + cards.length === 0) return
       this.clipboard = { shapes, cards, items: [] }
     },
@@ -163,12 +208,12 @@ export const useHmiStore = defineStore('hmi', {
           ? this.selection.card
           : this.selection?.kind === 'card'
             ? this.selection.index
-            : this.doc.cards.length - 1
-        const card = this.doc.cards[cardIndex]
+            : this.page.cards.length - 1
+        const card = this.page.cards[cardIndex]
         if (!card) return
         for (const item of clip.items) {
           if (item.type !== 'label' && bindingCount(this.doc) >= LIMITS.bindings) break
-          if (item.prop === 'CLOCK' && this.doc.cards.some((entry) => entry.items.some((cell) => cell.prop === 'CLOCK'))) continue
+          if (item.prop === 'CLOCK' && this.page.cards.some((entry) => entry.items.some((cell) => cell.prop === 'CLOCK'))) continue
           card.items.push(clone(item))
           this.selection = { kind: 'item', card: cardIndex, index: card.items.length - 1 }
         }
@@ -177,13 +222,13 @@ export const useHmiStore = defineStore('hmi', {
       }
       for (const shape of clip.shapes) {
         const next = offsetShape(clone({ ...shape, locked: false }))
-        if (next.type === 'line' && this.doc.shapes.filter((item) => item.type === 'line').length >= LIMITS.lines) continue
-        this.doc.shapes.push(next)
-        keys.push(shapeKey(this.doc.shapes.length - 1))
+        if (next.type === 'line' && this.page.shapes.filter((item) => item.type === 'line').length >= LIMITS.lines) continue
+        this.page.shapes.push(next)
+        keys.push(shapeKey(this.page.shapes.length - 1))
       }
       for (const card of clip.cards) {
-        this.doc.cards.push(offsetCard(clone({ ...card, locked: false })))
-        keys.push(cardKey(this.doc.cards.length - 1))
+        this.page.cards.push(offsetCard(clone({ ...card, locked: false })))
+        keys.push(cardKey(this.page.cards.length - 1))
       }
       if (keys.length) this.selectKeys(keys)
       this.clipboard = {
@@ -194,9 +239,11 @@ export const useHmiStore = defineStore('hmi', {
     },
     moveSelected(dx: number, dy: number) {
       const keys = new Set(this.selectedKeys)
-      const ix = Math.round(dx)
-      const iy = Math.round(dy)
-      this.doc.shapes.forEach((shape, index) => {
+      const moving = screenBoxes(this.doc).filter((box) => keys.has(box.key) && !box.locked)
+      const limited = clampTranslation(moving, dx, dy, this.doc.screen.w, this.doc.screen.h)
+      const ix = Math.round(limited.dx)
+      const iy = Math.round(limited.dy)
+      this.page.shapes.forEach((shape, index) => {
         if (!keys.has(shapeKey(index)) || shape.locked) return
         if (shape.type === 'line') {
           shape.x1 += ix
@@ -208,7 +255,7 @@ export const useHmiStore = defineStore('hmi', {
           shape.y += iy
         }
       })
-      this.doc.cards.forEach((card, index) => {
+      this.page.cards.forEach((card, index) => {
         if (!keys.has(cardKey(index)) || card.locked) return
         card.x += ix
         card.y += iy
@@ -218,12 +265,12 @@ export const useHmiStore = defineStore('hmi', {
       const sel = selectionFromKey(key)
       if (!sel) return
       if (sel.kind === 'card') {
-        const card = this.doc.cards[sel.index]
+        const card = this.page.cards[sel.index]
         if (!card || card.locked) return
         Object.assign(card, rect)
         return
       }
-      const shape = this.doc.shapes[sel.index]
+      const shape = this.page.shapes[sel.index]
       if (shape && shape.type !== 'line' && !shape.locked) Object.assign(shape, rect)
     },
     align(mode: 'left' | 'right' | 'top' | 'bottom' | 'centerX' | 'centerY' | 'equalW' | 'equalH') {
@@ -288,10 +335,10 @@ export const useHmiStore = defineStore('hmi', {
       const sel = selectionFromKey(key)
       if (!sel || sel.kind === 'item') return
       if (sel.kind === 'shape') {
-        const shape = this.doc.shapes[sel.index]
+        const shape = this.page.shapes[sel.index]
         if (shape) shape.locked = !shape.locked
       } else {
-        const card = this.doc.cards[sel.index]
+        const card = this.page.cards[sel.index]
         if (card) card.locked = !card.locked
       }
     },
@@ -301,30 +348,30 @@ export const useHmiStore = defineStore('hmi', {
       if (sel.kind === 'shape') {
         this.swapShape(sel.index, dir)
         const next = sel.index + dir
-        if (next >= 0 && next < this.doc.shapes.length) this.select({ kind: 'shape', index: next })
+        if (next >= 0 && next < this.page.shapes.length) this.select({ kind: 'shape', index: next })
       } else {
         this.swapCard(sel.index, dir)
       }
     },
     patchShape(index: number, patch: Partial<HmiShape>) {
-      const shape = this.doc.shapes[index]
+      const shape = this.page.shapes[index]
       if (!shape) return
       Object.assign(shape as object, patch)
     },
     patchCard(index: number, patch: Partial<HmiCard>) {
-      const card = this.doc.cards[index]
+      const card = this.page.cards[index]
       if (!card) return
       if ((patch.cols ?? card.cols ?? 1) > LIMITS.tracks || (patch.rows ?? card.rows ?? 1) > LIMITS.tracks) return
       Object.assign(card, patch)
     },
     patchItem(cardIndex: number, index: number, patch: Partial<HmiItem>) {
-      const item = this.doc.cards[cardIndex]?.items[index]
+      const item = this.page.cards[cardIndex]?.items[index]
       if (!item) return
       if (patch.prop === 'CLOCK' && item.prop !== 'CLOCK' && clockCount(this.doc) >= 1) return
       Object.assign(item, patch)
     },
     moveShape(index: number, dx: number, dy: number) {
-      const shape = this.doc.shapes[index]
+      const shape = this.page.shapes[index]
       if (!shape) return
       if (shape.type === 'line') {
         shape.x1 = Math.round(shape.x1 + dx)
@@ -337,16 +384,16 @@ export const useHmiStore = defineStore('hmi', {
       }
     },
     moveCard(index: number, dx: number, dy: number) {
-      const card = this.doc.cards[index]
+      const card = this.page.cards[index]
       if (!card) return
       card.x = Math.round(card.x + dx)
       card.y = Math.round(card.y + dy)
     },
     swapShape(index: number, dir: -1 | 1) {
-      swap(this.doc.shapes, index, dir)
+      swap(this.page.shapes, index, dir)
     },
     swapCard(index: number, dir: -1 | 1) {
-      swap(this.doc.cards, index, dir)
+      swap(this.page.cards, index, dir)
       if (this.selection?.kind === 'card' && this.selection.index === index) this.selection = { kind: 'card', index: index + dir }
     },
   },
@@ -376,7 +423,7 @@ function offsetCard(card: HmiCard): HmiCard {
 }
 
 function clockCount(doc: HmiDocument) {
-  return doc.cards.reduce((sum, card) => sum + card.items.filter((item) => item.prop === 'CLOCK').length, 0)
+  return currentPage(doc).cards.reduce((sum, card) => sum + card.items.filter((item) => item.prop === 'CLOCK').length, 0)
 }
 
 function swap<T>(list: T[], index: number, dir: -1 | 1) {
@@ -397,17 +444,42 @@ function selectionFromKey(key: string): Selection | null {
   return null
 }
 
-function normalize(raw: Partial<HmiDocument> | null | undefined): HmiDocument {
-  const base = createDefaultDocument()
-  if (!raw || raw.version !== 2 || !Array.isArray(raw.shapes) || !Array.isArray(raw.cards)) return base
+function asPage(value: unknown): HmiPage | null {
+  if (!value || typeof value !== 'object') return null
+  const page = value as HmiPage
+  if (!Array.isArray(page.shapes) || !Array.isArray(page.cards)) return null
   return {
-    version: 2,
+    shapes: page.shapes,
+    cards: page.cards.map((card) => ({ ...card, items: card.items ?? [] })),
+  }
+}
+
+function normalize(raw: Partial<HmiDocument> & { shapes?: HmiShape[]; cards?: HmiCard[] } | null | undefined): HmiDocument {
+  const base = createDefaultDocument()
+  if (!raw) return base
+  const pages: Record<string, HmiPage> = {}
+  if (raw.pages && typeof raw.pages === 'object') {
+    for (const [name, page] of Object.entries(raw.pages)) {
+      const next = asPage(page)
+      if (next) pages[name] = next
+    }
+  }
+  if (!pages.index && Array.isArray(raw.shapes) && Array.isArray(raw.cards)) {
+    pages.index = {
+      shapes: raw.shapes,
+      cards: raw.cards.map((card) => ({ ...card, items: card.items ?? [] })),
+    }
+  }
+  if (!pages.index) return base
+  const active = raw.active && pages[raw.active] ? raw.active : 'index'
+  return {
+    version: 3,
     screen: raw.screen ?? base.screen,
     sample: { ...base.sample, ...(raw.sample ?? {}) },
     colors: raw.colors ?? {},
     icons: raw.icons ?? {},
     library: raw.library ?? {},
-    shapes: raw.shapes,
-    cards: raw.cards.map((card) => ({ ...card, items: card.items ?? [] })),
+    active,
+    pages,
   }
 }
