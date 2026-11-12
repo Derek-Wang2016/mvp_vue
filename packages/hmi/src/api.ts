@@ -39,6 +39,49 @@ export async function updateScreen(id: number, name: string, schemaJson: HmiDocu
   return res.json()
 }
 
+export interface HmiPublicationItem {
+  id: number
+  description: string
+  screenId: number | null
+  status: 'active' | 'paused'
+  updatedAt: string
+}
+
+export function publicationUrl(id: number): string {
+  return `${getApiBase()}/api/hmi/publications/${id}`
+}
+
+export async function listPublications(): Promise<HmiPublicationItem[]> {
+  const res = await fetch(`${getApiBase()}/api/hmi/publications`)
+  if (!res.ok) throw new Error('list failed')
+  return res.json()
+}
+
+export async function createPublication(description: string, schemaJson: unknown, screenId: number | null) {
+  const res = await fetch(`${getApiBase()}/api/hmi/publications`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ description, schemaJson, screenId }),
+  })
+  if (!res.ok) throw new Error('publish failed')
+  return res.json() as Promise<HmiPublicationItem>
+}
+
+export async function updatePublication(id: number, patch: { description?: string; schemaJson?: unknown; status?: 'active' | 'paused' }) {
+  const res = await fetch(`${getApiBase()}/api/hmi/publications/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  })
+  if (!res.ok) throw new Error('update failed')
+  return res.json() as Promise<HmiPublicationItem & { unchanged?: boolean }>
+}
+
+export async function deletePublication(id: number) {
+  const res = await fetch(`${getApiBase()}/api/hmi/publications/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('delete failed')
+}
+
 export async function deleteScreen(id: number) {
   const res = await fetch(`${getApiBase()}/api/hmi/screens/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('delete failed')

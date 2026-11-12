@@ -154,6 +154,17 @@ model HmiScreen {
   updatedAt  DateTime @updatedAt
 }
 
+/// 已发布的 HMI 页面。GET /api/hmi/publications/:id 返回设备 JSON。
+model HmiPublication {
+  id          Int      @id @default(autoincrement())
+  description String
+  schemaJson  String
+  screenId    Int?
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 /// 床头卡装饰图，按 sha256 去重，与三维 AssetFile 分开
 model HmiFile {
   id        Int      @id @default(autoincrement())

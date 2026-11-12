@@ -216,6 +216,18 @@ const STEPS: { id: string; sql: string }[] = [
     sql: `CREATE UNIQUE INDEX IF NOT EXISTS "HmiFile_sha256_key" ON "HmiFile"("sha256")`,
   },
   {
+    id: '2026-11-12-hmi-publication',
+    sql: `CREATE TABLE IF NOT EXISTS "HmiPublication" (
+      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+      "description" TEXT NOT NULL,
+      "schemaJson" TEXT NOT NULL,
+      "screenId" INTEGER,
+      "status" TEXT NOT NULL DEFAULT 'active',
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  },
+  {
     id: '2026-11-10-hmi-screen',
     sql: `CREATE TABLE IF NOT EXISTS "HmiScreen" (
       "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,

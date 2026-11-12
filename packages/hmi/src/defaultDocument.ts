@@ -15,6 +15,7 @@ const sample = {
   COLORGREEN: 231,
   COLORBLUE: 24,
   DRUG_FEEDBACK: '花粉类过敏,青霉素过敏',
+  COMMUNICABLE_DISEASES_NAME: '飞沫隔离',
   DIET_LEVEL_NAME: '低盐低脂',
   SAFETAKECARE: '防窒息,防坠床',
 }

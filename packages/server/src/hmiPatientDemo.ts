@@ -9,6 +9,7 @@ const CARE_RGB: Record<(typeof TEND)[number], [number, number, number]> = {
 }
 const DIET = ['普食', '低盐低脂', '糖尿病饮食', '流质']
 const ALLERGY = ['花粉类过敏', '青霉素过敏', '头孢过敏', '海鲜过敏']
+const ISOLATION = ['特殊隔离', '一级隔离', '二级隔离', '空气隔离', '飞沫隔离', '接触隔离']
 const SAFE = ['防坠床', '防窒息', '防跌倒', '防压疮', '防走失', '防烫伤', '防脱管', '防误吸', '防血栓', '防感染', '留陪人', '绝对卧床']
 const SEX = ['男', '女']
 
@@ -37,6 +38,7 @@ export function buildHmiPatientResponse() {
   const tend = pick(TEND)
   const [red, green, blue] = CARE_RGB[tend]
   const allergy = [...ALLERGY].sort(() => Math.random() - 0.5).slice(0, 2)
+  const isolation = [...ISOLATION].sort(() => Math.random() - 0.5).slice(0, 1 + Math.floor(Math.random() * 3))
   const safe = [...SAFE].sort(() => Math.random() - 0.5).slice(0, 6)
   return {
     res: 'ok',
@@ -58,6 +60,7 @@ export function buildHmiPatientResponse() {
         COLORGREEN: green,
         COLORBLUE: blue,
         DRUG_FEEDBACK: allergy.join(','),
+        COMMUNICABLE_DISEASES_NAME: isolation.join(','),
         DIET_LEVEL_NAME: pick(DIET),
         SAFETAKECARE: safe.join(','),
         DIAGNOSE: '腰椎间盘突出',

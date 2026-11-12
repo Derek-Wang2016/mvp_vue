@@ -2,7 +2,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useHmiStore } from './stores/hmiStore'
-import { createScreen, deleteScreen, getScreen, listScreens, updateScreen, type HmiListItem } from './api'
+import { createPublication, createScreen, deletePublication, deleteScreen, getScreen, listPublications, listScreens, publicationUrl, updatePublication, updateScreen, type HmiListItem, type HmiPublicationItem } from './api'
+import { createDefaultDocument } from './defaultDocument'
 import { bindingCount, deviceJson, withCareColor } from './resolve'
 import { getApiBase } from './config'
 import { LIMITS, type HmiDocument, type HmiShape } from './types'
@@ -11,6 +12,7 @@ import HmiCanvas from './components/HmiCanvas.vue'
 import PropertyPanel from './components/PropertyPanel.vue'
 
 const store = useHmiStore()
+store.doc.sample = { ...createDefaultDocument().sample, ...store.doc.sample }
 const { doc, name, selection, screenId, selectedKeys } = storeToRefs(store)
 
 const msg = ref('')
@@ -21,6 +23,11 @@ const showJson = ref(false)
 const showSample = ref(false)
 const sampleText = ref('')
 const confirmDelete = ref<HmiListItem | null>(null)
+const showPublish = ref(false)
+const showPublications = ref(false)
+const publishDescription = ref('')
+const publications = ref<HmiPublicationItem[]>([])
+const confirmDropPublication = ref<HmiPublicationItem | null>(null)
 const showGrid = ref(true)
 const showPosition = ref(false)
 const contextMenu = ref<{ x: number; y: number; key: string } | null>(null)
@@ -100,7 +107,7 @@ async function loadRandomPatient() {
     const body = await res.json() as Record<string, unknown>
     sampleText.value = JSON.stringify(body, null, 2)
     const row = Array.isArray(body.obj) ? ((body.obj[0] as Record<string, unknown>) ?? {}) : body
-    doc.value.sample = row
+    doc.value.sample = { ...createDefaultDocument().sample, ...row }
     doc.value.colors = withCareColor(doc.value.colors, row)
     msg.value = '已填入随机病人'
   } catch {
@@ -112,12 +119,89 @@ function applySample() {
   try {
     const parsed = JSON.parse(sampleText.value) as Record<string, unknown>
     const row = Array.isArray(parsed.obj) ? ((parsed.obj[0] as Record<string, unknown>) ?? {}) : parsed
-    doc.value.sample = row
+    doc.value.sample = { ...createDefaultDocument().sample, ...row }
     doc.value.colors = withCareColor(doc.value.colors, row)
     showSample.value = false
   } catch {
     msg.value = '样例 JSON 无法解析'
   }
+}
+
+async function openPublications() {
+  showPublications.value = true
+  try { publications.value = await listPublications() } catch { msg.value = '无法读取发布列表'; publications.value = [] }
+}
+
+async function publish() {
+  const description = publishDescription.value.trim()
+  if (!description) {
+    msg.value = '请填写界面描述'
+    return
+  }
+  saving.value = true
+  try {
+    await createPublication(description, deviceJson(doc.value), screenId.value)
+    publishDescription.value = ''
+    showPublish.value = false
+    msg.value = '已发布'
+    if (showPublications.value) publications.value = await listPublications()
+  } catch {
+    msg.value = '发布失败，请确认后端已启动'
+  } finally {
+    saving.value = false
+  }
+}
+
+async function setPublicationStatus(item: HmiPublicationItem) {
+  const status = item.status === 'active' ? 'paused' : 'active'
+  await updatePublication(item.id, { status })
+  publications.value = await listPublications()
+}
+
+const updateNote = ref<Record<number, string>>({})
+
+async function refreshPublication(item: HmiPublicationItem) {
+  const result = await updatePublication(item.id, { schemaJson: deviceJson(doc.value) })
+  publications.value = await listPublications()
+  updateNote.value = { ...updateNote.value, [item.id]: result.unchanged ? '无改动' : '已更新' }
+}
+
+async function removePublication() {
+  if (!confirmDropPublication.value) return
+  await deletePublication(confirmDropPublication.value.id)
+  confirmDropPublication.value = null
+  publications.value = await listPublications()
+}
+
+const copiedId = ref<number | null>(null)
+
+function copyText(text: string): boolean {
+  const area = document.createElement('textarea')
+  area.value = text
+  area.setAttribute('readonly', '')
+  area.style.position = 'fixed'
+  area.style.left = '-9999px'
+  document.body.appendChild(area)
+  area.select()
+  const ok = document.execCommand('copy')
+  area.remove()
+  return ok
+}
+
+function copyApi(id: number) {
+  const text = publicationUrl(id)
+  const legacy = copyText(text)
+  const modern = navigator.clipboard?.writeText(text)
+  if (!modern) {
+    copiedId.value = legacy ? id : null
+    if (!legacy) msg.value = '复制失败'
+    return
+  }
+  void modern.then(() => { copiedId.value = id }).catch(() => {
+    copiedId.value = legacy ? id : null
+    if (!legacy) msg.value = '复制失败'
+  })
+  if (legacy) copiedId.value = id
 }
 
 async function copyJson() {
@@ -173,6 +257,8 @@ function resizeScreen(w: number, h: number) {
       <button class="btn" @click="store.reset()">新建</button>
       <button class="btn" @click="openList">打开</button>
       <button class="btn" :disabled="saving" @click="save">保存</button>
+      <button class="btn" @click="showPublish = true">发布</button>
+      <button class="btn" @click="openPublications">发布管理</button>
       <button class="btn" @click="showJson = true">设备 JSON</button>
       <button class="btn" @click="editSample">样例数据</button>
       <button class="btn" :class="showGrid ? 'text-sky-300' : ''" @click="showGrid = !showGrid">网格</button>
@@ -293,6 +379,51 @@ function resizeScreen(w: number, h: number) {
           </span>
         </div>
         <textarea class="editor-scrollbar h-96 w-full rounded bg-slate-950 p-2 font-mono text-xs" :value="jsonText" @change="importDoc(($event.target as HTMLTextAreaElement).value)" />
+      </div>
+    </div>
+    <div v-if="showPublish" class="overlay" @click.self="showPublish = false">
+      <div class="dialog">
+        <div class="mb-2">发布当前页面</div>
+        <label class="block text-sm">界面描述
+          <textarea v-model="publishDescription" maxlength="200" class="editor-scrollbar mt-1 h-24 w-full rounded border border-slate-600 bg-slate-950 p-2 text-sm" placeholder="例如 1024×600 床头卡" />
+        </label>
+        <div class="mt-3 flex justify-end gap-2">
+          <button class="btn" @click="showPublish = false">取消</button>
+          <button class="btn" :disabled="saving" @click="publish">发布</button>
+        </div>
+      </div>
+    </div>
+    <div v-if="showPublications" class="overlay" @click.self="showPublications = false">
+      <div class="dialog w-[720px]">
+        <div class="mb-2 flex justify-between"><span>发布管理</span><button @click="showPublications = false">关闭</button></div>
+        <ul class="editor-scrollbar max-h-96 space-y-2 overflow-auto">
+          <li v-for="item in publications" :key="item.id" class="rounded border border-slate-700 p-2 text-sm">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="truncate">{{ item.description }}</div>
+                <div class="truncate font-mono text-xs text-slate-500">{{ publicationUrl(item.id) }}</div>
+                <div class="text-xs" :class="item.status === 'active' ? 'text-emerald-400' : 'text-amber-300'">{{ item.status === 'active' ? '发布中' : '已暂停' }}</div>
+                <div v-if="updateNote[item.id]" class="text-xs" :class="updateNote[item.id] === '无改动' ? 'text-slate-400' : 'text-emerald-400'">{{ updateNote[item.id] }}</div>
+              </div>
+              <div class="flex shrink-0 flex-wrap justify-end gap-1">
+                <button class="btn" @click="copyApi(item.id)">{{ copiedId === item.id ? '已复制' : '复制地址' }}</button>
+                <button class="btn" @click="refreshPublication(item)">更新</button>
+                <button class="btn" @click="setPublicationStatus(item)">{{ item.status === 'active' ? '暂停' : '恢复' }}</button>
+                <button class="btn text-rose-300" @click="confirmDropPublication = item">删除</button>
+              </div>
+            </div>
+          </li>
+          <li v-if="!publications.length" class="text-slate-500">还没有发布</li>
+        </ul>
+      </div>
+    </div>
+    <div v-if="confirmDropPublication" class="overlay z-50" @click.self="confirmDropPublication = null">
+      <div class="dialog">
+        <p>删除发布「{{ confirmDropPublication.description }}」？对应 API 将不可用。</p>
+        <div class="mt-3 flex justify-end gap-2">
+          <button class="btn" @click="confirmDropPublication = null">取消</button>
+          <button class="btn text-rose-300" @click="removePublication">删除</button>
+        </div>
       </div>
     </div>
     <div v-if="showSample" class="overlay" @click.self="showSample = false">

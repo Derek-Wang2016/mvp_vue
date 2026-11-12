@@ -403,7 +403,7 @@ function normalize(raw: Partial<HmiDocument> | null | undefined): HmiDocument {
   return {
     version: 2,
     screen: raw.screen ?? base.screen,
-    sample: raw.sample ?? {},
+    sample: { ...base.sample, ...(raw.sample ?? {}) },
     colors: raw.colors ?? {},
     icons: raw.icons ?? {},
     library: raw.library ?? {},
