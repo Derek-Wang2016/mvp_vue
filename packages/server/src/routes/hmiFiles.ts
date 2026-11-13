@@ -73,6 +73,18 @@ function fileMeta(
 }
 
 export function registerHmiFileRoutes(app: FastifyInstance, prisma: PrismaClient) {
+  app.get('/api/hmi/files', async (req, reply) => {
+    const base = fileBase(req)
+    const rows = await prisma.$queryRaw<FileRow[]>`
+      SELECT "id", "name", "mime", "size", "sha256", "createdAt"
+      FROM "HmiFile" ORDER BY "id" DESC
+    `
+    reply.send(rows.map((row) => {
+      const file = asFile(row)
+      return { ...file, createdAt: row.createdAt, url: `${base}/api/hmi/files/${file.id}` }
+    }))
+  })
+
   app.post('/api/hmi/files', async (req, reply) => {
     const base = fileBase(req)
     let part: MultipartFile | undefined

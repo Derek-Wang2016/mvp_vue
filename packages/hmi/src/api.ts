@@ -87,6 +87,72 @@ export async function deleteScreen(id: number) {
   if (!res.ok) throw new Error('delete failed')
 }
 
+export interface HmiSampleSource {
+  id: number
+  name: string
+  mode: 'json' | 'http'
+  method: 'GET' | 'POST'
+  url: string
+  body: string
+  paramsJson: string
+  sampleJson: string
+  active: boolean
+  updatedAt: string
+}
+
+export type HmiSampleDraft = Omit<HmiSampleSource, 'id' | 'active' | 'updatedAt'>
+
+export async function listSampleSources(): Promise<HmiSampleSource[]> {
+  const res = await fetch(`${getApiBase()}/api/hmi/sample-sources`)
+  if (!res.ok) throw new Error('无法读取样例')
+  return res.json() as Promise<HmiSampleSource[]>
+}
+
+export async function createSampleSource(draft: HmiSampleDraft): Promise<HmiSampleSource> {
+  const res = await fetch(`${getApiBase()}/api/hmi/sample-sources`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(draft),
+  })
+  const json = await res.json().catch(() => ({})) as HmiSampleSource & { error?: string }
+  if (!res.ok) throw new Error(json.error ?? '保存失败')
+  return json
+}
+
+export async function updateSampleSource(id: number, draft: HmiSampleDraft): Promise<HmiSampleSource> {
+  const res = await fetch(`${getApiBase()}/api/hmi/sample-sources/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(draft),
+  })
+  const json = await res.json().catch(() => ({})) as HmiSampleSource & { error?: string }
+  if (!res.ok) throw new Error(json.error ?? '保存失败')
+  return json
+}
+
+export async function testSampleRequest(draft: Pick<HmiSampleDraft, 'method' | 'url' | 'body' | 'paramsJson'>): Promise<{ request: { method: string; url: string; body?: string }; status: number; data: unknown }> {
+  const res = await fetch(`${getApiBase()}/api/hmi/sample-sources/test`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(draft),
+  })
+  const json = await res.json().catch(() => ({})) as { request?: { method: string; url: string; body?: string }; status?: number; data?: unknown; error?: string }
+  if (!res.ok || !json.request) throw new Error(json.error ?? '测试失败')
+  return { request: json.request, status: json.status ?? res.status, data: json.data }
+}
+
+export async function activateSampleSource(id: number): Promise<unknown> {
+  const res = await fetch(`${getApiBase()}/api/hmi/sample-sources/${id}/activate`, { method: 'POST' })
+  const json = await res.json().catch(() => ({})) as { data?: unknown; error?: string }
+  if (!res.ok) throw new Error(json.error ?? '激活失败')
+  return json.data
+}
+
+export async function deleteSampleSource(id: number) {
+  const res = await fetch(`${getApiBase()}/api/hmi/sample-sources/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('删除失败')
+}
+
 export interface HostedImageItem {
   id: number
   name: string
@@ -95,8 +161,37 @@ export interface HostedImageItem {
   createdAt: string
 }
 
-export function hostedImageUrl(id: number): string {
-  return `${getApiBase()}/api/images/${id}`
+export interface HmiFileItem {
+  id: number
+  name: string
+  mime: string
+  size: number
+  sha256: string
+  url: string
+  createdAt?: string
+}
+
+export async function listHmiFiles(): Promise<HmiFileItem[]> {
+  const res = await fetch(`${getApiBase()}/api/hmi/files`)
+  if (!res.ok) throw new Error('加载图片失败')
+  return res.json() as Promise<HmiFileItem[]>
+}
+
+export async function uploadHmiFile(file: File): Promise<HmiFileItem> {
+  const body = new FormData()
+  body.append('file', file)
+  const res = await fetch(`${getApiBase()}/api/hmi/files`, { method: 'POST', body })
+  const json = await res.json().catch(() => ({})) as HmiFileItem & { error?: string }
+  if (!res.ok || !json.url) throw new Error(json.error ?? '上传失败')
+  return json
+}
+
+export async function deleteHmiFile(id: number) {
+  const res = await fetch(`${getApiBase()}/api/hmi/files/${id}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({})) as { error?: string }
+    throw new Error(json.error ?? '删除失败')
+  }
 }
 
 export async function listHostedImages(): Promise<HostedImageItem[]> {

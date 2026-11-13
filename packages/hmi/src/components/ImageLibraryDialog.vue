@@ -1,27 +1,22 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { deleteHostedImage, hostedImageUrl, listHostedImages, uploadHostedImage, type HostedImageItem } from '../api'
-import { getApiBase } from '../config'
+import { deleteHmiFile, listHmiFiles, uploadHmiFile, type HmiFileItem } from '../api'
 
 const emit = defineEmits<{ close: [] }>()
 
-const items = ref<HostedImageItem[]>([])
+const items = ref<HmiFileItem[]>([])
 const error = ref('')
 const loading = ref(false)
 const uploading = ref(false)
 const copiedId = ref<number | null>(null)
-const pendingDelete = ref<HostedImageItem | null>(null)
+const pendingDelete = ref<HmiFileItem | null>(null)
 const fileRef = ref<HTMLInputElement>()
-
-function absoluteUrl(item: HostedImageItem) {
-  return item.url.startsWith('http') ? item.url : `${getApiBase()}${item.url}`
-}
 
 async function load() {
   loading.value = true
   error.value = ''
   try {
-    items.value = await listHostedImages()
+    items.value = await listHmiFiles()
   } catch (e) {
     error.value = e instanceof Error ? e.message : '加载失败'
   } finally {
@@ -29,7 +24,7 @@ async function load() {
   }
 }
 
-function onPickFile(e: Event) {
+async function onPickFile(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   ;(e.target as HTMLInputElement).value = ''
   if (!file) return
@@ -37,30 +32,42 @@ function onPickFile(e: Event) {
     error.value = '请选择图片文件'
     return
   }
-  if (file.size > 2 * 1024 * 1024) {
-    error.value = '图片不能超过 2MB'
-    return
+  uploading.value = true
+  error.value = ''
+  try {
+    await uploadHmiFile(file)
+    await load()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '上传失败'
+  } finally {
+    uploading.value = false
   }
-  const reader = new FileReader()
-  reader.onload = async () => {
-    uploading.value = true
-    error.value = ''
-    try {
-      const name = file.name.replace(/\.[^.]+$/, '') || '图片'
-      await uploadHostedImage(name, String(reader.result ?? ''))
-      await load()
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : '上传失败'
-    } finally {
-      uploading.value = false
-    }
-  }
-  reader.readAsDataURL(file)
 }
 
-async function copyLink(item: HostedImageItem) {
-  await navigator.clipboard.writeText(absoluteUrl(item))
-  copiedId.value = item.id
+function copyText(text: string) {
+  if (navigator.clipboard?.writeText && window.isSecureContext) {
+    return navigator.clipboard.writeText(text)
+  }
+  const input = document.createElement('textarea')
+  input.value = text
+  input.setAttribute('readonly', '')
+  input.style.position = 'fixed'
+  input.style.left = '-9999px'
+  document.body.appendChild(input)
+  input.select()
+  const ok = document.execCommand('copy')
+  input.remove()
+  if (!ok) throw new Error('复制失败')
+}
+
+async function copyLink(item: HmiFileItem) {
+  try {
+    await copyText(item.url)
+    copiedId.value = item.id
+    error.value = ''
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '复制失败'
+  }
 }
 
 async function confirmDelete() {
@@ -69,7 +76,7 @@ async function confirmDelete() {
   pendingDelete.value = null
   error.value = ''
   try {
-    await deleteHostedImage(id)
+    await deleteHmiFile(id)
     items.value = items.value.filter((item) => item.id !== id)
   } catch (e) {
     error.value = e instanceof Error ? e.message : '删除失败'
@@ -88,7 +95,7 @@ onMounted(() => { void load() })
           <button type="button" class="rounded bg-sky-600 px-2.5 py-1 text-xs text-white disabled:opacity-40" :disabled="uploading" @click="fileRef?.click()">
             {{ uploading ? '上传中…' : '上传图片' }}
           </button>
-          <input ref="fileRef" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" class="hidden" @change="onPickFile" />
+          <input ref="fileRef" type="file" accept="image/png,image/jpeg,image/webp" class="hidden" @change="onPickFile" />
           <button type="button" class="text-xs text-slate-400 hover:text-slate-200" @click="emit('close')">关闭</button>
         </div>
       </div>
@@ -99,9 +106,10 @@ onMounted(() => { void load() })
         <div v-else class="grid grid-cols-4 gap-3">
           <div v-for="item in items" :key="item.id" class="rounded-md border border-slate-700 bg-slate-950 p-2">
             <button type="button" class="block h-24 w-full rounded bg-black/30" @click="copyLink(item)">
-              <img :src="hostedImageUrl(item.id)" :alt="item.name" class="h-full w-full object-contain" />
+              <img :src="item.url" :alt="item.name" class="h-full w-full object-contain" />
             </button>
             <p class="mt-1 truncate text-[11px] text-slate-300" :title="item.name">{{ item.name }}</p>
+            <p class="truncate text-[10px] text-slate-500" :title="item.url">{{ item.url }}</p>
             <div class="mt-1 flex gap-2 text-[11px]">
               <button type="button" class="text-sky-300 hover:text-sky-200" @click="copyLink(item)">{{ copiedId === item.id ? '已复制' : '复制链接' }}</button>
               <button type="button" class="text-rose-300 hover:text-rose-200" @click="pendingDelete = item">删除</button>

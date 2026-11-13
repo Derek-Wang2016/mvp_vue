@@ -235,6 +235,7 @@ function exportPage(page: HmiPage, library?: Record<string, string>) {
   return omitEmpty({
     bg: page.bg,
     bgImage: page.bgImage,
+    bgUrl: page.bgUrl,
     bgOpa: page.bgOpa,
     shapes: page.shapes.map((shape) => omitEmpty(exportShape(shape, library))),
     cards: page.cards.map((card) => omitEmpty({

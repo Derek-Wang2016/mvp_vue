@@ -72,3 +72,13 @@ pnpm build:server       # tsc → packages/server/dist/
 
 - 本仓库 **独立 Git 仓库**；`mvp`（React）另仓维护，Schema 与 API 契约保持兼容。
 - 后端已迁入 `packages/server`（含 `prisma/dev.db`）；勿与 React 版 `@mvp/server` 同时占用 3002 端口。
+
+
+
+
+
+随机展位图片：
+
+
+
+[https://placehold.co/1024x600/E58B8B/png](https://placehold.co/1024x600/E58B8B/png)

@@ -165,6 +165,21 @@ model HmiPublication {
   updatedAt   DateTime @updatedAt
 }
 
+/// 编辑器样例数据。json 为手写；http 按 method/url/body 请求，body 可用 {{参数}}。
+model HmiSampleSource {
+  id         Int      @id @default(autoincrement())
+  name       String
+  mode       String   @default("json")
+  method     String   @default("GET")
+  url        String   @default("")
+  body       String   @default("")
+  paramsJson String   @default("{}")
+  sampleJson String   @default("{}")
+  active     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
 /// 床头卡装饰图，按 sha256 去重，与三维 AssetFile 分开
 model HmiFile {
   id        Int      @id @default(autoincrement())

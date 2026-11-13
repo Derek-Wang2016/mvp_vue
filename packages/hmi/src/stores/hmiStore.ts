@@ -43,12 +43,12 @@ export const useHmiStore = defineStore('hmi', {
   },
   actions: {
     migrate() {
-      this.doc = normalize(this.doc)
+      this.doc = normalizeDocument(this.doc)
     },
     load(id: number, name: string, raw: HmiDocument) {
       this.screenId = id
       this.name = name
-      this.doc = normalize(raw)
+      this.doc = normalizeDocument(raw)
       this.selection = null
       this.selectedKeys = []
     },
@@ -96,7 +96,7 @@ export const useHmiStore = defineStore('hmi', {
       this.doc.active = name
       this.clearSelection()
     },
-    patchPage(patch: Partial<Pick<HmiPage, 'bg' | 'bgImage' | 'bgOpa'>>) {
+    patchPage(patch: Partial<Pick<HmiPage, 'bg' | 'bgImage' | 'bgUrl' | 'bgOpa'>>) {
       const name = this.doc.active
       const page = this.doc.pages[name]
       if (!page) return
@@ -361,16 +361,19 @@ export const useHmiStore = defineStore('hmi', {
     align(mode: 'left' | 'right' | 'top' | 'bottom' | 'centerX' | 'centerY' | 'equalW' | 'equalH') {
       const boxes = screenBoxes(this.doc).filter((box) => this.selectedKeys.includes(box.key))
       if (boxes.length < 2) return
-      const anchor = boxes[0]
+      const anchor = boxes.find((box) => box.key === this.selectedKeys[0]) ?? boxes[0]
       if (!anchor) return
       if (mode === 'equalW' || mode === 'equalH') {
+        const screen = this.doc.screen
         for (const box of boxes) {
           if (box.line || box.locked || box.key === anchor.key) continue
+          const w = mode === 'equalW' ? anchor.w : box.w
+          const h = mode === 'equalH' ? anchor.h : box.h
           this.setBoxRect(box.key, {
             x: box.x,
             y: box.y,
-            w: mode === 'equalW' ? anchor.w : box.w,
-            h: mode === 'equalH' ? anchor.h : box.h,
+            w: Math.max(8, Math.min(w, screen.w - box.x)),
+            h: Math.max(8, Math.min(h, screen.h - box.y)),
           })
         }
         return
@@ -538,11 +541,12 @@ function asPage(value: unknown): HmiPage | null {
     cards: page.cards.map((card) => ({ ...card, items: card.items ?? [] })),
     bg: page.bg,
     bgImage: page.bgImage,
+    bgUrl: page.bgUrl,
     bgOpa: page.bgOpa,
   }
 }
 
-function normalize(raw: Partial<HmiDocument> & { shapes?: HmiShape[]; cards?: HmiCard[] } | null | undefined): HmiDocument {
+export function normalizeDocument(raw: Partial<HmiDocument> & { shapes?: HmiShape[]; cards?: HmiCard[] } | null | undefined): HmiDocument {
   const base = createDefaultDocument()
   if (!raw) return base
   const pages: Record<string, HmiPage> = {}

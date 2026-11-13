@@ -27,7 +27,7 @@ const emit = defineEmits<{
   patchCard: [patch: Partial<HmiCard>]
   patchItem: [patch: Partial<HmiItem>]
   patchScreen: [w: number, h: number]
-  patchPage: [patch: Partial<Pick<HmiPage, 'bg' | 'bgImage' | 'bgOpa'>>]
+  patchPage: [patch: Partial<Pick<HmiPage, 'bg' | 'bgImage' | 'bgUrl' | 'bgOpa'>>]
   patchColors: [colors: Record<string, string>]
   patchIcons: [icons: Record<string, string>]
   patchLibrary: [library: Record<string, string>]
@@ -266,10 +266,14 @@ function colorTable(parsed: unknown): Record<string, string> | null {
       <p class="text-xs text-slate-500">当前页的底色和铺满图片。不用再放一张满屏矩形。</p>
       <ColorField plain label="背景色" :model-value="page.bg ?? ''" @update="emit('patchPage', { bg: $event || undefined })" />
       <label class="block">图片路径
-        <input class="field" :value="page.bgImage ?? ''" placeholder="assets/bg.png 或图片链接" @change="emit('patchPage', { bgImage: ($event.target as HTMLInputElement).value.trim() || undefined })" />
+        <input class="field" :value="page.bgImage ?? ''" placeholder="assets/bg.png" @change="emit('patchPage', { bgImage: ($event.target as HTMLInputElement).value.trim() || undefined })" />
       </label>
+      <label class="block">url
+        <input class="field" :value="page.bgUrl ?? ''" placeholder="http://主机:3002/api/hmi/files/1" @change="emit('patchPage', { bgUrl: ($event.target as HTMLInputElement).value.trim() || undefined })" />
+      </label>
+      <p class="text-xs text-slate-500">网页预览优先用 url。图片路径留给设备端下载。透明度同时作用于底色和底图，上面的形状会盖住它们。</p>
       <label class="block">透明度 0–100
-        <NumberField min="0" max="100" :value="page.bgOpa ?? 100" @change="emit('patchPage', { bgOpa: Math.max(0, Math.min(100, num(($event.target as HTMLInputElement).value))) })" />
+        <NumberField min="0" max="100" :value="page.bgOpa ?? 100" @input="emit('patchPage', { bgOpa: Math.max(0, Math.min(100, num(($event.target as HTMLInputElement).value))) })" />
       </label>
     </div>
     <template v-else>

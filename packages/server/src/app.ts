@@ -12,6 +12,7 @@ import { registerThreeDRoutes } from './threeD/registerThreeDRoutes.js'
 import { registerHmiScreenRoutes } from './routes/hmiScreens.js'
 import { registerHmiPublicationRoutes } from './routes/hmiPublications.js'
 import { registerHmiFileRoutes } from './routes/hmiFiles.js'
+import { registerHmiSampleSourceRoutes } from './routes/hmiSampleSources.js'
 
 export async function buildApp(
   prisma: PrismaClient,
@@ -39,6 +40,7 @@ export async function buildApp(
   registerHmiScreenRoutes(app, prisma)
   registerHmiPublicationRoutes(app, prisma)
   registerHmiFileRoutes(app, prisma)
+  registerHmiSampleSourceRoutes(app, prisma)
   registerDemoRoutes(app, prisma)
 
   return app

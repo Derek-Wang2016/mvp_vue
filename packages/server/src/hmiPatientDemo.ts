@@ -12,6 +12,23 @@ const ALLERGY = ['花粉类过敏', '青霉素过敏', '头孢过敏', '海鲜�
 const ISOLATION = ['特殊隔离', '一级隔离', '二级隔离', '空气隔离', '飞沫隔离', '接触隔离']
 const SAFE = ['防坠床', '防窒息', '防跌倒', '防压疮', '防走失', '防烫伤', '防脱管', '防误吸', '防血栓', '防感染', '留陪人', '绝对卧床']
 const SEX = ['男', '女']
+const DIAGNOSES = [
+  '腰椎间盘突出症（L4/5）',
+  '腰椎间盘突出症伴坐骨神经痛',
+  '腰椎管狭窄症',
+  '颈椎病（神经根型）',
+  '高血压病3级（极高危）',
+  '2型糖尿病',
+  '社区获得性肺炎',
+  '慢性阻塞性肺疾病急性加重',
+  '冠心病 不稳定型心绞痛',
+  '脑梗死恢复期',
+  '股骨颈骨折术后',
+  '孕2产1孕36周 妊娠期高血压',
+  '急性胃肠炎',
+  '慢性肾功能不全',
+  '支气管哮喘急性发作',
+]
 
 function pick<T>(list: readonly T[]): T {
   return list[Math.floor(Math.random() * list.length)]!
@@ -41,6 +58,7 @@ export function buildHmiPatientResponse() {
   const diet = [...DIET].sort(() => Math.random() - 0.5).slice(0, 1 + Math.floor(Math.random() * 3))
   const isolation = [...ISOLATION].sort(() => Math.random() - 0.5).slice(0, 1 + Math.floor(Math.random() * 3))
   const safe = [...SAFE].sort(() => Math.random() - 0.5).slice(0, 6)
+  const diagnose = [...DIAGNOSES].sort(() => Math.random() - 0.5).slice(0, 1 + Math.floor(Math.random() * 2))
   return {
     res: 'ok',
     datatype: '病人信息',
@@ -64,7 +82,7 @@ export function buildHmiPatientResponse() {
         COMMUNICABLE_DISEASES_NAME: isolation.join(','),
         DIET_LEVEL_NAME: diet.join(','),
         SAFETAKECARE: safe.join(','),
-        DIAGNOSE: '腰椎间盘突出',
+        DIAGNOSE: diagnose.join('；'),
       },
     ],
   }

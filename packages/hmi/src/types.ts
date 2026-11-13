@@ -171,8 +171,10 @@ export interface HmiPage {
   cards: HmiCard[]
   /** 页面底色。`#RRGGBB`。 */
   bg?: string
-  /** 铺满页面的图片路径。相对程序目录，或以 http、/ 开头的地址。 */
+  /** 铺满页面的本地路径，供设备端下载。网页预览在没有 url 时才用它。 */
   bgImage?: string
+  /** 网页预览优先使用的图片地址。 */
+  bgUrl?: string
   /** 背景图不透明度，0–100。缺省 100。 */
   bgOpa?: number
 }

@@ -200,18 +200,24 @@ function imageOpacity(shape: HmiImage): number {
   if (opa == null || !Number.isFinite(opa)) return 1
   return Math.max(0, Math.min(100, opa)) / 100
 }
-function imageSrc(shape: HmiImage) {
-  const url = shape.url?.trim()
-  if (!url) return shape.src
-  if (url.startsWith('/')) return `${getApiBase()}${url}`
-  return url
-}
-
-function pageImageSrc(path: string | undefined) {
+function mediaUrl(path: string | undefined) {
   const url = path?.trim()
   if (!url) return ''
   if (url.startsWith('/')) return `${getApiBase()}${url}`
   return url
+}
+
+/** 网页预览优先用 url。src / 图片路径留给设备端下载到本地。 */
+function previewSrc(local: string | undefined, remote: string | undefined) {
+  return mediaUrl(remote) || mediaUrl(local)
+}
+
+function imageSrc(shape: HmiImage) {
+  return previewSrc(shape.src, shape.url)
+}
+
+function pageBgSrc() {
+  return previewSrc(page.value.bgImage, page.value.bgUrl)
 }
 
 function valueText(prop: string | undefined, format?: string) {
@@ -228,10 +234,14 @@ function maskedValue(item: HmiItem) {
 </script>
 
 <template>
-  <div class="relative" :style="{ width: doc.screen.w + 'px', height: doc.screen.h + 'px', background: page.bg || '#0b1220' }">
+  <div class="relative" :style="{ width: doc.screen.w + 'px', height: doc.screen.h + 'px' }">
+    <div
+      class="pointer-events-none absolute inset-0"
+      :style="{ background: page.bg || '#0b1220', opacity: Math.max(0, Math.min(100, page.bgOpa ?? 100)) / 100 }"
+    />
     <img
-      v-if="pageImageSrc(page.bgImage)"
-      :src="pageImageSrc(page.bgImage)"
+      v-if="pageBgSrc()"
+      :src="pageBgSrc()"
       alt=""
       draggable="false"
       class="pointer-events-none absolute inset-0 h-full w-full object-fill"

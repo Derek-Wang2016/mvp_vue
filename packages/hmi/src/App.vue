@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useHmiStore } from './stores/hmiStore'
+import { useHmiStore, normalizeDocument } from './stores/hmiStore'
 import { createPublication, createScreen, deletePublication, deleteScreen, getScreen, listPublications, listScreens, publicationUrl, updatePublication, updateScreen, type HmiListItem, type HmiPublicationItem } from './api'
 import { createDefaultDocument } from './defaultDocument'
 import { bindingCount, deviceJson, withCareColor } from './resolve'
@@ -36,6 +36,8 @@ import TreePanel from './components/TreePanel.vue'
 import HmiCanvas from './components/HmiCanvas.vue'
 import PropertyPanel from './components/PropertyPanel.vue'
 import ImageLibraryDialog from './components/ImageLibraryDialog.vue'
+import PublicationThumb from './components/PublicationThumb.vue'
+import SampleSourceDialog from './components/SampleSourceDialog.vue'
 import { icons } from '@iconify-json/tabler'
 
 function tabler(name: string): string {
@@ -55,14 +57,15 @@ const msg = ref('')
 const saving = ref(false)
 const open = ref(false)
 const screens = ref<HmiListItem[]>([])
+const screenDocs = ref<Record<number, HmiDocument>>({})
 const showJson = ref(false)
 const showImages = ref(false)
 const insertData = ref(false)
 const insertKey = ref('')
 const insertPlace = ref<'row-before' | 'row-after' | 'col-before' | 'col-after'>('col-after')
 const showSample = ref(false)
-const sampleText = ref('')
 const confirmDelete = ref<HmiListItem | null>(null)
+const nameEdit = ref<{ mode: 'rename' | 'copy'; item: HmiListItem; name: string } | null>(null)
 const showAddPage = ref(false)
 const newPageName = ref('')
 const confirmDropPage = ref(false)
@@ -70,6 +73,7 @@ const showPublish = ref(false)
 const showPublications = ref(false)
 const publishDescription = ref('')
 const publications = ref<HmiPublicationItem[]>([])
+const publicationDocs = ref<Record<number, HmiDocument>>({})
 const confirmDropPublication = ref<HmiPublicationItem | null>(null)
 const showGrid = ref(true)
 const showPosition = ref(false)
@@ -119,9 +123,32 @@ async function save() {
   }
 }
 
+async function loadScreenPreviews(items: HmiListItem[]) {
+  const loaded = await Promise.all(items.map(async (item) => {
+    if (item.id === screenId.value) return [item.id, doc.value] as const
+    try {
+      const row = await getScreen(item.id)
+      return [item.id, normalizeDocument(row.schemaJson)] as const
+    } catch {
+      return null
+    }
+  }))
+  const next: Record<number, HmiDocument> = {}
+  for (const entry of loaded) {
+    if (entry) next[entry[0]] = entry[1]
+  }
+  screenDocs.value = next
+}
+
 async function openList() {
   open.value = true
-  try { screens.value = await listScreens() } catch { msg.value = '无法读取列表'; screens.value = [] }
+  try {
+    screens.value = await listScreens()
+    await loadScreenPreviews(screens.value)
+  } catch {
+    msg.value = '无法读取列表'
+    screens.value = []
+  }
 }
 
 async function pick(item: HmiListItem) {
@@ -136,44 +163,112 @@ async function confirmRemove() {
   if (screenId.value === confirmDelete.value.id) store.reset()
   confirmDelete.value = null
   screens.value = await listScreens()
+  await loadScreenPreviews(screens.value)
 }
 
-function editSample() {
-  sampleText.value = JSON.stringify(doc.value.sample, null, 2)
-  showSample.value = true
+function screenSize(doc: HmiDocument | undefined) {
+  if (!doc?.screen) return ''
+  return `${doc.screen.w}×${doc.screen.h}`
 }
 
-async function loadRandomPatient() {
+function formatScreenTime(iso: string) {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleString('zh-CN', { hour12: false })
+}
+
+function uniqueScreenName(base: string) {
+  const used = new Set(screens.value.map((item) => item.name))
+  if (!used.has(base)) return base
+  let n = 2
+  while (used.has(`${base} ${n}`)) n += 1
+  return `${base} ${n}`
+}
+
+function startRename(item: HmiListItem) {
+  nameEdit.value = { mode: 'rename', item, name: item.name }
+}
+
+function startCopy(item: HmiListItem) {
+  nameEdit.value = { mode: 'copy', item, name: uniqueScreenName(`${item.name} 副本`) }
+}
+
+async function applyNameEdit() {
+  const edit = nameEdit.value
+  if (!edit) return
+  const nextName = edit.name.trim()
+  if (!nextName) {
+    msg.value = '请填写屏幕名称'
+    return
+  }
+  const duplicated = screens.value.some((item) => item.name === nextName && (edit.mode === 'copy' || item.id !== edit.item.id))
+  if (duplicated) {
+    msg.value = '已有同名屏幕'
+    return
+  }
   try {
-    const res = await fetch(`${getApiBase()}/api/demo/hmi-patient`)
-    if (!res.ok) throw new Error('bad status')
-    const body = await res.json() as Record<string, unknown>
-    sampleText.value = JSON.stringify(body, null, 2)
-    const row = Array.isArray(body.obj) ? ((body.obj[0] as Record<string, unknown>) ?? {}) : body
-    doc.value.sample = { ...createDefaultDocument().sample, ...row }
-    doc.value.colors = withCareColor(doc.value.colors, row)
-    msg.value = '已填入随机病人'
+    if (edit.mode === 'rename') {
+      const schema = edit.item.id === screenId.value ? doc.value : (await getScreen(edit.item.id)).schemaJson
+      await updateScreen(edit.item.id, nextName, schema)
+      if (edit.item.id === screenId.value) name.value = nextName
+      msg.value = '已改名'
+    } else {
+      const schema = edit.item.id === screenId.value ? doc.value : (await getScreen(edit.item.id)).schemaJson
+      await createScreen(nextName, schema)
+      msg.value = '已复制'
+    }
+    nameEdit.value = null
+    screens.value = await listScreens()
+    await loadScreenPreviews(screens.value)
   } catch {
-    msg.value = '随机病人接口失败，请确认后端已启动'
+    msg.value = edit.mode === 'rename' ? '改名失败，请确认后端已启动' : '复制失败，请确认后端已启动'
   }
 }
 
-function applySample() {
+function editSample() {
+  showSample.value = true
+}
+
+function applySamplePayload(data: unknown) {
   try {
-    const parsed = JSON.parse(sampleText.value) as Record<string, unknown>
+    const parsed = (data ?? {}) as Record<string, unknown>
     const row = Array.isArray(parsed.obj) ? ((parsed.obj[0] as Record<string, unknown>) ?? {}) : parsed
     doc.value.sample = { ...createDefaultDocument().sample, ...row }
     doc.value.colors = withCareColor(doc.value.colors, row)
-    showSample.value = false
+    msg.value = '已激活样例'
   } catch {
     msg.value = '样例 JSON 无法解析'
   }
 }
 
+async function loadPublicationDocs(items: HmiPublicationItem[]) {
+  const ids = [...new Set(items.map((item) => item.screenId).filter((id): id is number => id != null))]
+  const loaded = await Promise.all(ids.map(async (id) => {
+    if (publicationDocs.value[id]) return null
+    try {
+      const row = await getScreen(id)
+      return [id, normalizeDocument(row.schemaJson)] as const
+    } catch {
+      return null
+    }
+  }))
+  const next = { ...publicationDocs.value }
+  for (const entry of loaded) {
+    if (entry) next[entry[0]] = entry[1]
+  }
+  publicationDocs.value = next
+}
+
 async function openPublications() {
   updateNote.value = {}
   showPublications.value = true
-  try { publications.value = await listPublications() } catch { msg.value = '无法读取发布列表'; publications.value = [] }
+  try {
+    publications.value = await listPublications()
+    await loadPublicationDocs(publications.value)
+  } catch {
+    msg.value = '无法读取发布列表'
+    publications.value = []
+  }
 }
 
 async function publish() {
@@ -188,7 +283,10 @@ async function publish() {
     publishDescription.value = ''
     showPublish.value = false
     msg.value = '已发布'
-    if (showPublications.value) publications.value = await listPublications()
+    if (showPublications.value) {
+      publications.value = await listPublications()
+      await loadPublicationDocs(publications.value)
+    }
   } catch {
     msg.value = '发布失败，请确认后端已启动'
   } finally {
@@ -206,6 +304,9 @@ const updateNote = ref<Record<number, string>>({})
 
 async function refreshPublication(item: HmiPublicationItem) {
   const result = await updatePublication(item.id, { schemaJson: deviceJson(doc.value) })
+  if (item.screenId != null) {
+    publicationDocs.value = { ...publicationDocs.value, [item.screenId]: doc.value }
+  }
   publications.value = await listPublications()
   updateNote.value = { ...updateNote.value, [item.id]: result.unchanged ? '无改动' : '已更新' }
 }
@@ -456,15 +557,37 @@ function removePage() {
     </div>
     <div v-if="contextMenu" class="fixed inset-0 z-40" @pointerdown="contextMenu = null" />
     <div v-if="open" class="overlay" @click.self="open = false">
-      <div class="dialog">
-        <div class="mb-2 flex justify-between"><span>打开屏幕</span><button @click="open = false">关闭</button></div>
-        <ul class="editor-scrollbar max-h-80 space-y-1 overflow-auto">
-          <li v-for="item in screens" :key="item.id" class="flex items-center justify-between rounded px-2 py-1 hover:bg-slate-800">
-            <button @click="pick(item)">{{ item.name }}</button>
-            <button class="text-rose-300" @click="confirmDelete = item">删除</button>
+      <div class="dialog pub-dialog">
+        <div class="mb-3 flex items-center justify-between"><span>打开屏幕</span><button type="button" class="icon-btn" title="关闭" @click="open = false" v-html="tabler('x')" /></div>
+        <ul class="editor-scrollbar min-h-0 flex-1 space-y-3 overflow-auto">
+          <li v-for="item in screens" :key="item.id" class="flex gap-3 rounded border border-slate-700 p-3" :class="item.id === screenId ? 'border-sky-500' : ''">
+            <button type="button" class="shrink-0" @click="pick(item)">
+              <PublicationThumb v-if="screenDocs[item.id]" :doc="screenDocs[item.id]" />
+              <div v-else class="flex h-[188px] w-[320px] items-center justify-center rounded bg-slate-950 text-xs text-slate-500">无预览</div>
+            </button>
+            <div class="flex min-w-0 flex-1 flex-col">
+              <button type="button" class="truncate text-left text-base" @click="pick(item)">{{ item.name }}</button>
+              <div class="mt-1 text-xs text-slate-500">{{ screenSize(screenDocs[item.id]) }}<span v-if="screenSize(screenDocs[item.id])"> · </span>{{ formatScreenTime(item.updatedAt) }}</div>
+              <div class="mt-auto flex flex-wrap justify-end gap-1 pt-3">
+                <button class="btn" @click="pick(item)">打开</button>
+                <button class="btn" @click="startRename(item)">改名</button>
+                <button class="btn" @click="startCopy(item)">复制</button>
+                <button class="btn text-rose-300" @click="confirmDelete = item">删除</button>
+              </div>
+            </div>
           </li>
           <li v-if="!screens.length" class="text-slate-500">没有已保存的屏幕</li>
         </ul>
+      </div>
+    </div>
+    <div v-if="nameEdit" class="overlay" @click.self="nameEdit = null">
+      <div class="dialog">
+        <div class="mb-2">{{ nameEdit.mode === 'rename' ? '改名' : '复制屏幕' }}</div>
+        <input v-model="nameEdit.name" class="w-full rounded border border-slate-600 bg-slate-950 px-2 py-1" @keyup.enter="applyNameEdit" />
+        <div class="mt-3 flex justify-end gap-2">
+          <button class="btn" @click="nameEdit = null">取消</button>
+          <button class="btn" @click="applyNameEdit">确定</button>
+        </div>
       </div>
     </div>
     <div v-if="confirmDelete" class="overlay" @click.self="confirmDelete = null">
@@ -540,18 +663,22 @@ function removePage() {
       </div>
     </div>
     <div v-if="showPublications" class="overlay" @click.self="showPublications = false">
-      <div class="dialog w-[720px]">
-        <div class="mb-2 flex justify-between"><span>发布管理</span><button @click="showPublications = false">关闭</button></div>
-        <ul class="editor-scrollbar max-h-96 space-y-2 overflow-auto">
-          <li v-for="item in publications" :key="item.id" class="rounded border border-slate-700 p-2 text-sm">
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0">
-                <div class="truncate">{{ item.description }}</div>
-                <div class="truncate font-mono text-xs text-slate-500">{{ publicationUrl(item.id) }}</div>
-                <div class="text-xs" :class="item.status === 'active' ? 'text-emerald-400' : 'text-amber-300'">{{ item.status === 'active' ? '发布中' : '已暂停' }}</div>
-                <div v-if="updateNote[item.id]" class="text-xs" :class="updateNote[item.id] === '无改动' ? 'text-slate-400' : 'text-emerald-400'">{{ updateNote[item.id] }}</div>
+      <div class="dialog pub-dialog">
+        <div class="mb-3 flex items-center justify-between"><span>发布管理</span><button type="button" class="icon-btn" title="关闭" @click="showPublications = false" v-html="tabler('x')" /></div>
+        <ul class="editor-scrollbar min-h-0 flex-1 space-y-3 overflow-auto">
+          <li v-for="item in publications" :key="item.id" class="flex gap-3 rounded border p-3 text-sm" :class="item.screenId != null && item.screenId === screenId ? 'border-sky-400 bg-sky-500/10 shadow-[0_0_0_1px_rgba(56,189,248,0.45)]' : 'border-slate-700'">
+            <PublicationThumb v-if="item.screenId != null && publicationDocs[item.screenId]" :doc="publicationDocs[item.screenId]" />
+            <div v-else class="flex h-[188px] w-[320px] shrink-0 items-center justify-center rounded bg-slate-950 text-xs text-slate-500">无缩略图</div>
+            <div class="flex min-w-0 flex-1 flex-col">
+              <div class="flex min-w-0 items-center gap-2">
+                <div class="truncate text-base">{{ item.description }}</div>
+                <span v-if="item.screenId != null && item.screenId === screenId" class="shrink-0 rounded bg-sky-500 px-1.5 py-0.5 text-[11px] text-slate-950">当前屏幕</span>
               </div>
-              <div class="flex shrink-0 flex-wrap justify-end gap-1">
+              <div class="mt-1 text-xs text-slate-500">{{ item.screenId != null ? screenSize(publicationDocs[item.screenId]) : '' }}</div>
+              <div class="mt-1 truncate font-mono text-xs text-slate-500">{{ publicationUrl(item.id) }}</div>
+              <div class="mt-1 text-xs" :class="item.status === 'active' ? 'text-emerald-400' : 'text-amber-300'">{{ item.status === 'active' ? '发布中' : '已暂停' }}</div>
+              <div v-if="updateNote[item.id]" class="text-xs" :class="updateNote[item.id] === '无改动' ? 'text-slate-400' : 'text-emerald-400'">{{ updateNote[item.id] }}</div>
+              <div class="mt-auto flex flex-wrap justify-end gap-1 pt-3">
                 <button class="btn" @click="copyApi(item.id)">{{ copiedId === item.id ? '已复制' : '复制地址' }}</button>
                 <button class="btn" @click="refreshPublication(item)">更新</button>
                 <button class="btn" @click="setPublicationStatus(item)">{{ item.status === 'active' ? '暂停' : '恢复' }}</button>
@@ -572,19 +699,7 @@ function removePage() {
         </div>
       </div>
     </div>
-    <div v-if="showSample" class="overlay" @click.self="showSample = false">
-      <div class="dialog w-[640px]">
-        <div class="mb-2 flex items-center justify-between gap-2">
-          <span>样例数据。可粘贴接口整包，会取 obj[0]。不会写入设备 JSON。</span>
-          <button class="btn shrink-0" @click="loadRandomPatient">随机病人</button>
-        </div>
-        <textarea v-model="sampleText" class="editor-scrollbar h-80 w-full rounded bg-slate-950 p-2 font-mono text-xs" />
-        <div class="mt-2 flex justify-end gap-2">
-          <button class="btn" @click="showSample = false">取消</button>
-          <button class="btn" @click="applySample">应用</button>
-        </div>
-      </div>
-    </div>
+    <SampleSourceDialog v-if="showSample" @close="showSample = false" @apply="applySamplePayload" />
   </div>
 </template>
 
@@ -604,5 +719,6 @@ function removePage() {
 .menu:disabled { opacity: 0.4; }
 .overlay { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: rgb(0 0 0 / 0.55); }
 .dialog { width: 420px; border-radius: 8px; border: 1px solid rgb(51 65 85); background: rgb(15 23 42); padding: 16px; }
+.pub-dialog { display: flex; width: min(1080px, 94vw); max-height: 86vh; flex-direction: column; }
 .json-dialog { width: min(1100px, 94vw); }
 </style>
