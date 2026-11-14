@@ -75,6 +75,7 @@ const publishDescription = ref('')
 const publications = ref<HmiPublicationItem[]>([])
 const publicationDocs = ref<Record<number, HmiDocument>>({})
 const confirmDropPublication = ref<HmiPublicationItem | null>(null)
+const publicationNameEdit = ref<{ item: HmiPublicationItem; name: string } | null>(null)
 const showGrid = ref(true)
 const showPosition = ref(false)
 const contextMenu = ref<{ x: number; y: number; key: string } | null>(null)
@@ -271,6 +272,11 @@ async function openPublications() {
   }
 }
 
+function openPublish() {
+  publishDescription.value = name.value
+  showPublish.value = true
+}
+
 async function publish() {
   const description = publishDescription.value.trim()
   if (!description) {
@@ -309,6 +315,28 @@ async function refreshPublication(item: HmiPublicationItem) {
   }
   publications.value = await listPublications()
   updateNote.value = { ...updateNote.value, [item.id]: result.unchanged ? '无改动' : '已更新' }
+}
+
+function startRenamePublication(item: HmiPublicationItem) {
+  publicationNameEdit.value = { item, name: item.description }
+}
+
+async function applyPublicationName() {
+  const edit = publicationNameEdit.value
+  if (!edit) return
+  const next = edit.name.trim()
+  if (!next) {
+    msg.value = '请填写发布名称'
+    return
+  }
+  try {
+    await updatePublication(edit.item.id, { description: next })
+    publicationNameEdit.value = null
+    publications.value = await listPublications()
+    msg.value = '已改名'
+  } catch {
+    msg.value = '改名失败，请确认后端已启动'
+  }
 }
 
 async function removePublication() {
@@ -427,7 +455,7 @@ function removePage() {
       <button class="icon-btn" title="新建" @click="store.reset()" v-html="tabler('file')" />
       <button class="icon-btn" title="打开" @click="openList" v-html="tabler('folder-open')" />
       <button class="icon-btn" :title="saving ? '保存中' : '保存'" :disabled="saving" @click="save" v-html="tabler('device-floppy')" />
-      <button class="icon-btn" title="发布" @click="showPublish = true" v-html="tabler('upload')" />
+      <button class="icon-btn" title="发布" @click="openPublish" v-html="tabler('upload')" />
       <button class="icon-btn" title="发布管理" @click="openPublications" v-html="tabler('list-details')" />
       <button class="icon-btn" title="图片" @click="showImages = true" v-html="tabler('photo')" />
       <button class="icon-btn" title="设备 JSON" @click="showJson = true" v-html="tabler('braces')" />
@@ -680,6 +708,7 @@ function removePage() {
               <div v-if="updateNote[item.id]" class="text-xs" :class="updateNote[item.id] === '无改动' ? 'text-slate-400' : 'text-emerald-400'">{{ updateNote[item.id] }}</div>
               <div class="mt-auto flex flex-wrap justify-end gap-1 pt-3">
                 <button class="btn" @click="copyApi(item.id)">{{ copiedId === item.id ? '已复制' : '复制地址' }}</button>
+                <button class="btn" @click="startRenamePublication(item)">改名</button>
                 <button class="btn" @click="refreshPublication(item)">更新</button>
                 <button class="btn" @click="setPublicationStatus(item)">{{ item.status === 'active' ? '暂停' : '恢复' }}</button>
                 <button class="btn text-rose-300" @click="confirmDropPublication = item">删除</button>
@@ -688,6 +717,16 @@ function removePage() {
           </li>
           <li v-if="!publications.length" class="text-slate-500">还没有发布</li>
         </ul>
+      </div>
+    </div>
+    <div v-if="publicationNameEdit" class="overlay z-[60]" @click.self="publicationNameEdit = null">
+      <div class="dialog">
+        <div class="mb-2">修改发布名称</div>
+        <input v-model="publicationNameEdit.name" maxlength="200" class="w-full rounded border border-slate-600 bg-slate-950 px-2 py-1" @keyup.enter="applyPublicationName" />
+        <div class="mt-3 flex justify-end gap-2">
+          <button class="btn" @click="publicationNameEdit = null">取消</button>
+          <button class="btn" @click="applyPublicationName">确定</button>
+        </div>
       </div>
     </div>
     <div v-if="confirmDropPublication" class="overlay z-50" @click.self="confirmDropPublication = null">

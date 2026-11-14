@@ -571,6 +571,8 @@ function colorTable(parsed: unknown): Record<string, string> | null {
       <label class="block">分隔符<input class="field" maxlength="1" :value="item.split ?? ','" @input="emit('patchItem', { split: ($event.target as HTMLInputElement).value })" /></label>
       <label class="block">{{ item.flow === 'row' ? '列宽' : '块高' }}<NumberField :value="item.item_h ?? 73" @input="emit('patchItem', { item_h: num(($event.target as HTMLInputElement).value) })" /></label>
       <label class="block">块间距<NumberField :value="item.gap ?? 8" @input="emit('patchItem', { gap: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label class="block">块内边距<NumberField :value="item.pad ?? 0" @input="emit('patchItem', { pad: num(($event.target as HTMLInputElement).value) })" /></label>
+      <label class="block">块圆角<NumberField :value="item.radius ?? 0" @input="emit('patchItem', { radius: num(($event.target as HTMLInputElement).value) })" /></label>
       <ColorField label="默认底色" :model-value="item.default_color ?? '#7C7C7C'" @update="emit('patchItem', { default_color: $event })" />
       <p class="text-xs text-slate-500">每块底色按文字查页面颜色字典，没有则用默认底色。</p>
     </template>
@@ -580,4 +582,5 @@ function colorTable(parsed: unknown): Record<string, string> | null {
 <style scoped>
 .field { margin-top: 4px; width: 100%; border-radius: 6px; border: 1px solid rgb(255 255 255 / 0.15); background: rgb(255 255 255 / 0.08); padding: 6px 10px; font-size: 12px; color: rgb(241 245 249); outline: none; }
 .field:focus { border-color: rgb(129 140 248 / 0.5); box-shadow: 0 0 0 1px rgb(129 140 248 / 0.3); }
+.field option { background: #0f172a; color: #e2e8f0; }
 </style>

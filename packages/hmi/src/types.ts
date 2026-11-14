@@ -143,6 +143,10 @@ export interface HmiItem {
   /** column 为纵向，row 为从左往右的列。缺省 column。 */
   flow?: 'column' | 'row'
   item_h?: number
+  /** 块内沿对齐方向的内边距。竹简列作用在上下，横条作用在左右。 */
+  pad?: number
+  /** 每一块的圆角，像素。缺省 0。 */
+  radius?: number
   default_color?: string
 }
 

@@ -359,11 +359,32 @@ function maskedValue(item: HmiItem) {
                 background: lookupColor(doc.colors, part, paintColor(item.default_color, doc, '#7C7C7C')),
                 alignItems: 'center',
                 justifyContent: item.align === 'start' ? 'flex-start' : item.align === 'end' ? 'flex-end' : 'center',
+                boxSizing: 'border-box',
+                borderRadius: `${item.radius ?? 0}px`,
+                overflow: 'hidden',
                 ...(item.flow === 'row'
-                  ? { flexDirection: 'column', width: `${item.item_h ?? 73}px`, maxWidth: `${item.item_h ?? 73}px`, height: '100%', flex: 'none' }
-                  : { height: `${item.item_h ?? 73}px`, width: '100%' }),
+                  ? {
+                      flexDirection: 'column',
+                      width: `${item.item_h ?? 73}px`,
+                      maxWidth: `${item.item_h ?? 73}px`,
+                      height: '100%',
+                      flex: 'none',
+                      alignItems: 'center',
+                      justifyContent: item.align === 'start' ? 'flex-start' : item.align === 'end' ? 'flex-end' : 'center',
+                      paddingTop: `${item.pad ?? 0}px`,
+                      paddingBottom: `${item.pad ?? 0}px`,
+                    }
+                  : {
+                      height: `${item.item_h ?? 73}px`,
+                      width: '100%',
+                      paddingLeft: `${item.pad ?? 0}px`,
+                      paddingRight: `${item.pad ?? 0}px`,
+                    }),
               }"
-            >{{ part }}</div>
+            >
+              <span v-if="item.flow === 'row'" :style="{ writingMode: 'vertical-rl', textOrientation: 'upright', lineHeight: '1' }">{{ part }}</span>
+              <template v-else>{{ part }}</template>
+            </div>
           </div>
         </div>
       </div>
