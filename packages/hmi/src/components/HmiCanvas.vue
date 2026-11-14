@@ -179,6 +179,48 @@ function onMenu(event: MouseEvent, key: string) {
 }
 
 const single = computed(() => selectedBoxes.value.length === 1 ? selectedBoxes.value[0] : undefined)
+const singleShape = computed(() => {
+  const current = selection.value
+  return current?.kind === 'shape' ? doc.value.pages[doc.value.active]?.shapes[current.index] : undefined
+})
+
+function shapeRotation(shape: HmiShape | undefined): number {
+  if (shape?.type === 'rect' || shape?.type === 'circle') return shape.rotate ?? 0
+  if (shape?.type === 'line') {
+    return Math.atan2(shape.y2 - shape.y1, shape.x2 - shape.x1) * 180 / Math.PI
+  }
+  return 0
+}
+
+const selectionFrame = computed(() => {
+  const box = single.value
+  if (!box) return undefined
+  const shape = singleShape.value
+  if (shape?.type === 'line') {
+    const cx = (shape.x1 + shape.x2) / 2
+    const cy = (shape.y1 + shape.y2) / 2
+    const length = Math.max(1, Math.hypot(shape.x2 - shape.x1, shape.y2 - shape.y1))
+    const thickness = Math.max(1, shape.width ?? 1)
+    return {
+      x: cx - length / 2,
+      y: cy - thickness / 2,
+      w: length,
+      h: thickness,
+      rotation: shapeRotation(shape),
+      line: true,
+      rotatable: true,
+    }
+  }
+  return {
+    x: box.x,
+    y: box.y,
+    w: box.w,
+    h: box.h,
+    rotation: shapeRotation(shape),
+    line: false,
+    rotatable: shape?.type === 'rect' || shape?.type === 'circle',
+  }
+})
 
 function onResize(dir: string, event: PointerEvent) {
   const box = single.value
@@ -224,6 +266,43 @@ function onResize(dir: string, event: PointerEvent) {
   }
   window.addEventListener('pointermove', move)
   window.addEventListener('pointerup', up)
+}
+
+function onRotate(event: PointerEvent) {
+  const frame = selectionFrame.value
+  const shape = singleShape.value
+  const current = selection.value
+  if (!frame?.rotatable || !shape || current?.kind !== 'shape') return
+  event.stopPropagation()
+  event.preventDefault()
+  const start = clientPoint(event)
+  if (!start) return
+  const center = { x: frame.x + frame.w / 2, y: frame.y + frame.h / 2 }
+  const startAngle = Math.atan2(start.y - center.y, start.x - center.x)
+  const startRotation = frame.rotation
+  const lineOrigin = shape.type === 'line'
+    ? { x1: shape.x1, y1: shape.y1, x2: shape.x2, y2: shape.y2 }
+    : undefined
+  const target = event.currentTarget as HTMLElement
+  target.setPointerCapture?.(event.pointerId)
+  document.body.style.cursor = 'grabbing'
+  const move = (ev: PointerEvent) => {
+    const point = clientPoint(ev)
+    if (!point) return
+    const angle = Math.atan2(point.y - center.y, point.x - center.x)
+    let rotation = startRotation + (angle - startAngle) * 180 / Math.PI
+    if (ev.shiftKey) rotation = Math.round(rotation / 15) * 15
+    store.rotateShape(current.index, rotation, lineOrigin)
+  }
+  const finish = () => {
+    window.removeEventListener('pointermove', move)
+    window.removeEventListener('pointerup', finish)
+    window.removeEventListener('pointercancel', finish)
+    document.body.style.cursor = ''
+  }
+  window.addEventListener('pointermove', move)
+  window.addEventListener('pointerup', finish)
+  window.addEventListener('pointercancel', finish)
 }
 
 const handles = ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se']
@@ -332,12 +411,31 @@ function onWheel(event: WheelEvent) {
             @select="store.select"
           />
           <div
-            v-if="single && !single.line && !single.locked"
+            v-if="selectionFrame && !single?.locked"
             class="pointer-events-none absolute z-20 border border-sky-400"
-            :style="{ left: single.x + (dragOffset?.dx ?? 0) + 'px', top: single.y + (dragOffset?.dy ?? 0) + 'px', width: single.w + 'px', height: single.h + 'px' }"
+            :style="{
+              left: selectionFrame.x + (dragOffset?.dx ?? 0) + 'px',
+              top: selectionFrame.y + (dragOffset?.dy ?? 0) + 'px',
+              width: selectionFrame.w + 'px',
+              height: selectionFrame.h + 'px',
+              transform: selectionFrame.rotation ? `rotate(${selectionFrame.rotation}deg)` : undefined,
+              transformOrigin: '50% 50%',
+            }"
           >
             <button
+              v-if="selectionFrame.rotatable"
+              type="button"
+              title="旋转（按住 Shift 以 15° 吸附）"
+              aria-label="旋转图元"
+              class="pointer-events-auto absolute left-1/2 top-[-28px] h-7 w-3 -translate-x-1/2 cursor-grab touch-none"
+              @pointerdown="onRotate"
+            >
+              <span class="pointer-events-none absolute left-1/2 top-2.5 h-[18px] w-0.5 -translate-x-1/2 bg-sky-400" />
+              <span class="pointer-events-none absolute left-1/2 top-0 h-3 w-3 -translate-x-1/2 rounded-full border-2 border-white bg-sky-400" />
+            </button>
+            <button
               v-for="dir in handles"
+              v-if="!selectionFrame.line"
               :key="dir"
               type="button"
               class="pointer-events-auto"

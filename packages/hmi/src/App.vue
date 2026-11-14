@@ -6,7 +6,7 @@ import { createPublication, createScreen, deletePublication, deleteScreen, getSc
 import { createDefaultDocument } from './defaultDocument'
 import { bindingCount, deviceJson, withCareColor } from './resolve'
 import { getApiBase } from './config'
-import { currentPage, LIMITS, type HmiDocument } from './types'
+import { currentPage, LIMITS, type HmiDocument, type HmiShape } from './types'
 
 const canvasPalette: { kind: 'shape' | 'card'; type: string; label: string; icon: string }[] = [
   { kind: 'shape', type: 'rect', label: '矩形', icon: 'rectangle' },
@@ -556,6 +556,7 @@ function removePage() {
           @patch-icons="store.setIcons"
           @patch-library="store.setLibrary"
           @patch-shape="selection?.kind === 'shape' && store.patchShape(selection.index, $event as Partial<HmiShape>)"
+          @rotate-shape="selection?.kind === 'shape' && store.rotateShape(selection.index, $event)"
           @patch-card="selectedCard && store.patchCard(selection?.kind === 'item' ? selection.card : (selection?.kind === 'card' ? selection.index : -1), $event)"
           @patch-item="selection?.kind === 'item' && store.patchItem(selection.card, selection.index, $event)"
         />
@@ -590,7 +591,7 @@ function removePage() {
         <ul class="editor-scrollbar min-h-0 flex-1 space-y-3 overflow-auto">
           <li v-for="item in screens" :key="item.id" class="flex gap-3 rounded border border-slate-700 p-3" :class="item.id === screenId ? 'border-sky-500' : ''">
             <button type="button" class="shrink-0" @click="pick(item)">
-              <PublicationThumb v-if="screenDocs[item.id]" :doc="screenDocs[item.id]" />
+              <PublicationThumb v-if="screenDocs[item.id]" :doc="screenDocs[item.id]!" />
               <div v-else class="flex h-[188px] w-[320px] items-center justify-center rounded bg-slate-950 text-xs text-slate-500">无预览</div>
             </button>
             <div class="flex min-w-0 flex-1 flex-col">
@@ -695,7 +696,7 @@ function removePage() {
         <div class="mb-3 flex items-center justify-between"><span>发布管理</span><button type="button" class="icon-btn" title="关闭" @click="showPublications = false" v-html="tabler('x')" /></div>
         <ul class="editor-scrollbar min-h-0 flex-1 space-y-3 overflow-auto">
           <li v-for="item in publications" :key="item.id" class="flex gap-3 rounded border p-3 text-sm" :class="item.screenId != null && item.screenId === screenId ? 'border-sky-400 bg-sky-500/10 shadow-[0_0_0_1px_rgba(56,189,248,0.45)]' : 'border-slate-700'">
-            <PublicationThumb v-if="item.screenId != null && publicationDocs[item.screenId]" :doc="publicationDocs[item.screenId]" />
+            <PublicationThumb v-if="item.screenId != null && publicationDocs[item.screenId]" :doc="publicationDocs[item.screenId]!" />
             <div v-else class="flex h-[188px] w-[320px] shrink-0 items-center justify-center rounded bg-slate-950 text-xs text-slate-500">无缩略图</div>
             <div class="flex min-w-0 flex-1 flex-col">
               <div class="flex min-w-0 items-center gap-2">

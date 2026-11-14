@@ -13,6 +13,8 @@ export interface HmiRect {
   y: number
   w: number
   h: number
+  /** 绕中心旋转的角度，单位度；仅矩形和圆形使用 */
+  rotate?: number
   bg?: string
   radius?: number
   border_w?: number

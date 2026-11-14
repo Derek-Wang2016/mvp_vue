@@ -24,6 +24,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{
   patchShape: [patch: Partial<HmiShape>]
+  rotateShape: [rotation: number]
   patchCard: [patch: Partial<HmiCard>]
   patchItem: [patch: Partial<HmiItem>]
   patchScreen: [w: number, h: number]
@@ -109,6 +110,13 @@ function setLinkShowsLast(text: string | undefined, on: boolean) {
 function num(value: string) {
   const n = Number(value)
   return Number.isFinite(n) ? n : 0
+}
+function shapeRotation(shape: HmiShape): number {
+  if (shape.type === 'line') {
+    return Math.round(Math.atan2(shape.y2 - shape.y1, shape.x2 - shape.x1) * 180 / Math.PI)
+  }
+  if (shape.type === 'rect' || shape.type === 'circle') return shape.rotate ?? 0
+  return 0
 }
 function list(value: string): number[] {
   return value.split(',').map((part) => Number(part.trim())).filter((n) => Number.isFinite(n))
@@ -335,6 +343,9 @@ function colorTable(parsed: unknown): Record<string, string> | null {
     </label>
     <div class="text-slate-400">{{ shape.type }}</div>
     <template v-if="shape.type === 'line'">
+      <label class="block">旋转角度
+        <NumberField min="-180" max="180" step="1" :value="shapeRotation(shape)" @input="emit('rotateShape', num(($event.target as HTMLInputElement).value))" />
+      </label>
       <div class="grid grid-cols-2 gap-2">
         <label>x1<NumberField :value="shape.x1" @input="emit('patchShape', { x1: num(($event.target as HTMLInputElement).value) })" /></label>
         <label>y1<NumberField :value="shape.y1" @input="emit('patchShape', { y1: num(($event.target as HTMLInputElement).value) })" /></label>
@@ -490,6 +501,9 @@ function colorTable(parsed: unknown): Record<string, string> | null {
         <div v-if="uploadMsg" class="text-xs text-slate-400">{{ uploadMsg }}</div>
       </template>
     </template>
+    <label v-if="shape.type === 'rect' || shape.type === 'circle'" class="block">旋转角度
+      <NumberField min="-180" max="180" step="1" :value="shape.rotate ?? 0" @input="emit('rotateShape', num(($event.target as HTMLInputElement).value))" />
+    </label>
   </div>
   <div v-else-if="card && selection?.kind === 'card'" class="space-y-2 p-2.5 text-[11px]">
     <label class="flex items-center gap-2">锁定

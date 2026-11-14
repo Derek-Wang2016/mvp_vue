@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { currentPage, LIMITS, type HmiButton, type HmiDocument, type HmiIconShape, type HmiImage, type HmiItem, type Selection } from '../types'
+import { currentPage, LIMITS, type HmiButton, type HmiDocument, type HmiIconShape, type HmiImage, type HmiItem, type HmiShape, type Selection } from '../types'
 import { cardKey, shapeKey } from '../geometry'
 import { paintSvg, resolveIcon } from '../icons/lvglSvg'
 import { lvglSymbolName } from '../icons/lvglSymbols'
@@ -81,11 +81,17 @@ function boxStyle(node: { x: number; y: number; w: number; h: number; bg?: strin
   return style
 }
 
-function lineStyle(shape: { x1: number; y1: number; x2: number; y2: number; width?: number; color?: string }) {
+function dragTransform(key: string, locked = false): string {
+  if (locked || !props.drag || !props.selectedKeys.includes(key)) return ''
+  return `translate(${props.drag.dx}px, ${props.drag.dy}px)`
+}
+
+function lineStyle(shape: { x1: number; y1: number; x2: number; y2: number; width?: number; color?: string; locked?: boolean }, key: string) {
   const dx = shape.x2 - shape.x1
   const dy = shape.y2 - shape.y1
   const length = Math.hypot(dx, dy) || 1
   const angle = Math.atan2(dy, dx) * 180 / Math.PI
+  const translate = dragTransform(key, !!shape.locked)
   return {
     position: 'absolute' as const,
     left: `${shape.x1}px`,
@@ -94,7 +100,7 @@ function lineStyle(shape: { x1: number; y1: number; x2: number; y2: number; widt
     height: `${shape.width ?? 1}px`,
     background: paintColor(shape.color, props.doc, '#000'),
     transformOrigin: '0 50%',
-    transform: `rotate(${angle}deg)`,
+    transform: `${translate} rotate(${angle}deg)`.trim(),
   }
 }
 
@@ -137,9 +143,16 @@ function fontStyle(item: { font?: string; bold?: number; color?: string; align?:
   }
 }
 
-function dragStyle(key: string, locked = false): Record<string, string> {
-  if (locked || !props.drag || !props.selectedKeys.includes(key)) return {}
-  return { transform: `translate(${props.drag.dx}px, ${props.drag.dy}px)` }
+function shapeRotation(shape: HmiShape): number | undefined {
+  return shape.type === 'rect' || shape.type === 'circle' ? shape.rotate : undefined
+}
+
+function dragStyle(key: string, locked = false, rotation?: number): Record<string, string> {
+  const transforms: string[] = []
+  const translate = dragTransform(key, locked)
+  if (translate) transforms.push(translate)
+  if (rotation) transforms.push(`rotate(${rotation}deg)`)
+  return transforms.length ? { transform: transforms.join(' ') } : {}
 }
 function onTarget(event: PointerEvent, key: string) {
   if (event.button !== 0) return
@@ -251,7 +264,7 @@ function maskedValue(item: HmiItem) {
       <div
         v-if="shape.type === 'line'"
         data-node
-        :style="{ ...lineStyle(shape), ...dragStyle(shapeKey(index), !!shape.locked), outline: selectedShape(index) ? '1px solid #38bdf8' : 'none', cursor: shape.locked ? 'default' : 'grab' }"
+        :style="{ ...lineStyle(shape, shapeKey(index)), outline: selectedShape(index) ? '1px solid #38bdf8' : 'none', cursor: shape.locked ? 'default' : 'grab' }"
         @pointerdown="onTarget($event, shapeKey(index))"
         @contextmenu="onMenu($event, shapeKey(index))"
       />
@@ -315,7 +328,7 @@ function maskedValue(item: HmiItem) {
       <div
         v-else
         data-node
-        :style="{ ...boxStyle(shape, shape.type === 'circle'), ...dragStyle(shapeKey(index), !!shape.locked), outline: selectedShape(index) ? '2px solid #38bdf8' : 'none', cursor: shape.locked ? 'default' : 'grab' }"
+        :style="{ ...boxStyle(shape, shape.type === 'circle'), ...dragStyle(shapeKey(index), !!shape.locked, shapeRotation(shape)), outline: selectedShape(index) ? '2px solid #38bdf8' : 'none', cursor: shape.locked ? 'default' : 'grab' }"
         @pointerdown="onTarget($event, shapeKey(index))"
         @contextmenu="onMenu($event, shapeKey(index))"
       />
@@ -357,8 +370,6 @@ function maskedValue(item: HmiItem) {
               :style="{
                 ...fontStyle(item),
                 background: lookupColor(doc.colors, part, paintColor(item.default_color, doc, '#7C7C7C')),
-                alignItems: 'center',
-                justifyContent: item.align === 'start' ? 'flex-start' : item.align === 'end' ? 'flex-end' : 'center',
                 boxSizing: 'border-box',
                 borderRadius: `${item.radius ?? 0}px`,
                 overflow: 'hidden',
@@ -369,8 +380,6 @@ function maskedValue(item: HmiItem) {
                       maxWidth: `${item.item_h ?? 73}px`,
                       height: '100%',
                       flex: 'none',
-                      alignItems: 'center',
-                      justifyContent: item.align === 'start' ? 'flex-start' : item.align === 'end' ? 'flex-end' : 'center',
                       paddingTop: `${item.pad ?? 0}px`,
                       paddingBottom: `${item.pad ?? 0}px`,
                     }
@@ -380,6 +389,8 @@ function maskedValue(item: HmiItem) {
                       paddingLeft: `${item.pad ?? 0}px`,
                       paddingRight: `${item.pad ?? 0}px`,
                     }),
+                alignItems: 'center',
+                justifyContent: item.align === 'start' ? 'flex-start' : item.align === 'end' ? 'flex-end' : 'center',
               }"
             >
               <span v-if="item.flow === 'row'" :style="{ writingMode: 'vertical-rl', textOrientation: 'upright', lineHeight: '1' }">{{ part }}</span>

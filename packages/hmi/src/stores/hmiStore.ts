@@ -358,6 +358,28 @@ export const useHmiStore = defineStore('hmi', {
       const shape = this.page.shapes[sel.index]
       if (shape && shape.type !== 'line' && !shape.locked) Object.assign(shape, rect)
     },
+    rotateShape(
+      index: number,
+      rotation: number,
+      lineOrigin?: { x1: number; y1: number; x2: number; y2: number },
+    ) {
+      const shape = this.page.shapes[index]
+      if (!shape || shape.locked) return
+      if (shape.type === 'rect' || shape.type === 'circle') {
+        shape.rotate = normalizeRotation(rotation)
+        return
+      }
+      if (shape.type !== 'line' || !Number.isFinite(rotation)) return
+      const origin = lineOrigin ?? shape
+      const cx = (origin.x1 + origin.x2) / 2
+      const cy = (origin.y1 + origin.y2) / 2
+      const half = Math.hypot(origin.x2 - origin.x1, origin.y2 - origin.y1) / 2
+      const radians = rotation * Math.PI / 180
+      shape.x1 = Math.round(cx - Math.cos(radians) * half)
+      shape.y1 = Math.round(cy - Math.sin(radians) * half)
+      shape.x2 = Math.round(cx + Math.cos(radians) * half)
+      shape.y2 = Math.round(cy + Math.sin(radians) * half)
+    },
     align(mode: 'left' | 'right' | 'top' | 'bottom' | 'centerX' | 'centerY' | 'equalW' | 'equalH') {
       const boxes = screenBoxes(this.doc).filter((box) => this.selectedKeys.includes(box.key))
       if (boxes.length < 2) return
@@ -530,6 +552,13 @@ function selectionFromKey(key: string): Selection | null {
   if (kind === 's') return { kind: 'shape', index }
   if (kind === 'c') return { kind: 'card', index }
   return null
+}
+
+function normalizeRotation(angle: number): number {
+  let next = Math.round(angle) % 360
+  if (next > 180) next -= 360
+  if (next <= -180) next += 360
+  return Object.is(next, -0) ? 0 : next
 }
 
 function asPage(value: unknown): HmiPage | null {
