@@ -54,6 +54,7 @@ packages/server/prisma/*.db
 packages/server/prisma/*.db-journal
 *.db-wal
 *.db-shm
+*.db.bak
 
 # 本地调试、临时文件
 *.swp
