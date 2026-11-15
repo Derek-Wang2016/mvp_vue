@@ -78,6 +78,16 @@ export interface HmiButton {
   symbol?: string
   color?: string
   font?: string
+  /**
+   * 图标独立尺寸，像素。留空时跟随文字字号（LVGL 图标也是字体，默认与文字同号）。
+   * 设备端按这个值单独设置图标字号。
+   */
+  icon_size?: number
+  /**
+   * 图标独立颜色。`#RRGGBB` 或 `color.字段`。留空时跟随文字颜色 `color`。
+   * 用于图标与文字需要不同色的场景。
+   */
+  icon_color?: string
   /** 图标相对文字的位置。left 左右，right 右左，top 上下，bottom 下上。 */
   icon_pos?: 'left' | 'right' | 'top' | 'bottom'
   bg?: string

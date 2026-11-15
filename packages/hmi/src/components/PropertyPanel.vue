@@ -3,9 +3,9 @@ import { computed, ref } from 'vue'
 import { ICON_OPTIONS } from '../icons/catalog'
 import { LVGL_SYMBOLS, lvglSymbolName } from '../icons/lvglSymbols'
 import TablerImport from './TablerImport.vue'
-import { iconId, qrSide } from '../resolve'
+import { fontPx, iconId, qrSide } from '../resolve'
 import { resolveIcon } from '../icons/lvglSvg'
-import type { HmiCard, HmiItem, HmiPage, HmiReplaceRule, HmiShape, Selection } from '../types'
+import type { HmiButton, HmiCard, HmiItem, HmiPage, HmiReplaceRule, HmiShape, Selection } from '../types'
 import { getApiBase } from '../config'
 import ColorField from './ColorField.vue'
 import NumberField from './NumberField.vue'
@@ -111,6 +111,12 @@ function num(value: string) {
   const n = Number(value)
   return Number.isFinite(n) ? n : 0
 }
+
+/** 图标尺寸留空时实际会用到的值，作为输入框 placeholder 提示。 */
+function symbolSizeHint(shape: HmiButton): string {
+  if (shape.font) return String(fontPx(shape.font))
+  return String(Math.min(48, Math.max(8, shape.h - 16)))
+}
 function shapeRotation(shape: HmiShape): number {
   if (shape.type === 'line') {
     return Math.round(Math.atan2(shape.y2 - shape.y1, shape.x2 - shape.x1) * 180 / Math.PI)
@@ -123,8 +129,7 @@ function list(value: string): number[] {
 }
 
 /** 字符替换规则。patchItem 是整体合并，所以每次传完整数组。 */
-function addReplaceRule() {
-  if (!props.item) return
+function addReplaceRule() {  if (!props.item) return
   emit('patchItem', { replace: [...(props.item.replace ?? []), { from: '', to: '' }] })
 }
 
@@ -459,6 +464,22 @@ function colorTable(parsed: unknown): Record<string, string> | null {  const sou
           <option value="bottom">下上</option>
         </select>
       </label>
+      <div class="rounded border border-slate-700 p-2">
+        <div class="mb-1 flex items-center justify-between gap-2">
+          <span class="text-slate-300">图标样式</span>
+          <span class="text-[10px] text-slate-500">留空跟随文字</span>
+        </div>
+        <label class="block">图标尺寸 px
+          <NumberField
+            min="0"
+            :placeholder="symbolSizeHint(shape)"
+            :value="shape.icon_size ?? ''"
+            @input="emit('patchShape', { icon_size: ($event.target as HTMLInputElement).value === '' ? undefined : Math.max(0, num(($event.target as HTMLInputElement).value)) })"
+          />
+        </label>
+        <ColorField label="图标颜色" :model-value="shape.icon_color ?? ''" @update="emit('patchShape', { icon_color: $event || undefined })" />
+        <p class="mt-1 text-[11px] leading-relaxed text-slate-500">不填尺寸时跟随字号，不填颜色时跟随文字颜色。LVGL 里图标也是字体，这两个值分别映射到图标部分的字号与颜色。</p>
+      </div>
       <ColorField label="文字颜色" :model-value="shape.color ?? '#FFFFFF'" @update="emit('patchShape', { color: $event })" />
       <ColorField label="底色" :model-value="shape.bg ?? ''" @update="emit('patchShape', { bg: $event })" />
       <label class="block">圆角<NumberField :value="shape.radius ?? 0" @input="emit('patchShape', { radius: num(($event.target as HTMLInputElement).value) })" /></label>

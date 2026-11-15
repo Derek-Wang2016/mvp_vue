@@ -184,7 +184,7 @@ curl http://localhost:3002/api/hmi/sample-sources | grep -o '"builtin":[a-z]*'
 
 ### 4.1 新增字段
 
-设备 JSON 的 `pages.<name>.cards[].items[]` 里，item 对象新增 / 明确三个字段：
+设备 JSON 里，`pages.<name>.cards[].items[]` 的 item 新增以下字段：
 
 | 字段 | 类型 | 说明 | 引入 |
 |---|---|---|---|
@@ -192,7 +192,16 @@ curl http://localhost:3002/api/hmi/sample-sources | grep -o '"builtin":[a-z]*'
 | `bg` | `string` | 格子底色，`#RRGGBB` 或 `color.字段` | `c600a32` |
 | `radius` | `number` | 格子圆角（split 时为内部块圆角） | `c600a32` |
 
+`pages.<name>.shapes[]` 里**按钮**（`type: "button"`）新增：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `icon_size` | `number` | 图标独立尺寸（像素）。缺省跟随文字字号 |
+| `icon_color` | `string` | 图标独立颜色。缺省跟随文字颜色 `color` |
+
 ### 4.2 完整示例
+
+**数值卡（item）**：
 
 ```json
 {
@@ -215,6 +224,28 @@ curl http://localhost:3002/api/hmi/sample-sources | grep -o '"builtin":[a-z]*'
 }
 ```
 
+**按钮（shape）**：
+
+```json
+{
+  "type": "button",
+  "x": 400, "y": 460, "w": 160, "h": 56,
+  "text": "呼叫",
+  "symbol": "CALL",
+  "color": "#FFFFFF",
+  "font": "status",
+  "icon_size": 40,
+  "icon_color": "#FF0000",
+  "icon_pos": "left",
+  "bg": "#0E3A5F",
+  "radius": 8,
+  "action": "page",
+  "page": "index"
+}
+```
+
+上面这段同时表达了「文字白色、图标红色、图标 40px 比文字更大」的配置。
+
 ### 4.3 导出时的清理规则
 
 **`replace`**：
@@ -227,19 +258,28 @@ curl http://localhost:3002/api/hmi/sample-sources | grep -o '"builtin":[a-z]*'
 - `bg` 为空字符串时由 `omitEmpty` 丢弃
 - `radius` 为 `0` 时保留（`omitEmpty` 只跳过 `null` / `undefined` / `''`，0 会留下）
 
+**`icon_size` / `icon_color`**：
+
+- `icon_size` 未配置或 ≤ 0 时不写
+- `icon_color` 未配置或为空白字符串时不写
+- 两个都不写时，设备端按「跟随文字」处理，与旧版行为完全一致
+
 > 如果希望 `radius: 0` 也不写，需要在 `omitEmpty` 里特殊处理 —— 当前没这么做，因为 0 有语义（显式无圆角 vs 未配置）。
 
 ### 4.4 向后兼容
 
-- 旧 JSON（无 `replace` / `bg`）导入后行为完全不变
+- 旧 JSON（无 `replace` / `bg` / `icon_size` / `icon_color`）导入后行为完全不变
 - `applyReplace(undefined)` 直接返回原文
 - `cellBoxStyle()` 未配 `bg` 时不加 `background`，保持透明
+- 按钮未配 `icon_size` 时图标尺寸回落为文字字号（原先硬编码 24px 的视觉差异见 6.5）
+
+> ⚠️ **一处视觉变化**：以前按钮的 SVG 图标固定渲染为 24×24px（`h-6 w-6`），现在未配 `icon_size` 时跟随文字字号。字号为 `default`(28) / `status`(30) 时图标会比之前更大，`num_large`(47) 更大。如果旧设计稿依赖 24px，需显式填 `icon_size: 24`。
 
 ---
 
 ## 5. LVGL 端配套修改（重点）
 
-### 5.1 需要实现的三件事
+### 5.1 需要实现的四件事
 
 #### ① 字符替换（`replace`）
 
@@ -316,18 +356,49 @@ if (item->radius > 0) {
 "bg": "color.TEND_NAME"  →  取 sample["TEND_NAME"] 的文本，查 colors 字典
 ```
 
-### 5.2 不需要改动的地方
+#### ④ 按钮图标独立尺寸与颜色（`icon_size` / `icon_color`）
+
+按钮（`shape.type === "button"`）的两个新字段：
+
+| 字段 | 类型 | 缺省行为 |
+|---|---|---|
+| `icon_size` | `number`（像素） | 未配置时，图标尺寸 = 文字字号 |
+| `icon_color` | `string`（`#RRGGBB` 或 `color.字段`） | 未配置时，图标颜色 = 文字颜色 `color` |
+
+**LVGL 实现要点**：LVGL 的 `LV_SYMBOL_*` 本质是字体，所以图标尺寸就是图标 label 的字号：
+
+```c
+lv_obj_t *icon_label = ...;
+lv_obj_t *text_label = ...;
+
+// 文字：始终用 font / color
+lv_obj_set_style_text_font(text_label, resolve_font(btn->font), 0);
+lv_obj_set_style_text_color(text_label, lv_color_hex(parse_hex(btn->color)), 0);
+
+// 图标：有独立配置就用独立的，否则跟随文字
+lv_obj_set_style_text_font(icon_label,
+    resolve_font(btn->icon_size ? fmt_px(btn->icon_size) : btn->font), 0);
+lv_obj_set_style_text_color(icon_label,
+    lv_color_hex(parse_hex(btn->icon_color ? btn->icon_color : btn->color)), 0);
+```
+
+对于 SVG 图标（`svg` 字段），`icon_size` 决定渲染的 width/height，`icon_color` 决定填充色。
+
+**注意**：`icon_size` 用像素数值，不是 `font` 那种预定义字号名（`default` / `status` / `num_large` / `num_huge`）。这样可以直接对齐设计稿上的图标视觉尺寸，不受字号档位限制。
+
+#### ⑤ 不需要改动的地方
 
 - 布局坐标：`x` / `y` / `w` / `h` 未变
 - 卡片网格：`cols` / `rows` / `col_w` / `row_h` 未变
 - 其他 item 字段：未增删
 - `version` 仍为 `3`
 
-### 5.3 建议的 LVGL 实现顺序
+### 5.2 建议的 LVGL 实现顺序
 
 1. **先做 `bg` / `radius`** —— 最简单，纯样式设置
-2. **再做 `replace`（数值卡）** —— 单次替换链路
-3. **最后做 `replace`（拆分块）** —— 注意切分顺序
+2. **再做 `icon_size` / `icon_color`** —— 也是纯样式，但要注意「未配置时回落到文字样式」
+3. **再做 `replace`（数值卡）** —— 单次替换链路
+4. **最后做 `replace`（拆分块）** —— 注意切分顺序
 
 ---
 
@@ -366,6 +437,18 @@ if (item->radius > 0) {
 | `value` | 字符替换（增删改规则） | 「遮罩」下方 |
 | `value` / `label` / `split` | 底色、格子圆角 | 「颜色」下方 |
 | `split` | 字符替换（增删改规则） | 「默认底色」下方 |
+| **`button`（图形）** | **「图标样式」区块：图标尺寸 px、图标颜色** | 「图标位置」下方 |
+
+### 6.6 按钮图标样式
+
+按钮形状的属性面板在「图标位置」下方新增「图标样式」区块：
+
+- **图标尺寸 px**：数字输入。留空时 placeholder 显示当前会实际用到的值（取自字号或按钮高度）
+- **图标颜色**：颜色选择器，可填 `#RRGGBB` 或 `color.字段`。留空时跟随文字颜色
+
+这两个值分别控制图标，文字仍由「字号」和「文字颜色」控制，互不干扰。
+
+**视觉变化提示**：以前按钮的 SVG 图标固定 24×24px，现在未显式配置 `icon_size` 时跟随文字字号。已有设计稿如果依赖原来的 24px，需要补填 `icon_size: 24`。
 
 ---
 
@@ -412,6 +495,19 @@ if (item->radius > 0) {
 - [ ] 清空底色 → 恢复透明
 - [ ] 「格子圆角」设 8 → 该格四角变圆
 
+### 7.6 按钮图标样式
+
+- [ ] 从左侧拖入一个「按钮」，选中它
+- [ ] 属性面板「图标位置」下方出现「图标样式」区块
+- [ ] 「LVGL 图标」选 `CALL`，「文字」填「呼叫」
+- [ ] 「图标尺寸 px」填 `40` → 画布上图标明显变大（比文字大）
+- [ ] 「图标颜色」填 `#FF0000` → 图标变红，文字仍是白色
+- [ ] 「设备 JSON」里该 button 出现 `"icon_size":40,"icon_color":"#FF0000"`
+- [ ] 清空图标尺寸 → 图标回落到与文字同尺寸
+- [ ] 清空图标颜色 → 图标回落到白色（跟随文字）
+
+> 若按钮里用的是 SVG 图标（而非 LVGL symbol），行为一致；但需注意 SVG 的染色走 `paintSvg`，仅支持单色图标的整体替换。
+
 ---
 
 ## 8. 排查
@@ -426,6 +522,8 @@ if (item->radius > 0) {
 | 截图文字错位、左右被裁 | 仍在用 html2canvas | 确认 import 的是 `modern-screenshot` |
 | 截图导出后文件找不到 | 内置浏览器拦截下载 | 已改 `showSaveFilePicker`，会弹系统保存框 |
 | 属性面板看不到「字符替换」 | 选中的不是 value / split | 检查选中类型 |
+| 属性面板看不到「图标样式」 | 选中的不是 button | 检查选中类型 |
+| 按钮图标突然变大 | 未配 `icon_size`，跟随了新字号 | 显式填 `icon_size` |
 | 点删除内置样例却成功 | 后端是旧进程 | 重启后端，确认返回 403 |
 | 浏览器标签页图标没变 | 缓存 | `Ctrl+Shift+R` |
 
@@ -434,7 +532,6 @@ if (item->radius > 0) {
 ## 9. 提交明细（按文件）
 
 ### 9.1 新增文件
-
 | 文件 | 说明 |
 |---|---|
 | `packages/hmi/src/components/PreviewDialog.vue` | 预览 + 截图对话框（411 行） |
@@ -451,10 +548,10 @@ if (item->radius > 0) {
 | 文件 | 改动 |
 |---|---|
 | `packages/hmi/src/App.vue` | 预览入口、关闭按钮替换、5 处补关闭入口 |
-| `packages/hmi/src/types.ts` | `HmiItem` 新增 `bg`、`replace`；`HmiReplaceRule` 接口 |
-| `packages/hmi/src/resolve.ts` | `applyReplace`、`unescapeReplaceValue`、导出清理 |
-| `packages/hmi/src/components/Stage.vue` | `cellBoxStyle`、`splitParts`、`maskedValue` 接入替换 |
-| `packages/hmi/src/components/PropertyPanel.vue` | 字符替换区块、底色/圆角输入 |
+| `packages/hmi/src/types.ts` | `HmiItem` 新增 `bg`、`replace`；`HmiShape.button` 新增 `icon_size`、`icon_color`；`HmiReplaceRule` 接口 |
+| `packages/hmi/src/resolve.ts` | `applyReplace`、`unescapeReplaceValue`、导出清理；按钮导出补 `icon_size` / `icon_color` |
+| `packages/hmi/src/components/Stage.vue` | `cellBoxStyle`、`splitParts`、`maskedValue` 接入替换；按钮图标改用 `buttonIconColor` 与 `symbolSize` |
+| `packages/hmi/src/components/PropertyPanel.vue` | 字符替换区块、底色/圆角输入、按钮「图标样式」区块 |
 | `packages/hmi/src/components/SampleSourceDialog.vue` | 内置样例只读、另存为 |
 | `packages/hmi/src/defaultDocument.ts` | 改用 schema 包的默认样例 |
 | `packages/hmi/src/api.ts` | `HmiSampleSource` 加 `builtin` |
@@ -474,6 +571,8 @@ if (item->radius > 0) {
 | 截图倍率持久化 | 当前每次打开预览都回到 1× |
 | `label` / `qrcode` 的字符替换 | 只有 `value` / `split` 开放 |
 | `radius: 0` 不写入 JSON | 当前 0 会保留，如需精简可改 `omitEmpty` |
+| 图标与文字间距 | 按钮内图标与文字目前用固定 `gap-1`（4px），未暴露配置 |
+| 静态图标形状的尺寸颜色 | `shape.type === "icon"` 已有 `color`，但没有独立 `icon_size`（尺寸由 `w`/`h` 控制） |
 
 ---
 

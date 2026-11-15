@@ -36,14 +36,20 @@ function selectedCard(index: number) {
   return props.selectedKeys.includes(cardKey(index)) || (props.selection?.kind === 'item' && props.selection.card === index)
 }
 function symbolSize(shape: HmiButton): number {
+  if (shape.icon_size != null && shape.icon_size > 0) return shape.icon_size
   if (shape.font) return fontPx(shape.font)
   return Math.min(48, Math.max(8, shape.h - 16))
+}
+
+/** 图标颜色：优先 icon_color，其次跟随文字 color。 */
+function buttonIconColor(shape: HmiButton): string {
+  return paintColor(shape.icon_color, props.doc) || paintColor(shape.color, props.doc, '#FFFFFF')
 }
 
 function buttonIcon(shape: HmiButton): string {
   const svg = resolveIcon(shape.icon, props.doc.library)
   if (!svg) return ''
-  return paintSvg(svg, paintColor(shape.color, props.doc, '#FFFFFF'))
+  return paintSvg(svg, buttonIconColor(shape))
 }
 
 function shapeIcon(shape: HmiIconShape): string {
@@ -336,9 +342,14 @@ function splitParts(item: HmiItem): string[] {
           <span
             v-if="lvglSymbolName(shape.symbol)"
             class="flex items-center justify-center overflow-hidden font-semibold leading-none"
-            :style="{ width: symbolSize(shape) + 'px', height: symbolSize(shape) + 'px', fontSize: Math.max(8, symbolSize(shape) * 0.32) + 'px' }"
+            :style="{ width: symbolSize(shape) + 'px', height: symbolSize(shape) + 'px', fontSize: Math.max(8, symbolSize(shape) * 0.32) + 'px', color: buttonIconColor(shape) }"
           >{{ lvglSymbolName(shape.symbol) }}</span>
-          <span v-if="buttonIcon(shape)" class="h-6 w-6 [&>svg]:h-full [&>svg]:w-full" v-html="buttonIcon(shape)" />
+          <span
+            v-if="buttonIcon(shape)"
+            class="[&>svg]:h-full [&>svg]:w-full"
+            :style="{ width: symbolSize(shape) + 'px', height: symbolSize(shape) + 'px' }"
+            v-html="buttonIcon(shape)"
+          />
         </span>
         <span class="truncate">{{ shape.text }}</span>
       </div>

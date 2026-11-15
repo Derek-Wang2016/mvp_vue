@@ -206,6 +206,9 @@ function exportShape(shape: HmiShape, docLibrary?: Record<string, string>): Reco
       symbol: lvglSymbolName(shape.symbol) || undefined,
       color: shape.color,
       font: shape.font,
+      // 图标独立样式。未配置时不写，设备端回落到 font / color
+      icon_size: shape.icon_size != null && shape.icon_size > 0 ? shape.icon_size : undefined,
+      icon_color: shape.icon_color?.trim() ? shape.icon_color : undefined,
       icon_pos: shape.icon_pos === 'right' || shape.icon_pos === 'top' || shape.icon_pos === 'bottom' ? shape.icon_pos : 'left',
       bg: shape.bg,
       radius: shape.radius,
