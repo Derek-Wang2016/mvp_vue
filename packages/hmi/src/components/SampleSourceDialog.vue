@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import {
   activateSampleSource,
   createSampleSource,
@@ -10,7 +10,9 @@ import {
   type HmiSampleDraft,
   type HmiSampleSource,
 } from '../api'
+import DialogClose from './DialogClose.vue'
 import { getApiBase } from '../config'
+import { hmiDefaultSampleJson } from '@mvp-vue/schema'
 
 const emit = defineEmits<{ close: []; apply: [data: unknown] }>()
 
@@ -21,12 +23,22 @@ const selectedId = ref<number | null>(null)
 const draft = ref<HmiSampleDraft>(blank())
 const responseText = ref('')
 
-function blank(): HmiSampleDraft {
-  return { name: '未命名样例', mode: 'json', method: 'GET', url: '', body: '', paramsJson: '{}', sampleJson: '{}' }
+function defaultJson(): string {
+  return hmiDefaultSampleJson()
 }
 
-function loadDraft(item: HmiSampleSource) {
-  if (item.id === selectedId.value) return
+function blank(): HmiSampleDraft {
+  return { name: '未命名样例', mode: 'json', method: 'GET', url: '', body: '', paramsJson: '{}', sampleJson: defaultJson() }
+}
+
+/** 当前选中的是否内置样例。内置样例由服务端在建表时写入，只读。 */
+const selectedItem = computed(() => items.value.find((item) => item.id === selectedId.value))
+const isBuiltin = computed(() => !!selectedItem.value?.builtin)
+/** 只读态：内置样例的编辑控件全部禁用，只能另存为后再改。 */
+const readOnly = computed(() => isBuiltin.value)
+
+function loadDraft(item: HmiSampleSource, force = false) {
+  if (!force && item.id === selectedId.value) return
   selectedId.value = item.id
   draft.value = {
     name: item.name,
@@ -46,12 +58,15 @@ const savedHint = ref('')
 async function reload(keepDraft = false) {
   items.value = await listSampleSources()
   if (keepDraft) return
-  const current = items.value.find((item) => item.id === selectedId.value) ?? items.value.find((item) => item.active)
+  // 优先保持当前选中，其次当前激活的，最后列表第一条（内置样例排最前）
+  const current = items.value.find((item) => item.id === selectedId.value)
+    ?? items.value.find((item) => item.active)
+    ?? items.value[0]
   if (current) loadDraft(current)
 }
 
-async function save(): Promise<number | null> {
-  const payload = { ...draft.value, name: draft.value.name.trim() }
+function validate(draftValue: HmiSampleDraft) {
+  const payload = { ...draftValue, name: draftValue.name.trim() }
   if (!payload.name) throw new Error('请填写名称')
   JSON.parse(payload.paramsJson || '{}')
   if (payload.mode === 'json') {
@@ -61,6 +76,13 @@ async function save(): Promise<number | null> {
       throw new Error('手写 JSON 无法解析')
     }
   }
+  return payload
+}
+
+/** 保存当前草稿。内置样例不允许覆盖，调用方应先走另存为。 */
+async function save(): Promise<number | null> {
+  if (isBuiltin.value) throw new Error('内置样例不可修改，请另存为一条新样例')
+  const payload = validate(draft.value)
   const saved = selectedId.value
     ? await updateSampleSource(selectedId.value, payload)
     : await createSampleSource(payload)
@@ -71,10 +93,46 @@ async function save(): Promise<number | null> {
   return saved.id
 }
 
+/** 另存为一条新样例。内置样例改内容只能走这条路。 */
+async function saveAsCopy() {
+  busy.value = true
+  error.value = ''
+  savedHint.value = ''
+  try {
+    const base = draft.value.name.trim() || '样例'
+    const taken = new Set(items.value.map((item) => item.name))
+    let name = `${base} 副本`
+    let n = 2
+    while (taken.has(name)) {
+      name = `${base} 副本 ${n}`
+      n += 1
+    }
+    const payload = validate({ ...draft.value, name })
+    const saved = await createSampleSource(payload)
+    items.value = await listSampleSources()
+    const current = items.value.find((item) => item.id === saved.id)
+    // reload 会按 selectedId 选中，这里强制刷新草稿，让名称切到副本
+    if (current) loadDraft(current, true)
+    savedHint.value = `已另存为「${name}」`
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '另存失败'
+  } finally {
+    busy.value = false
+  }
+}
+
 async function activate() {
   busy.value = true
   error.value = ''
   try {
+    // 内置样例直接按 id 激活，不需要先保存
+    if (isBuiltin.value && selectedId.value != null) {
+      const data = await activateSampleSource(selectedId.value)
+      responseText.value = JSON.stringify(data, null, 2)
+      emit('apply', data)
+      await reload()
+      return
+    }
     const id = await save()
     if (id == null) return
     const data = await activateSampleSource(id)
@@ -99,9 +157,11 @@ async function randomize() {
     const row = Array.isArray(body.obj) ? (body.obj[0] ?? {}) : body
     draft.value = { ...draft.value, mode: 'json', sampleJson: JSON.stringify(row, null, 2) }
     const active = items.value.find((item) => item.id === selectedId.value)?.active
-    if (selectedId.value != null && active) {
+    if (selectedId.value != null && active && !isBuiltin.value) {
       await save()
       savedHint.value = '已换一组随机数据，画面已更新'
+    } else if (isBuiltin.value) {
+      savedHint.value = '已生成，内置样例不可覆盖，请另存为后再改'
     } else {
       savedHint.value = '已生成，保存后写入这条样例'
     }
@@ -149,6 +209,10 @@ async function saveOnly() {
 
 async function remove() {
   if (selectedId.value == null) return
+  if (isBuiltin.value) {
+    error.value = '内置样例不可删除'
+    return
+  }
   busy.value = true
   error.value = ''
   try {
@@ -175,7 +239,7 @@ onMounted(() => {
     <div class="flex h-[86vh] w-[min(1080px,94vw)] flex-col rounded-lg border border-slate-700 bg-slate-900 p-4">
       <div class="mb-3 flex items-center justify-between">
         <span>样例数据</span>
-        <button type="button" class="text-xs text-slate-400" @click="emit('close')">关闭</button>
+        <DialogClose @close="emit('close')" />
       </div>
       <p v-if="error" class="mb-2 text-xs text-rose-300">{{ error }}</p>
       <div class="grid min-h-0 flex-1 grid-cols-[220px_1fr] gap-3">
@@ -185,51 +249,54 @@ onMounted(() => {
             v-for="item in items"
             :key="item.id"
             type="button"
-            class="mb-1 block w-full truncate rounded px-2 py-1 text-left text-sm"
+            class="mb-1 flex w-full items-center gap-1 rounded px-2 py-1 text-left text-sm"
             :class="item.id === selectedId ? 'bg-sky-500/20 text-sky-200' : 'hover:bg-slate-800'"
             @click="loadDraft(item)"
           >
-            {{ item.name }}
-            <span v-if="item.active" class="ml-1 text-[10px] text-emerald-400">当前</span>
+            <span class="min-w-0 flex-1 truncate">{{ item.name }}</span>
+            <span v-if="item.builtin" class="shrink-0 rounded bg-amber-500/20 px-1 text-[10px] text-amber-300">内置</span>
+            <span v-if="item.active" class="shrink-0 text-[10px] text-emerald-400">当前</span>
           </button>
-          <p v-if="!items.length" class="text-xs text-slate-500">还没有样例</p>
+          <p v-if="!items.length" class="mt-1 text-[11px] leading-relaxed text-slate-500">还没有样例</p>
         </div>
         <div class="flex min-h-0 flex-1 flex-col gap-2 pr-1 text-sm">
           <div class="editor-scrollbar min-h-0 flex-1 space-y-2 overflow-auto">
-          <label class="block">名称<input v-model="draft.name" class="field" /></label>
+          <label class="block">名称<input v-model="draft.name" class="field" :disabled="readOnly" /></label>
           <div class="flex gap-2">
-            <button type="button" class="rounded px-2 py-1 text-xs" :class="draft.mode === 'json' ? 'bg-slate-700' : 'bg-slate-800'" @click="draft.mode = 'json'">手写 JSON</button>
-            <button type="button" class="rounded px-2 py-1 text-xs" :class="draft.mode === 'http' ? 'bg-slate-700' : 'bg-slate-800'" @click="draft.mode = 'http'">请求地址</button>
-            <button v-if="draft.mode === 'json'" type="button" class="rounded bg-slate-800 px-2 py-1 text-xs" :disabled="busy" @click="randomize">随机生成</button>
+            <button type="button" class="rounded px-2 py-1 text-xs" :class="draft.mode === 'json' ? 'bg-slate-700' : 'bg-slate-800'" :disabled="readOnly" @click="draft.mode = 'json'">手写 JSON</button>
+            <button type="button" class="rounded px-2 py-1 text-xs" :class="draft.mode === 'http' ? 'bg-slate-700' : 'bg-slate-800'" :disabled="readOnly" @click="draft.mode = 'http'">请求地址</button>
+            <button v-if="draft.mode === 'json'" type="button" class="rounded bg-slate-800 px-2 py-1 text-xs" :disabled="busy || readOnly" @click="randomize">随机生成</button>
           </div>
           <template v-if="draft.mode === 'http'">
             <div class="flex gap-2">
               <label class="block w-28">方法
-                <select v-model="draft.method" class="field">
+                <select v-model="draft.method" class="field" :disabled="readOnly">
                   <option value="GET">GET</option>
                   <option value="POST">POST</option>
                 </select>
               </label>
-              <label class="block min-w-0 flex-1">地址<input v-model="draft.url" class="field" placeholder="https://example/api，可用 {{参数}}" /></label>
+              <label class="block min-w-0 flex-1">地址<input v-model="draft.url" class="field" placeholder="https://example/api，可用 {{参数}}" :disabled="readOnly" /></label>
             </div>
-            <label class="block">参数 JSON<input v-model="draft.paramsJson" class="field font-mono text-xs" placeholder='{"id":"1"}' /></label>
+            <label class="block">参数 JSON<input v-model="draft.paramsJson" class="field font-mono text-xs" placeholder='{"id":"1"}' :disabled="readOnly" /></label>
             <label v-if="draft.method === 'POST'" class="block">Body
-              <textarea v-model="draft.body" class="editor-scrollbar field h-24 font-mono text-xs" placeholder='{"patientId":"{{id}}"}' />
+              <textarea v-model="draft.body" class="editor-scrollbar field h-24 font-mono text-xs" placeholder='{"patientId":"{{id}}"}' :disabled="readOnly" />
             </label>
-            <button type="button" class="rounded bg-slate-800 px-2 py-1 text-xs" :disabled="busy" @click="testRequest">测试请求</button>
+            <button type="button" class="rounded bg-slate-800 px-2 py-1 text-xs" :disabled="busy || readOnly" @click="testRequest">测试请求</button>
           </template>
           <label v-else class="block">手写 JSON
-            <textarea v-model="draft.sampleJson" class="editor-scrollbar field h-64 font-mono text-xs" />
+            <textarea v-model="draft.sampleJson" class="editor-scrollbar field h-64 font-mono text-xs" :disabled="readOnly" />
           </label>
           <label v-if="responseText" class="block">请求与回送
             <textarea readonly :value="responseText" class="editor-scrollbar field h-40 font-mono text-xs" />
           </label>
           <p class="text-xs text-slate-500">激活后写入当前预览。接口整包会取 obj[0]。地址和 Body 里的 &#123;&#123;参数&#125;&#125; 会被替换。不会写入设备 JSON。</p>
+          <p v-if="readOnly" class="text-xs text-amber-300">内置样例只读。要改内容请点「另存为」，在副本上修改。</p>
           </div>
           <div class="flex shrink-0 items-center justify-end gap-2 border-t border-slate-700 pt-2">
             <span v-if="savedHint" class="mr-auto text-xs text-emerald-400">{{ savedHint }}</span>
-            <button type="button" class="rounded bg-slate-800 px-2 py-1 text-xs text-rose-300" :disabled="busy || selectedId == null" @click="remove">删除</button>
-            <button type="button" class="rounded bg-slate-800 px-2 py-1 text-xs" :disabled="busy" @click="saveOnly">保存</button>
+            <button type="button" class="rounded bg-slate-800 px-2 py-1 text-xs text-rose-300" :disabled="busy || selectedId == null || isBuiltin" @click="remove">删除</button>
+            <button type="button" class="rounded bg-slate-800 px-2 py-1 text-xs" :disabled="busy || isBuiltin" @click="saveOnly">保存</button>
+            <button type="button" class="rounded bg-slate-800 px-2 py-1 text-xs" :disabled="busy" @click="saveAsCopy">另存为</button>
             <button type="button" class="rounded bg-sky-700 px-2 py-1 text-xs" :disabled="busy" @click="activate">激活</button>
           </div>
         </div>

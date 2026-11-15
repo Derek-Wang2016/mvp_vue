@@ -494,6 +494,11 @@ export const DEFAULT_CHART_TEXT_COLOR = '#cbd5e1'
 export { buildPieSeriesLayout, type PieSeriesLayout } from './pieChartLayout'
 export { parseKeyValueTagKeyList, filterKeyValueTagItems } from './keyValueTag'
 export {
+  HMI_DEFAULT_SAMPLE,
+  HMI_BUILTIN_SAMPLE_NAME,
+  hmiDefaultSampleJson,
+} from './hmiSample'
+export {
   parseImportFieldWhitelist,
   resolveImportFieldNames,
   resolveCombinedImportFieldNames,

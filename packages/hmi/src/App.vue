@@ -38,14 +38,9 @@ import PropertyPanel from './components/PropertyPanel.vue'
 import ImageLibraryDialog from './components/ImageLibraryDialog.vue'
 import PublicationThumb from './components/PublicationThumb.vue'
 import SampleSourceDialog from './components/SampleSourceDialog.vue'
-import { icons } from '@iconify-json/tabler'
-
-function tabler(name: string): string {
-  const alias = icons.aliases?.[name]
-  const icon = icons.icons[alias?.parent ?? name]
-  if (!icon?.body) return ''
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icon.body}</svg>`
-}
+import PreviewDialog from './components/PreviewDialog.vue'
+import DialogClose from './components/DialogClose.vue'
+import { tabler } from './icons/tabler'
 
 const store = useHmiStore()
 store.migrate()
@@ -60,6 +55,7 @@ const screens = ref<HmiListItem[]>([])
 const screenDocs = ref<Record<number, HmiDocument>>({})
 const showJson = ref(false)
 const showImages = ref(false)
+const showPreview = ref(false)
 const insertData = ref(false)
 const insertKey = ref('')
 const insertPlace = ref<'row-before' | 'row-after' | 'col-before' | 'col-after'>('col-after')
@@ -240,6 +236,13 @@ function applySamplePayload(data: unknown) {
   } catch {
     msg.value = '样例 JSON 无法解析'
   }
+}
+
+/** 预览里手改的数据写回编辑器，需保存屏幕才会持久化。 */
+function applyPreviewSample(sample: Record<string, unknown>) {
+  doc.value.sample = sample
+  doc.value.colors = withCareColor(doc.value.colors, sample)
+  msg.value = '已写回预览数据'
 }
 
 async function loadPublicationDocs(items: HmiPublicationItem[]) {
@@ -457,6 +460,7 @@ function removePage() {
       <button class="icon-btn" :title="saving ? '保存中' : '保存'" :disabled="saving" @click="save" v-html="tabler('device-floppy')" />
       <button class="icon-btn" title="发布" @click="openPublish" v-html="tabler('upload')" />
       <button class="icon-btn" title="发布管理" @click="openPublications" v-html="tabler('list-details')" />
+      <button class="icon-btn" title="预览（1:1，可改数据）" @click="showPreview = true" v-html="tabler('eye')" />
       <button class="icon-btn" title="图片" @click="showImages = true" v-html="tabler('photo')" />
       <button class="icon-btn" title="设备 JSON" @click="showJson = true" v-html="tabler('braces')" />
       <button class="icon-btn" title="样例数据" @click="editSample" v-html="tabler('database')" />
@@ -587,7 +591,7 @@ function removePage() {
     <div v-if="contextMenu" class="fixed inset-0 z-40" @pointerdown="contextMenu = null" />
     <div v-if="open" class="overlay" @click.self="open = false">
       <div class="dialog pub-dialog">
-        <div class="mb-3 flex items-center justify-between"><span>打开屏幕</span><button type="button" class="icon-btn" title="关闭" @click="open = false" v-html="tabler('x')" /></div>
+        <div class="mb-3 flex items-center justify-between"><span>打开屏幕</span><DialogClose @close="open = false" /></div>
         <ul class="editor-scrollbar min-h-0 flex-1 space-y-3 overflow-auto">
           <li v-for="item in screens" :key="item.id" class="flex gap-3 rounded border border-slate-700 p-3" :class="item.id === screenId ? 'border-sky-500' : ''">
             <button type="button" class="shrink-0" @click="pick(item)">
@@ -611,7 +615,10 @@ function removePage() {
     </div>
     <div v-if="nameEdit" class="overlay" @click.self="nameEdit = null">
       <div class="dialog">
-        <div class="mb-2">{{ nameEdit.mode === 'rename' ? '改名' : '复制屏幕' }}</div>
+        <div class="mb-2 flex items-center justify-between gap-2">
+          <span>{{ nameEdit.mode === 'rename' ? '改名' : '复制屏幕' }}</span>
+          <DialogClose @close="nameEdit = null" />
+        </div>
         <input v-model="nameEdit.name" class="w-full rounded border border-slate-600 bg-slate-950 px-2 py-1" @keyup.enter="applyNameEdit" />
         <div class="mt-3 flex justify-end gap-2">
           <button class="btn" @click="nameEdit = null">取消</button>
@@ -635,7 +642,7 @@ function removePage() {
           <span class="text-xs text-slate-400">version 3：screen、colors、icons、pages。index 为启动页</span>
           <span class="flex shrink-0 gap-1">
             <button type="button" class="icon-btn" title="复制" @click="copyJson" v-html="tabler('copy')" />
-            <button type="button" class="icon-btn" title="关闭" @click="showJson = false" v-html="tabler('x')" />
+            <DialogClose @close="showJson = false" />
           </span>
         </div>
         <textarea class="editor-scrollbar h-[70vh] w-full rounded bg-slate-950 p-2 font-mono text-xs" :value="jsonText" @change="importDoc(($event.target as HTMLTextAreaElement).value)" />
@@ -643,7 +650,10 @@ function removePage() {
     </div>
     <div v-if="insertData" class="overlay" @click.self="insertData = false">
       <div class="dialog text-[12px]">
-        <div class="mb-2 text-sm text-slate-200">插入数据</div>
+        <div class="mb-2 flex items-center justify-between gap-2">
+          <span class="text-sm text-slate-200">插入数据</span>
+          <DialogClose @close="insertData = false" />
+        </div>
         <label class="block text-slate-400">KEY
           <input v-model="insertKey" class="field mt-1" placeholder="例如 PATIENT_NAME" @keyup.enter="confirmInsertData" />
         </label>
@@ -662,7 +672,10 @@ function removePage() {
     </div>
     <div v-if="showAddPage" class="overlay" @click.self="showAddPage = false">
       <div class="dialog">
-        <div class="mb-2">添加页面</div>
+        <div class="mb-2 flex items-center justify-between gap-2">
+          <span>添加页面</span>
+          <DialogClose @close="showAddPage = false" />
+        </div>
         <input v-model="newPageName" class="w-full rounded border border-slate-600 bg-slate-950 px-2 py-1" placeholder="例如 detail" @keyup.enter="addPage" />
         <div class="mt-3 flex justify-end gap-2">
           <button class="btn" @click="showAddPage = false">取消</button>
@@ -681,7 +694,10 @@ function removePage() {
     </div>
     <div v-if="showPublish" class="overlay" @click.self="showPublish = false">
       <div class="dialog">
-        <div class="mb-2">发布当前页面</div>
+        <div class="mb-2 flex items-center justify-between gap-2">
+          <span>发布当前页面</span>
+          <DialogClose @close="showPublish = false" />
+        </div>
         <label class="block text-sm">界面描述
           <textarea v-model="publishDescription" maxlength="200" class="editor-scrollbar mt-1 h-24 w-full rounded border border-slate-600 bg-slate-950 p-2 text-sm" placeholder="例如 1024×600 床头卡" />
         </label>
@@ -693,7 +709,7 @@ function removePage() {
     </div>
     <div v-if="showPublications" class="overlay" @click.self="showPublications = false">
       <div class="dialog pub-dialog">
-        <div class="mb-3 flex items-center justify-between"><span>发布管理</span><button type="button" class="icon-btn" title="关闭" @click="showPublications = false" v-html="tabler('x')" /></div>
+        <div class="mb-3 flex items-center justify-between"><span>发布管理</span><DialogClose @close="showPublications = false" /></div>
         <ul class="editor-scrollbar min-h-0 flex-1 space-y-3 overflow-auto">
           <li v-for="item in publications" :key="item.id" class="flex gap-3 rounded border p-3 text-sm" :class="item.screenId != null && item.screenId === screenId ? 'border-sky-400 bg-sky-500/10 shadow-[0_0_0_1px_rgba(56,189,248,0.45)]' : 'border-slate-700'">
             <PublicationThumb v-if="item.screenId != null && publicationDocs[item.screenId]" :doc="publicationDocs[item.screenId]!" />
@@ -722,7 +738,10 @@ function removePage() {
     </div>
     <div v-if="publicationNameEdit" class="overlay z-[60]" @click.self="publicationNameEdit = null">
       <div class="dialog">
-        <div class="mb-2">修改发布名称</div>
+        <div class="mb-2 flex items-center justify-between gap-2">
+          <span>修改发布名称</span>
+          <DialogClose @close="publicationNameEdit = null" />
+        </div>
         <input v-model="publicationNameEdit.name" maxlength="200" class="w-full rounded border border-slate-600 bg-slate-950 px-2 py-1" @keyup.enter="applyPublicationName" />
         <div class="mt-3 flex justify-end gap-2">
           <button class="btn" @click="publicationNameEdit = null">取消</button>
@@ -740,6 +759,7 @@ function removePage() {
       </div>
     </div>
     <SampleSourceDialog v-if="showSample" @close="showSample = false" @apply="applySamplePayload" />
+    <PreviewDialog v-if="showPreview" :doc="doc" :name="name" @close="showPreview = false" @apply="applyPreviewSample" />
   </div>
 </template>
 

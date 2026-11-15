@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import type { PrismaClient } from '@prisma/client'
+import { HMI_BUILTIN_SAMPLE_NAME, hmiDefaultSampleJson } from '@mvp-vue/schema'
 
 type SourceRow = {
   id: number
@@ -11,8 +12,19 @@ type SourceRow = {
   paramsJson: string
   sampleJson: string
   active: number | boolean
+  builtin: number | boolean
   updatedAt: string
 }
+
+/**
+ * 内置样例。建表时写入一行 builtin=1 的只读记录，前端不能改也不能删。
+ * 想改内容就在界面上「另存为」，另存出来的记录才归用户所有。
+ * 内容来自 `@mvp-vue/schema`，与编辑器默认文档同源。
+ */
+const BUILTIN_SAMPLE = {
+  name: HMI_BUILTIN_SAMPLE_NAME,
+  sampleJson: hmiDefaultSampleJson(),
+} as const
 
 function parseId(id: string): number {
   const value = Number(id)
@@ -46,6 +58,7 @@ function present(row: SourceRow) {
     paramsJson: row.paramsJson,
     sampleJson: row.sampleJson,
     active: row.active === true || row.active === 1,
+    builtin: row.builtin === true || row.builtin === 1,
     updatedAt: row.updatedAt,
   }
 }
@@ -74,9 +87,11 @@ async function runHttp(row: Pick<SourceRow, 'method' | 'url' | 'body' | 'paramsJ
   return { request: { method, url, body }, status: res.status, data }
 }
 
+const SELECT_COLUMNS = `"id", "name", "mode", "method", "url", "body", "paramsJson", "sampleJson", "active", "builtin", "updatedAt"`
+
 async function findOne(prisma: PrismaClient, id: number): Promise<SourceRow | undefined> {
   const rows = await prisma.$queryRawUnsafe<SourceRow[]>(
-    `SELECT "id", "name", "mode", "method", "url", "body", "paramsJson", "sampleJson", "active", "updatedAt" FROM "HmiSampleSource" WHERE "id" = ?`,
+    `SELECT ${SELECT_COLUMNS} FROM "HmiSampleSource" WHERE "id" = ?`,
     id,
   )
   return rows[0]
@@ -84,8 +99,24 @@ async function findOne(prisma: PrismaClient, id: number): Promise<SourceRow | un
 
 let tableReady: Promise<void> | null = null
 
+/** 老库补 builtin 列。列已在时 SQLite 会报错，忽略即可。 */
+async function addBuiltinColumn(prisma: PrismaClient) {
+  try {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE "HmiSampleSource" ADD COLUMN "builtin" INTEGER NOT NULL DEFAULT 0`,
+    )
+  } catch {
+    // 列已存在
+  }
+}
+
+/**
+ * 建表 + 写入内置样例。内置样例只在这里插入一次：
+ * 判据是 builtin = 1 且名称匹配，用户删不掉它（DELETE 有服务端拦截）。
+ */
 function ensureTable(prisma: PrismaClient) {
-  tableReady ??= prisma.$executeRawUnsafe(`
+  tableReady ??= (async () => {
+    await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS "HmiSampleSource" (
         "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
         "name" TEXT NOT NULL,
@@ -96,10 +127,22 @@ function ensureTable(prisma: PrismaClient) {
         "paramsJson" TEXT NOT NULL DEFAULT '{}',
         "sampleJson" TEXT NOT NULL DEFAULT '{}',
         "active" INTEGER NOT NULL DEFAULT 0,
+        "builtin" INTEGER NOT NULL DEFAULT 0,
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
-    `).then(() => undefined)
+    `)
+    await addBuiltinColumn(prisma)
+    const existing = await prisma.$queryRawUnsafe<Array<{ id: number }>>(
+      `SELECT "id" FROM "HmiSampleSource" WHERE "builtin" = 1 LIMIT 1`,
+    )
+    if (existing.length > 0) return
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "HmiSampleSource" ("name", "mode", "method", "url", "body", "paramsJson", "sampleJson", "active", "builtin", "updatedAt") VALUES (?, 'json', 'GET', '', '', '{}', ?, 0, 1, CURRENT_TIMESTAMP)`,
+      BUILTIN_SAMPLE.name,
+      BUILTIN_SAMPLE.sampleJson,
+    )
+  })()
   return tableReady
 }
 
@@ -110,7 +153,7 @@ export function registerHmiSampleSourceRoutes(app: FastifyInstance, prisma: Pris
 
   app.get('/api/hmi/sample-sources', async (_req, reply) => {
     const rows = await prisma.$queryRawUnsafe<SourceRow[]>(
-      `SELECT "id", "name", "mode", "method", "url", "body", "paramsJson", "sampleJson", "active", "updatedAt" FROM "HmiSampleSource" ORDER BY "updatedAt" DESC`,
+      `SELECT ${SELECT_COLUMNS} FROM "HmiSampleSource" ORDER BY "builtin" DESC, "updatedAt" DESC`,
     )
     reply.send(rows.map(present))
   })
@@ -133,7 +176,7 @@ export function registerHmiSampleSourceRoutes(app: FastifyInstance, prisma: Pris
       body.sampleJson ?? '{}',
     )
     const rows = await prisma.$queryRawUnsafe<SourceRow[]>(
-      `SELECT "id", "name", "mode", "method", "url", "body", "paramsJson", "sampleJson", "active", "updatedAt" FROM "HmiSampleSource" ORDER BY "id" DESC LIMIT 1`,
+      `SELECT ${SELECT_COLUMNS} FROM "HmiSampleSource" ORDER BY "id" DESC LIMIT 1`,
     )
     reply.status(201).send(present(rows[0]!))
   })
@@ -151,6 +194,16 @@ export function registerHmiSampleSourceRoutes(app: FastifyInstance, prisma: Pris
     const name = body.name?.trim()
     if (!name) {
       reply.status(400).send({ error: '请填写名称' })
+      return
+    }
+    // 内置样例只读：要改内容请另存为一条新样例
+    const existing = await findOne(prisma, sourceId)
+    if (!existing) {
+      reply.status(404).send({ error: '样例不存在' })
+      return
+    }
+    if (existing.builtin === true || existing.builtin === 1) {
+      reply.status(403).send({ error: '内置样例不可修改，请另存为一条新样例' })
       return
     }
     try {
@@ -230,6 +283,15 @@ export function registerHmiSampleSourceRoutes(app: FastifyInstance, prisma: Pris
       sourceId = parseId(id)
     } catch {
       reply.status(400).send({ error: 'invalid id' })
+      return
+    }
+    const row = await findOne(prisma, sourceId)
+    if (!row) {
+      reply.status(404).send({ error: '样例不存在' })
+      return
+    }
+    if (row.builtin === true || row.builtin === 1) {
+      reply.status(403).send({ error: '内置样例不可删除' })
       return
     }
     await prisma.$executeRawUnsafe(`DELETE FROM "HmiSampleSource" WHERE "id" = ?`, sourceId)

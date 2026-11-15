@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { icons } from '@iconify-json/tabler'
 import { paintSvg, toLvglSvg } from '../icons/lvglSvg'
+import DialogClose from './DialogClose.vue'
 
 const emit = defineEmits<{
   add: [icon: { id: string; svg: string }]
@@ -63,7 +64,7 @@ function pick(name: string) {
     <div class="flex h-[70vh] w-[640px] max-w-full flex-col rounded-lg border border-slate-700 bg-slate-900 p-3 text-sm text-slate-200">
       <div class="mb-2 flex items-center justify-between">
         <span>Tabler 开源图标</span>
-        <button type="button" class="text-slate-400" @click="emit('close')">关闭</button>
+        <DialogClose @close="emit('close')" />
       </div>
       <input class="mb-2 rounded border border-slate-600 bg-slate-950 px-2 py-1" placeholder="搜索，例如 heart" :value="query" @input="search(($event.target as HTMLInputElement).value)" />
       <div class="editor-scrollbar grid min-h-0 flex-1 grid-cols-6 content-start gap-2 overflow-auto">

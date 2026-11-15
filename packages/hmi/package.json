@@ -10,6 +10,9 @@
   },
   "dependencies": {
     "@iconify-json/tabler": "^1.2.35",
+    "@mvp-vue/schema": "workspace:*",
+    "html2canvas": "^1.4.1",
+    "modern-screenshot": "^4.7.0",
     "pinia": "^2.2.6",
     "qrcode": "1.5.4",
     "vue": "^3.5.13"

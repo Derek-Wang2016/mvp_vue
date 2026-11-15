@@ -54,6 +54,8 @@ onBeforeUnmount(() => {
 function onKey(event: KeyboardEvent) {
   const tag = (event.target as HTMLElement | null)?.tagName
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+  // 预览等只读对话框打开时不响应画布快捷键
+  if (document.querySelector('[data-hmi-modal]')) return
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c') {
     store.copySelected()
     event.preventDefault()

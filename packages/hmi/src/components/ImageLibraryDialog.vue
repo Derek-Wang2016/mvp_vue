@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { deleteHmiFile, listHmiFiles, uploadHmiFile, type HmiFileItem } from '../api'
+import DialogClose from './DialogClose.vue'
 
 const emit = defineEmits<{ close: [] }>()
 
@@ -96,7 +97,7 @@ onMounted(() => { void load() })
             {{ uploading ? '上传中…' : '上传图片' }}
           </button>
           <input ref="fileRef" type="file" accept="image/png,image/jpeg,image/webp" class="hidden" @change="onPickFile" />
-          <button type="button" class="text-xs text-slate-400 hover:text-slate-200" @click="emit('close')">关闭</button>
+          <DialogClose @close="emit('close')" />
         </div>
       </div>
       <p v-if="error" class="px-4 pt-2 text-[11px] text-rose-300">{{ error }}</p>

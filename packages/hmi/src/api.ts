@@ -97,10 +97,12 @@ export interface HmiSampleSource {
   paramsJson: string
   sampleJson: string
   active: boolean
+  /** 内置样例，只读，不能改也不能删。 */
+  builtin: boolean
   updatedAt: string
 }
 
-export type HmiSampleDraft = Omit<HmiSampleSource, 'id' | 'active' | 'updatedAt'>
+export type HmiSampleDraft = Omit<HmiSampleSource, 'id' | 'active' | 'builtin' | 'updatedAt'>
 
 export async function listSampleSources(): Promise<HmiSampleSource[]> {
   const res = await fetch(`${getApiBase()}/api/hmi/sample-sources`)
