@@ -1,4 +1,4 @@
-import { buildTextComponentStyle } from './textComponent'
+import { buildTextComponentStyle } from './textComponent.js'
 
 export type EditableTextAlign = 'left' | 'center' | 'right'
 export type EditableTextVerticalAlign = 'top' | 'middle' | 'bottom'

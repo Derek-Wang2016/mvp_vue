@@ -5,7 +5,7 @@
 - 实现计划：[docker-deploy-plan.md](docker-deploy-plan.md)
 - 快速参考：[deploy/docker/README.md](../deploy/docker/README.md)
 
-本手册覆盖：**新机器首次部署**、**从现有非 Docker 部署迁移**、**日常程序升级**、**回滚**、**备份恢复**、**端口调整**。
+本手册覆盖：**新机器首次部署**、**从现有非 Docker 部署迁移**、**日常程序升级**、**回滚**、**备份恢复**、**端口调整**。Docker Web 镜像同时包含 Editor、Renderer 和 HMI。
 
 ---
 
@@ -100,6 +100,7 @@ sudo mkdir -p data backups
 TAG=20261021-1            # upgrade.sh 会自动覆盖为实际版本
 EDITOR_PORT=5000          # 宿主机端口，可改
 RENDERER_PORT=5001        # 宿主机端口，可改
+HMI_PORT=5002             # 宿主机端口，可改
 PAGE_POLICY=strict        # 与前端 strict 构建成对使用
 TZ=Asia/Shanghai
 RETENTION_DAYS=30
@@ -126,7 +127,7 @@ sudo ./scripts/upgrade.sh
 ```
 
 脚本会依次：导入镜像 → 更新 `.env` 的 `TAG` → `docker compose up -d --wait` → 健康检查。
-全新空库会自动建表（`PageDraft`、`PagePublished`、`CustomIcon`、`EditableText`），无需手动初始化。
+全新空库会自动建表（页面、HMI 画面/发布/图片等业务表），无需手动初始化。
 
 ### 2.5 验收
 
@@ -135,24 +136,28 @@ docker compose ps                       # api、web 均应为 healthy
 curl -fsS http://127.0.0.1:5000/api/publish/pages    # 期望返回 []
 curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5000/   # 200
 curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5001/   # 200
+curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5002/   # 200
 curl -fsS http://127.0.0.1:5000/runtime-config.js    # 含 rendererPort
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3002      # 期望失败（000/7）
 ```
 
 浏览器：访问 `http://<IP>:5000`，新建并发布一个页面，再用
-`http://<IP>:5001/?id=<发布页ID>` 打开。Network 中接口应为同源 `:5000/api/...` 或 `:5001/api/...`。
+`http://<IP>:5001/?id=<发布页ID>` 打开。访问 `http://<IP>:5002`，新建并保存一个
+HMI 画面，发布后检查设备 JSON 地址。三个前端 Network 中的接口都应为各自端口的同源
+`/api/...`。
 
 ### 2.6 防火墙
 
 ```bash
 # firewalld
-sudo firewall-cmd --permanent --add-port=5000/tcp --add-port=5001/tcp
+sudo firewall-cmd --permanent --add-port=5000/tcp --add-port=5001/tcp --add-port=5002/tcp
 sudo firewall-cmd --permanent --remove-port=3002/tcp
 sudo firewall-cmd --reload
 
 # 或 ufw
 sudo ufw allow 5000/tcp
 sudo ufw allow 5001/tcp
+sudo ufw allow 5002/tcp
 sudo ufw delete allow 3002/tcp
 ```
 
@@ -220,7 +225,7 @@ sudo nginx -t && sudo systemctl reload nginx
 确认端口释放：
 
 ```bash
-ss -lntp | grep -E ':(5000|5001|8080|8081)\b' || echo 'web ports free'
+ss -lntp | grep -E ':(5000|5001|5002|8080|8081|8082)\b' || echo 'web ports free'
 pgrep -af 'vite preview|packages/server/dist/index.js'   # 如有试运行进程，确认后停止
 ```
 
@@ -303,7 +308,8 @@ docker compose logs --tail=100 api
 curl -fsS http://127.0.0.1:5000/api/publish/pages | head -c 200
 ```
 
-浏览器抽查：编辑器打开/保存/发布、渲染器加载、可编辑文本、自定义图标。
+浏览器抽查：编辑器打开/保存/发布、渲染器加载、可编辑文本、自定义图标；
+HMI 画面打开/保存/发布、图片上传与回显。
 
 ### 4.4 清理旧镜像
 
@@ -365,7 +371,7 @@ sudo ./scripts/restore-db.sh backups/dev-YYYYmmdd-HHMMSS.db
 
 ## 7. 修改宿主机端口
 
-容器内端口固定为 5000/5001，只调整宿主机映射，无需重新构建镜像。
+容器内端口固定为 5000/5001/5002，只调整宿主机映射，无需重新构建镜像。
 
 ```bash
 cd /opt/mvp_vue-docker
@@ -375,6 +381,7 @@ sudo vi .env
 ```env
 EDITOR_PORT=9080
 RENDERER_PORT=9081
+HMI_PORT=9082
 ```
 
 ```bash
@@ -383,6 +390,7 @@ curl -fsS http://127.0.0.1:9080/runtime-config.js   # 应含 rendererPort: "9081
 ```
 
 `web` 容器启动时会重新生成 `runtime-config.js`，编辑器右上角「打开渲染器」自动使用新端口。
+验收 `http://<IP>:9080`、`http://<IP>:9081/?id=...` 和 `http://<IP>:9082`。
 随后调整防火墙放行新端口、关闭旧端口。
 
 ---
@@ -394,9 +402,10 @@ curl -fsS http://127.0.0.1:9080/runtime-config.js   # 应含 rendererPort: "9081
 | `docker compose ps` 中 api 不健康 | `docker compose logs api`；确认 `data/` 可写、`TAG` 对应的镜像已 load |
 | 页面 502 | 查看 `docker compose logs web`；Nginx 依赖 api 健康状态启动 |
 | `data` 权限错误 | `sudo chown -R 1000:1000 data backups` |
-| 端口被占用 | `ss -lntp \| grep -E ':(5000\|5001)\b'`，停旧服务或修改 `.env` |
+| 端口被占用 | `ss -lntp \| grep -E ':(5000\|5001\|5002)\b'`，停旧服务或修改 `.env` |
 | 升级启动失败 | 按提示执行 `./scripts/rollback.sh <old-tag>` |
 | 编辑器打开渲染器仍用旧端口 | 改 `.env` 后执行 `docker compose up -d`，确认浏览器未缓存 `runtime-config.js`（该文件已设置 `no-store`） |
+| HMI 上传图片 URL 少了端口 | 确认经 `HMI_PORT` 访问；Nginx 必须转发完整的 `Host` / `X-Forwarded-Host` |
 | 目标机完全离线时地图空白 | 地图 GeoJSON 经 API 代理访问 `geo.datav.aliyun.com`，离线环境不可用（与 Docker 无关） |
 
 ---
@@ -415,9 +424,9 @@ curl -fsS http://127.0.0.1:9080/runtime-config.js   # 应含 rendererPort: "9081
 非 Docker 部署继续按原流程：
 
 ```bash
-pnpm build                # 或 VITE_API_BASE=http://<服务器IP>:3002 pnpm build
+pnpm build                # 构建 Editor、Renderer、HMI；或设置 VITE_API_BASE=http://<服务器IP>:3002
 pnpm build:server
-# 复制 packages/editor/dist、packages/renderer/dist 到 Nginx 目录
+# 复制 packages/editor/dist、packages/renderer/dist、packages/hmi/dist 到 Nginx 目录
 # systemd 启动 packages/server/dist/index.js，数据库仍在 packages/server/prisma/dev.db
 ```
 

@@ -1,10 +1,15 @@
 # Docker 离线部署 Implementation Plan
 
+> **历史实施计划（已执行）。** 当前部署已加入 HMI，端口与验收口径以
+> [docker-deploy-design.md](docker-deploy-design.md) 和
+> [docker-deploy-guide.md](docker-deploy-guide.md) 为准。下文保留原始拆分记录，
+> 其中“双前端 5000/5001”不再是当前状态。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 将 mvp_vue 从「Nginx + systemd + SQLite」部署迁移为可离线交付的 Docker Compose 部署，保留 5000/5001 访问方式、现有数据、版本回滚与数据库备份能力。
 
-**Architecture:** 两个镜像：`mvp-vue-web`（Nginx 托管 Editor/Renderer，5000/5001，同源 `/api` 反代）与 `mvp-vue-api`（Node 20 + Fastify + Prisma）。API 不发布宿主端口，SQLite 位于宿主 `./data/dev.db`。构建机联网产出镜像 tar，目标机离线 `docker load`。
+**Architecture:** 两个镜像：`mvp-vue-web`（Nginx 托管前端，同源 `/api` 反代）与 `mvp-vue-api`（Node 20 + Fastify + Prisma）。API 不发布宿主端口，SQLite 位于宿主 `./data/dev.db`。构建机联网产出镜像 tar，目标机离线 `docker load`。
 
 **Tech Stack:** Docker / Docker Compose v2、Nginx 1.27 Alpine、Node.js 20、pnpm 10.14、Prisma 5.22、SQLite、Bash。
 

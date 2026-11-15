@@ -42,12 +42,13 @@ services:
     ports:
       - "${EDITOR_PORT:-5000}:5000"
       - "${RENDERER_PORT:-5001}:5001"
+      - "${HMI_PORT:-5002}:5002"
     networks:
       - mvp
     healthcheck:
       test:
         - CMD-SHELL
-        - "wget -qO- http://127.0.0.1:5000/ > /dev/null || exit 1"
+        - "wget -qO- http://127.0.0.1:5000/ > /dev/null && wget -qO- http://127.0.0.1:5001/ > /dev/null && wget -qO- http://127.0.0.1:5002/ > /dev/null || exit 1"
       interval: 10s
       timeout: 5s
       retries: 6

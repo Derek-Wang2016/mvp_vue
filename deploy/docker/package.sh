@@ -15,6 +15,7 @@ cp deploy/docker/docker-compose.yml "$OUT/"
 cp deploy/docker/.env.example "$OUT/"
 cp deploy/docker/README.md "$OUT/"
 cp deploy/docker/scripts/*.sh "$OUT/scripts/"
+sed -i 's/\r$//' "$OUT"/scripts/*.sh
 printf 'TAG=%s\n' "$TAG" > "$OUT/release.env"
 
 tar -C "$ROOT/release" -czf "$ROOT/release/$NAME.tar.gz" "$NAME"

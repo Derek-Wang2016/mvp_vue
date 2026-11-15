@@ -1,4 +1,4 @@
-import type { IconDictEntry } from './index'
+import type { IconDictEntry } from './index.js'
 
 /** 图标组件 props → 与 IconDictEntry 同形，供 CardListIcon / IconDictEntryPreview 复用 */
 export function iconPropsToDictEntry(props: Record<string, unknown>): IconDictEntry {

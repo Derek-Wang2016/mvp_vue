@@ -3,7 +3,8 @@
 完整操作手册（新机器部署、从旧部署迁移、升级、回滚、备份）见
 [doc/docker-deploy-guide.md](../../doc/docker-deploy-guide.md)。
 
-默认访问：Editor `http://<IP>:5000`，Renderer `http://<IP>:5001/?id=<发布页ID>`。
+默认访问：Editor `http://<IP>:5000`，Renderer `http://<IP>:5001/?id=<发布页ID>`，
+HMI `http://<IP>:5002`。
 API 不对外暴露，由 Nginx 同源 `/api/` 反代。
 
 ## 构建机（可联网）
@@ -50,8 +51,8 @@ chown -R 1000:1000 data backups   # 如使用非 root 部署用户且目录属�
 
 ## 修改宿主机端口
 
-编辑 `.env` 的 `EDITOR_PORT` / `RENDERER_PORT`，执行 `docker compose up -d`。
-容器内端口固定为 5000/5001，无需重建镜像。
+编辑 `.env` 的 `EDITOR_PORT` / `RENDERER_PORT` / `HMI_PORT`，执行
+`docker compose up -d`。容器内端口固定为 5000/5001/5002，无需重建镜像。
 
 ## 停止旧部署（切换窗口）
 
@@ -60,6 +61,8 @@ chown -R 1000:1000 data backups   # 如使用非 root 部署用户且目录属�
 
 ## 常见问题
 
-- **端口被占用**：`ss -lntp | grep -E ':(5000|5001|8080|8081)\b'`，停掉旧服务或改 `.env`。
+- **端口被占用**：`ss -lntp | grep -E ':(5000|5001|5002|8080|8081|8082)\b'`，停掉旧服务或改 `.env`。
 - **502**：`docker compose ps` 检查 api 健康状态；`docker compose logs api`。
 - **权限错误**：`sudo chown -R 1000:1000 data backups`。
+- **HMI 图片 URL 指向错误端口**：确认通过 `HMI_PORT` 访问，且 Nginx 已转发
+  `Host` / `X-Forwarded-Host` 的完整端口。

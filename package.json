@@ -8,6 +8,7 @@
     "dev:renderer": "pnpm -F @mvp-vue/renderer dev",
     "dev:server": "pnpm -F @mvp-vue/server dev",
     "build:editor": "pnpm -F @mvp-vue/editor build",
+    "build:hmi": "pnpm -F @mvp-vue/hmi build",
     "build:renderer": "pnpm -F @mvp-vue/renderer build",
     "prisma:generate": "pnpm -F @mvp-vue/server exec prisma generate",
     "build:schema": "pnpm -F @mvp-vue/schema build",
@@ -15,8 +16,9 @@
     "prepare:trial-env": "node scripts/prepare-trial-env.mjs",
     "build:trial": "node scripts/prepare-trial-env.mjs && pnpm build && pnpm prisma:generate && pnpm build:server",
     "preview:editor": "pnpm -F @mvp-vue/editor exec vite preview --host 0.0.0.0 --port 8080",
+    "preview:hmi": "pnpm -F @mvp-vue/hmi exec vite preview --host 0.0.0.0 --port 8082",
     "preview:renderer": "pnpm -F @mvp-vue/renderer exec vite preview --host 0.0.0.0 --port 8081",
-    "build": "pnpm -r --filter @mvp-vue/editor --filter @mvp-vue/renderer run build"
+    "build": "pnpm -r --filter @mvp-vue/editor --filter @mvp-vue/hmi --filter @mvp-vue/renderer run build"
   },
   "engines": {
     "node": ">=20.12.0",

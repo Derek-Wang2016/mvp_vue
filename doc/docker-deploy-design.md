@@ -1,18 +1,18 @@
-# Docker 部署设计（离线双镜像 + 版本回滚）
+# Docker 部署设计（离线双镜像 + 三前端 + 版本回滚）
 
-- 日期：2026-10-21
-- 状态：已评审（待实现）
+- 日期：2026-11-15
+- 状态：已实现
 - 关联文档：[deploy-linux-nginx.md](deploy-linux-nginx.md)（现有 Linux + Nginx 部署）
 
 ## 1. 背景与目标
 
-现有部署为：Nginx 托管 Editor/Renderer 静态包（**5000/5001**，见 `doc/nginx/mvp-intranet.conf.example`），systemd 运行 Fastify API（3002），SQLite 文件位于 `packages/server/prisma/dev.db`。
+现有部署为：Nginx 托管 Editor/Renderer/HMI 静态包（**5000/5001/5002**），systemd 运行 Fastify API（3002），SQLite 文件位于 `packages/server/prisma/dev.db`。
 
-> 仓库内端口存在两套写法：开发端口与 Nginx 模板为 5000/5001，部署文档正文与试运行脚本为 8080/8081。Docker 方案统一采用 **5000/5001**，与现有 Nginx 模板和开发端口一致。
+> HMI 开发端口为 5002；旧的非 Docker 文档可能使用 8080/8081。Docker 方案统一采用 **5000/5001/5002**，与开发端口一致。
 
 目标：
 
-1. 改为 Docker 部署，**默认保留现有访问方式**：Editor `:5000`、Renderer `:5001`；
+1. 改为 Docker 部署，**默认保留现有访问方式**：Editor `:5000`、Renderer `:5001`、HMI `:5002`；
    宿主机端口可通过 `.env` 调整，无需重新构建镜像。
 2. API 不再对外暴露 3002，由 Nginx 在 `/api/` 同源反代到 API 容器。
 3. 构建机可联网、目标服务器**离线**：通过 `docker save` / `docker load` 交付镜像。
@@ -30,9 +30,9 @@
 
 | 决策点 | 结论 |
 |--------|------|
-| 访问入口 | 双端口，容器内固定 5000/5001；宿主机端口由 `.env` 的 `EDITOR_PORT` / `RENDERER_PORT` 映射，默认 5000/5001；3002 不映射到宿主 |
+| 访问入口 | 三端口，容器内固定 5000/5001/5002；宿主机端口由 `.env` 的 `EDITOR_PORT` / `RENDERER_PORT` / `HMI_PORT` 映射；3002 不映射到宿主 |
 | 渲染器链接 | Web 容器启动时注入 `rendererPort`，Editor 用「当前主机名 + 该端口」拼地址，改端口无需重新构建 |
-| 镜像拆分 | 2 个镜像：`mvp-vue-web`（Nginx + 两个 dist）、`mvp-vue-api`（Node） |
+| 镜像拆分 | 2 个镜像：`mvp-vue-web`（Nginx + Editor/Renderer/HMI 三个 dist）、`mvp-vue-api`（Node） |
 | 前端 API 地址 | 构建时 `VITE_API_BASE=/`，请求同源 `/api`，不再写死服务器 IP |
 | 数据库持久化 | 宿主目录绑定挂载 `./data:/data`，DB 路径 `/data/dev.db` |
 | 发布方式 | 版本 tag（如 `20261021-1`）+ `docker save` 发布包 |
@@ -45,20 +45,20 @@
 
 ```text
 浏览器
-  ├─ :5000  Editor  ──┐
-  └─ :5001  Renderer ─┤→ web 容器（Nginx）
-                       │    ├─ /        → 对应 dist（SPA fallback）
-                       │    └─ /api/    → http://api:3002
-                       │
-                       └→ api 容器（Node 20 + Fastify + Prisma）
+  ├─ :5000  Editor   ──┐
+  ├─ :5001  Renderer ──┤→ web 容器（Nginx）
+  └─ :5002  HMI      ──┤    ├─ /        → 对应 dist（SPA fallback）
+                        │    └─ /api/    → http://api:3002
+                        │
+                        └→ api 容器（Node 20 + Fastify + Prisma）
                               └─ /data/dev.db  ←  宿主 ./data
 ```
 
 - 两个容器位于同一个 Docker bridge 网络；`api` 不发布宿主端口。
-- `web` 容器的两个 server 块分别监听 5000/5001（容器内固定），均配置
+- `web` 容器的三个 server 块分别监听 5000/5001/5002（容器内固定），均配置
   `location /api/ { proxy_pass http://api:3002; }`（不带尾斜杠，保留完整路径）。
 - 宿主机映射：
-  `"${EDITOR_PORT:-5000}:5000"`、`"${RENDERER_PORT:-5001}:5001"`。
+  `"${EDITOR_PORT:-5000}:5000"`、`"${RENDERER_PORT:-5001}:5001"`、`"${HMI_PORT:-5002}:5002"`。
   改端口只改 `.env` 后 `docker compose up -d`，不重新构建镜像。
 - `api` 健康检查使用 Node `fetch` 请求本机 `/api/publish/pages`；`web` 依赖 `api` 健康后启动。
 
@@ -75,11 +75,12 @@
 - 运行阶段：`nginx:1.27-alpine`
   - 复制 `packages/editor/dist` → `/usr/share/nginx/html/editor`
   - 复制 `packages/renderer/dist` → `/usr/share/nginx/html/renderer`
-  - 复制 `deploy/docker/nginx/editor.conf`、`renderer.conf` 到 `/etc/nginx/conf.d/`
+  - 复制 `packages/hmi/dist` → `/usr/share/nginx/html/hmi`
+  - 复制 `deploy/docker/nginx/editor.conf`、`renderer.conf`、`hmi.conf` 到 `/etc/nginx/conf.d/`
   - 入口脚本用 `envsubst` 生成 `/usr/share/nginx/html/editor/runtime-config.js`：
     `window.__MVP_RUNTIME__ = { rendererPort: "<RENDERER_PORT>" }`
     （compose 同时把 `RENDERER_PORT` 传入 web 容器，保证映射端口与链接端口一致）
-  - Nginx 要点：`client_max_body_size 20m`、gzip、静态资源缓存、
+  - Nginx 要点：Editor/Renderer 上传限制 20m，HMI 上传限制 55m；gzip、静态资源缓存、
     `try_files $uri $uri/ /index.html`、`/api/` 反代。
 
 ### 4.2 `mvp-vue-api:<tag>`
@@ -158,11 +159,11 @@ TAG=20261021-1 ./deploy/docker/package.sh
    ```bash
    systemctl status mvp-server --no-pager
    systemctl status nginx --no-pager
-   ss -lntp | grep -E ':(3002|5000|5001|8080|8081)\b'
-   nginx -T 2>/dev/null | grep -nE 'listen\s+(3002|5000|5001|8080|8081)'
+   ss -lntp | grep -E ':(3002|5000|5001|5002|8080|8081|8082)\b'
+   nginx -T 2>/dev/null | grep -nE 'listen\s+(3002|5000|5001|5002|8080|8081|8082)'
    ```
 
-   > 旧部署可能使用 5000/5001（Nginx 模板）或 8080/8081（部署文档与试运行脚本），
+   > 旧部署可能使用 5000/5001/5002（开发端口）或 8080/8081/8082（试运行端口），
    > 务必以 `ss` / `nginx -T` 的实际结果为准。
 3. 在线备份现网数据库（旧 API 仍在运行）：
 
@@ -190,7 +191,7 @@ TAG=20261021-1 ./deploy/docker/package.sh
 
 ### 7.2 停止旧 systemd 与 Nginx（切换窗口）
 
-顺序：**先停 API（停止写入），再停 Nginx（释放 5000/5001）**。本阶段只停用、不删除，
+顺序：**先停 API（停止写入），再停 Nginx（释放 5000/5001/5002）**。本阶段只停用、不删除，
 保留 systemd unit、Nginx 配置和旧目录，便于回滚。
 
 1. 停止旧 API：
@@ -229,7 +230,7 @@ TAG=20261021-1 ./deploy/docker/package.sh
 3. 释放端口检查：
 
    ```bash
-   ss -lntp | grep -E ':(5000|5001|8080|8081)\b' || echo 'web ports free'
+   ss -lntp | grep -E ':(5000|5001|5002|8080|8081|8082)\b' || echo 'web ports free'
    ```
 
 4. 清理试运行进程（如有）：
@@ -336,7 +337,7 @@ TAG=20261021-1 ./deploy/docker/package.sh
    `web` 容器会重新生成 `runtime-config.js`，Editor 的「打开渲染器」自动使用新端口。
 3. 防火墙放行新端口、关闭旧端口。
 4. 验收：`http://<IP>:9080`、`http://<IP>:9081/?id=...`，以及编辑器右上角打开渲染器。
-5. 注意：**不要同时修改容器内端口**；容器内固定 5000/5001 是设计约束，
+5. 注意：**不要同时修改容器内端口**；容器内固定 5000/5001/5002 是设计约束，
    宿主映射即可解决端口冲突。
 
 ### 7.6 日常升级
@@ -374,10 +375,10 @@ TAG=20261021-1 ./deploy/docker/package.sh
 | 项 | 验证方式 |
 |----|----------|
 | 镜像可离线导入 | 断网目标机 `docker load` 成功 |
-| 访问方式不变 | `http://<IP>:5000`、`http://<IP>:5001/?id=<发布页ID>` 可打开 |
-| 端口可配置 | 修改 `.env` 的 `EDITOR_PORT`/`RENDERER_PORT` 后 `up -d`，新端口可访问且 Editor 链接正确 |
+| 访问方式不变 | `http://<IP>:5000`、`http://<IP>:5001/?id=<发布页ID>`、`http://<IP>:5002` 可打开 |
+| 端口可配置 | 修改 `.env` 的三个宿主机端口后 `up -d`，新端口可访问且 Editor 链接正确 |
 | 旧服务已停 | `systemctl is-active mvp-server` 为 inactive；`ss` 无 3002 监听；旧 5000/5001 已释放 |
-| 同源 API | 浏览器 Network 中接口为 `http://<IP>:5000/api/...` 或 `:5001/api/...`，无 3002 |
+| 同源 API | 浏览器 Network 中接口为对应前端端口的 `/api/...`，无 3002 |
 | 3002 不暴露 | 宿主 `curl http://<IP>:3002` 失败；容器间正常 |
 | 数据保留 | 迁移后草稿页、发布页、自定义图标、可编辑文本均存在 |
 | 持久化 | 重启/`up -d` 后新增数据仍在 |
@@ -392,7 +393,7 @@ TAG=20261021-1 ./deploy/docker/package.sh
 - **权限**：`./data` 需允许容器用户（uid 1000）写入；部署脚本检测并提示。
 - **SQLite 单实例**：禁止对 `api` 扩容多副本或共享 NFS。
 - **外网依赖**：地图 GeoJSON 经 API 代理访问 `geo.datav.aliyun.com`；目标机完全离线时地图数据不可用（与 Docker 无关）。
-- **旧服务并存**：旧 systemd/nginx 与新 compose 不得同时占用 5000/5001。
+- **旧服务并存**：旧 systemd/nginx 与新 compose 不得同时占用 5000/5001/5002。
 
 ## 11. 交付文件
 

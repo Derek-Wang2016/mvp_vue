@@ -28,6 +28,7 @@ Editor (Vue)  →  JSON Schema  →  Server (Fastify)  →  Renderer (Vue)
 |------|------|------|
 | 编辑器 | 5000 | `@mvp-vue/editor` |
 | 渲染器 | 5001 | `@mvp-vue/renderer` |
+| HMI 编辑器 | 5002 | `@mvp-vue/hmi` |
 | 后端 | 3002 | `@mvp-vue/server` |
 
 环境变量见根目录 [.env.example](.env.example)（`VITE_API_BASE`，默认 `http://<hostname>:3002`）。
@@ -46,12 +47,13 @@ pnpm dev:server                                  # → http://localhost:3002
 # 另开终端
 pnpm dev:editor    # http://localhost:5000
 pnpm dev:renderer  # http://localhost:5001?id=<发布页ID>
+pnpm dev:hmi       # http://localhost:5002
 ```
 
 构建：
 
 ```bash
-pnpm build              # editor + renderer（Vite，含 vue-tsc）
+pnpm build              # editor + renderer + HMI（Vite，含 vue-tsc）
 
 # 后端：首次或 prisma/schema 变更后先生成 Client，再编译
 pnpm prisma:generate    # 须先停掉 pnpm dev:server（Windows 否则会 EPERM）

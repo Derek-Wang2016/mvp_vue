@@ -1,4 +1,4 @@
-import type { CardEmptyDisplayConfig, IconDictEntry, PageComponent, PageSchema } from './index'
+import type { CardEmptyDisplayConfig, IconDictEntry, PageComponent, PageSchema } from './index.js'
 
 export interface CustomIconRecord {
   id: number

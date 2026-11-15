@@ -33,7 +33,7 @@ export {
   getMapEchartsKey,
   resolveMapConfig,
   getMapProvinceName,
-} from './mapRegions'
+} from './mapRegions.js'
 
 /** 页面跳转按钮 — 内置图标 */
 export type PageNavIconPreset = 'arrow-right' | 'home' | 'layout-grid' | 'bar-chart' | 'external-link' | 'none'
@@ -84,7 +84,7 @@ export {
   DEFAULT_PAGE_NAV_BG_GRADIENT,
   resolvePageNavButtonAppearance,
   resolvePageNavButtonBackgroundStyle,
-} from './pageNavButtonComponent'
+} from './pageNavButtonComponent.js'
 
 // ===== 卡片字段布局 =====
 export type CardFieldLayoutId = 'default' | 'label-above' | 'value-only' | 'divider'
@@ -351,7 +351,7 @@ export function resolveAbbrevDictValue(
 }
 
 // ===== 自定义 SVG 图标库（Server /api/custom-icons） =====
-import type { CustomIconRecord, CustomIconListItem } from './savedIcons'
+import type { CustomIconRecord, CustomIconListItem } from './savedIcons.js'
 export type { CustomIconRecord, CustomIconListItem }
 export {
   savedIconsToMap,
@@ -361,9 +361,9 @@ export {
   listItemToRecord,
   iconEntryPickerLabel,
   collectSavedIconsFromSchema,
-} from './savedIcons'
+} from './savedIcons.js'
 
-export { iconPropsToDictEntry, iconPickerResultToProps, resolveIconLayoutSizes, type IconLayoutSizes } from './iconComponent'
+export { iconPropsToDictEntry, iconPickerResultToProps, resolveIconLayoutSizes, type IconLayoutSizes } from './iconComponent.js'
 export {
   type RectangleComponentProps,
   type RectangleCornerRadii,
@@ -373,14 +373,14 @@ export {
   formatRectangleBorderRadius,
   resolveRectangleStyle,
   type RectangleInlineStyle,
-} from './rectangleComponent'
+} from './rectangleComponent.js'
 export {
   type EllipseComponentProps,
   DEFAULT_ELLIPSE_PROPS,
   resolveEllipseProps,
   resolveEllipseStyle,
   type EllipseInlineStyle,
-} from './ellipseComponent'
+} from './ellipseComponent.js'
 export {
   type LineOrientation,
   type LineStrokeStyle,
@@ -396,7 +396,7 @@ export {
   resolveLineSvgAttrs,
   type LineSvgEndpoints,
   type LineSvgAttrs,
-} from './lineComponent'
+} from './lineComponent.js'
 export {
   tintInlineSvg,
   svgToMaskDataUrl,
@@ -404,7 +404,7 @@ export {
   countDistinctPaintColors,
   resolveInlineSvgColorMode,
   type InlineSvgColorMode,
-} from './svgIconTint'
+} from './svgIconTint.js'
 
 // ===== 图标字典 =====
 export interface IconDictEntry {
@@ -491,13 +491,13 @@ export const DEFAULT_PAGE_HEIGHT = 1080
 export const DEFAULT_CHART_TEXT_FONT_SIZE = 16
 export const DEFAULT_CHART_TEXT_COLOR = '#cbd5e1'
 
-export { buildPieSeriesLayout, type PieSeriesLayout } from './pieChartLayout'
-export { parseKeyValueTagKeyList, filterKeyValueTagItems } from './keyValueTag'
+export { buildPieSeriesLayout, type PieSeriesLayout } from './pieChartLayout.js'
+export { parseKeyValueTagKeyList, filterKeyValueTagItems } from './keyValueTag.js'
 export {
   HMI_DEFAULT_SAMPLE,
   HMI_BUILTIN_SAMPLE_NAME,
   hmiDefaultSampleJson,
-} from './hmiSample'
+} from './hmiSample.js'
 export {
   parseImportFieldWhitelist,
   resolveImportFieldNames,
@@ -505,7 +505,7 @@ export {
   resolveUrlQueryParamValue,
   appendQueryParamToUrl,
   resolveRestDataSourceUrl,
-} from './dataSource'
+} from './dataSource.js'
 export {
   type CardArrayFilterOperator,
   type CardArrayFilterCondition,
@@ -514,35 +514,35 @@ export {
   resolveCardItem,
   matchCardArrayItem,
   getActiveCardArrayFilters,
-} from './cardComponent'
+} from './cardComponent.js'
 export {
   parseChartFilterValues,
   asChartRowArray,
   filterChartArrayRows,
-} from './chartComponent'
+} from './chartComponent.js'
 export {
   type TextDirection,
   getTextDirection,
   getTextLetterSpacing,
   buildTextComponentStyle,
-} from './textComponent'
+} from './textComponent.js'
 export {
   type EditableTextAlign,
   type EditableTextVerticalAlign,
   getEditableTextAlign,
   getEditableTextVerticalAlign,
   buildEditableTextBoxStyle,
-} from './editableTextComponent'
+} from './editableTextComponent.js'
 
 // ===== 页面 Schema =====
-import type { BgGradient } from './bgGradient'
+import type { BgGradient } from './bgGradient.js'
 export {
   type BgGradient,
   BG_GRADIENTS,
   pickBgGradient,
   buildGradientBackground,
   DEFAULT_GRADIENT_COLOR_TO,
-} from './bgGradient'
+} from './bgGradient.js'
 
 export interface PageSchema {
   width: number
@@ -566,7 +566,7 @@ export {
   SYSTEM_PAGE_ID_MAX,
   MIN_USER_PAGE_ID,
   isSystemPageId,
-} from './pagePolicy'
+} from './pagePolicy.js'
 
 // ===== API 响应 =====
 export interface PageRecord {

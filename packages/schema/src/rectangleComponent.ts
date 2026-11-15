@@ -5,7 +5,7 @@ import {
   DEFAULT_GRADIENT_COLOR_TO,
   pickBgGradient,
   type BgGradient,
-} from './bgGradient'
+} from './bgGradient.js'
 
 export interface RectangleCornerRadii {
   topLeft: number

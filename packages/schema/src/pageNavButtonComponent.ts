@@ -1,10 +1,10 @@
-import type { IconDictEntry, PageNavIconPreset } from './index'
+import type { IconDictEntry, PageNavIconPreset } from './index.js'
 import {
   buildGradientBackground,
   DEFAULT_GRADIENT_COLOR_TO,
   pickBgGradient,
   type BgGradient,
-} from './bgGradient'
+} from './bgGradient.js'
 
 /** 与 index.ts 中 PAGE_NAV_ICON_PRESETS 保持一致（勿从 index 运行时导入，避免循环依赖） */
 const PAGE_NAV_ICON_PRESET_VALUES: readonly PageNavIconPreset[] = [
