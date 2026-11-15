@@ -5,7 +5,7 @@ import { LVGL_SYMBOLS, lvglSymbolName } from '../icons/lvglSymbols'
 import TablerImport from './TablerImport.vue'
 import { iconId, qrSide } from '../resolve'
 import { resolveIcon } from '../icons/lvglSvg'
-import type { HmiCard, HmiItem, HmiPage, HmiShape, Selection } from '../types'
+import type { HmiCard, HmiItem, HmiPage, HmiReplaceRule, HmiShape, Selection } from '../types'
 import { getApiBase } from '../config'
 import ColorField from './ColorField.vue'
 import NumberField from './NumberField.vue'
@@ -121,6 +121,24 @@ function shapeRotation(shape: HmiShape): number {
 function list(value: string): number[] {
   return value.split(',').map((part) => Number(part.trim())).filter((n) => Number.isFinite(n))
 }
+
+/** 字符替换规则。patchItem 是整体合并，所以每次传完整数组。 */
+function addReplaceRule() {
+  if (!props.item) return
+  emit('patchItem', { replace: [...(props.item.replace ?? []), { from: '', to: '' }] })
+}
+
+function patchReplaceRule(index: number, patch: Partial<HmiReplaceRule>) {
+  if (!props.item) return
+  const rules = (props.item.replace ?? []).map((rule, i) => (i === index ? { ...rule, ...patch } : rule))
+  emit('patchItem', { replace: rules })
+}
+
+function removeReplaceRule(index: number) {
+  if (!props.item) return
+  const rules = (props.item.replace ?? []).filter((_, i) => i !== index)
+  emit('patchItem', { replace: rules.length ? rules : undefined })
+}
 function addLibraryIcon(icon: { id: string; svg: string }) {
   emit('patchLibrary', { ...props.library, [icon.id]: icon.svg })
 }
@@ -234,8 +252,7 @@ function importColors() {
   colorImport.value = ''
   colorImportMsg.value = `已导入 ${count} 条`
 }
-function colorTable(parsed: unknown): Record<string, string> | null {
-  const source = parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'colors' in parsed
+function colorTable(parsed: unknown): Record<string, string> | null {  const source = parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'colors' in parsed
     ? (parsed as { colors: unknown }).colors
     : parsed
   if (Array.isArray(source)) {
@@ -555,7 +572,32 @@ function colorTable(parsed: unknown): Record<string, string> | null {
         <label>遮罩字数<NumberField min="1" placeholder="1" :value="item.mask_n ?? ''" @input="emit('patchItem', { mask_n: num(($event.target as HTMLInputElement).value) || undefined })" /></label>
       </div>
       <p class="text-xs text-slate-500">填写符号后生效。缺省从第 2 个字起遮 1 个，例如赵一鸣显示为赵*鸣。</p>
-      <label class="block">左侧内边距<NumberField :value="item.pad_x ?? 0" @input="emit('patchItem', { pad_x: num(($event.target as HTMLInputElement).value) })" /></label>
+      <div class="rounded border border-slate-700 p-2">
+        <div class="mb-1 flex items-center justify-between gap-2">
+          <span class="text-slate-300">字符替换</span>
+          <button type="button" class="text-xs text-sky-300" @click="addReplaceRule()">+ 添加</button>
+        </div>
+        <p class="mb-2 text-[11px] leading-relaxed text-slate-500">按顺序逐条替换，先替换再遮罩。`\s` 表示一个空格，`\t` 表示制表符；替换值留空则删除该字符。</p>
+        <div v-for="(rule, index) in item.replace ?? []" :key="index" class="mb-1.5 flex items-center gap-1">
+          <input
+            class="field mt-0 min-w-0 flex-1 font-mono"
+            maxlength="16"
+            placeholder="原文，如 ,"
+            :value="rule.from"
+            @input="patchReplaceRule(index, { from: ($event.target as HTMLInputElement).value })"
+          />
+          <span class="shrink-0 text-slate-500">→</span>
+          <input
+            class="field mt-0 min-w-0 flex-1 font-mono"
+            maxlength="32"
+            placeholder="替换为，如 \s"
+            :value="rule.to"
+            @input="patchReplaceRule(index, { to: ($event.target as HTMLInputElement).value })"
+          />
+          <button type="button" class="shrink-0 px-1 text-xs text-rose-300" title="删除这条" @click="removeReplaceRule(index)">×</button>
+        </div>
+        <p v-if="!(item.replace ?? []).length" class="text-[11px] text-slate-500">还没有规则。点「+ 添加」加一条。</p>
+      </div>      <label class="block">左侧内边距<NumberField :value="item.pad_x ?? 0" @input="emit('patchItem', { pad_x: num(($event.target as HTMLInputElement).value) })" /></label>
       <label class="block">标题间距<NumberField :value="item.gap ?? 0" @input="emit('patchItem', { gap: num(($event.target as HTMLInputElement).value) })" /></label>
     </template>
     <template v-if="item.type === 'label' || item.type === 'value' || item.type === 'split'">
@@ -589,6 +631,32 @@ function colorTable(parsed: unknown): Record<string, string> | null {
       <label class="block">块圆角<NumberField :value="item.radius ?? 0" @input="emit('patchItem', { radius: num(($event.target as HTMLInputElement).value) })" /></label>
       <ColorField label="默认底色" :model-value="item.default_color ?? '#7C7C7C'" @update="emit('patchItem', { default_color: $event })" />
       <p class="text-xs text-slate-500">每块底色按文字查页面颜色字典，没有则用默认底色。</p>
+      <div class="rounded border border-slate-700 p-2">
+        <div class="mb-1 flex items-center justify-between gap-2">
+          <span class="text-slate-300">字符替换</span>
+          <button type="button" class="text-xs text-sky-300" @click="addReplaceRule()">+ 添加</button>
+        </div>
+        <p class="mb-2 text-[11px] leading-relaxed text-slate-500">先按分隔符切分，再对每一块替换。`\s` 表示一个空格，`\t` 表示制表符；替换值留空则删除该字符。</p>
+        <div v-for="(rule, index) in item.replace ?? []" :key="index" class="mb-1.5 flex items-center gap-1">
+          <input
+            class="field mt-0 min-w-0 flex-1 font-mono"
+            maxlength="16"
+            placeholder="原文，如 症"
+            :value="rule.from"
+            @input="patchReplaceRule(index, { from: ($event.target as HTMLInputElement).value })"
+          />
+          <span class="shrink-0 text-slate-500">→</span>
+          <input
+            class="field mt-0 min-w-0 flex-1 font-mono"
+            maxlength="32"
+            placeholder="替换为，如 \s"
+            :value="rule.to"
+            @input="patchReplaceRule(index, { to: ($event.target as HTMLInputElement).value })"
+          />
+          <button type="button" class="shrink-0 px-1 text-xs text-rose-300" title="删除这条" @click="removeReplaceRule(index)">×</button>
+        </div>
+        <p v-if="!(item.replace ?? []).length" class="text-[11px] text-slate-500">还没有规则。点「+ 添加」加一条。</p>
+      </div>
     </template>
   </div>
 </template>

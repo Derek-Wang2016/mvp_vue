@@ -4,7 +4,7 @@ import { currentPage, LIMITS, type HmiButton, type HmiDocument, type HmiIconShap
 import { cardKey, shapeKey } from '../geometry'
 import { paintSvg, resolveIcon } from '../icons/lvglSvg'
 import { lvglSymbolName } from '../icons/lvglSymbols'
-import { applyMask, fontPx, formatClock, lookupColor, paintColor, qrSide, sampleValue, textAlign, trackSizes } from '../resolve'
+import { applyMask, applyReplace, fontPx, formatClock, lookupColor, paintColor, qrSide, sampleValue, textAlign, trackSizes } from '../resolve'
 import { getApiBase } from '../config'
 import QrPreview from './QrPreview.vue'
 
@@ -239,10 +239,26 @@ function valueText(prop: string | undefined, format?: string) {
   return String(sampleValue(props.doc, prop) ?? '')
 }
 
+/**
+ * 数值卡里最终显示的文字：先按配置做字符替换，再套遮罩。
+ * 顺序固定为「替换 → 遮罩」，设备端 LVGL 重绘需保持一致。
+ */
 function maskedValue(item: HmiItem) {
   const raw = valueText(item.prop, item.format)
   if (item.type !== 'value') return raw
-  return applyMask(raw, item.mask, item.mask_at, item.mask_n)
+  return applyMask(applyReplace(raw, item.replace), item.mask, item.mask_at, item.mask_n)
+}
+
+/**
+ * 拆分块的每一块文字。先按分隔符切开，再对每块做字符替换，
+ * 否则把分隔符本身替换掉会导致切不开。
+ */
+function splitParts(item: HmiItem): string[] {
+  const sep = item.split?.[0] || ','
+  return valueText(item.prop)
+    .split(sep)
+    .map((part) => applyReplace(part.trim(), item.replace))
+    .filter(Boolean)
 }
 </script>
 
@@ -364,7 +380,7 @@ function maskedValue(item: HmiItem) {
             :style="{ gap: `${item.gap ?? 8}px`, alignSelf: 'stretch' }"
           >
             <div
-              v-for="part in valueText(item.prop).split(item.split?.[0] || ',').map(s => s.trim()).filter(Boolean)"
+              v-for="part in splitParts(item)"
               :key="part"
               class="flex"
               :style="{

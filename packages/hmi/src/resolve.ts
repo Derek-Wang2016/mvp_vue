@@ -1,6 +1,6 @@
 import { resolveIcon } from './icons/lvglSvg'
 import { lvglSymbolName } from './icons/lvglSymbols'
-import { currentPage, FONT_PX, LIMITS, type HmiCard, type HmiDocument, type HmiItem, type HmiPage, type HmiShape } from './types'
+import { currentPage, FONT_PX, LIMITS, type HmiCard, type HmiDocument, type HmiItem, type HmiPage, type HmiReplaceRule, type HmiShape } from './types'
 
 export function fontPx(name: string | undefined, fallback = 28): number {
   if (!name) return fallback
@@ -47,6 +47,36 @@ export function textAlign(align: HmiItem['align']): 'left' | 'center' | 'right' 
   if (align === 'start') return 'left'
   if (align === 'end') return 'right'
   return 'center'
+}
+
+/**
+ * 把替换值里的转义写法还原成真实字符。
+ * `\s` 是一个空格，`\t` 是制表符，`\n` 是换行，`\\` 是反斜杠本身。
+ * 其余 `\x` 原样保留，避免把路径里的反斜杠吃掉。
+ */
+export function unescapeReplaceValue(text: string): string {
+  return text.replace(/\\(s|t|n|\\)/g, (_, ch: string) => {
+    if (ch === 's') return ' '
+    if (ch === 't') return '\t'
+    if (ch === 'n') return '\n'
+    return '\\'
+  })
+}
+
+/**
+ * 按配置逐条替换文本。顺序执行，前一条的结果会进入后一条。
+ * `from` 为空或 `to` 未定义时跳过该条。
+ */
+export function applyReplace(text: string, rules: HmiReplaceRule[] | undefined): string {
+  if (!rules?.length) return text
+  let out = text
+  for (const rule of rules) {
+    const from = rule?.from
+    if (!from) continue
+    const to = unescapeReplaceValue(rule.to ?? '')
+    out = out.split(from).join(to)
+  }
+  return out
 }
 
 /** 大于 0 的轨道用指定像素。列宽合计正好为 12 时，按 12 份把卡片宽度等分。其余未指定的轨道平分剩余空间。 */
@@ -219,6 +249,12 @@ function exportItem(item: HmiItem, card: HmiCard): Record<string, unknown> {
     delete next.mask_at
     delete next.mask_n
   }
+  // 字符替换：丢掉 from 为空的规则；全空时整字段不写，保持设备 JSON 干净
+  const rules = (item.replace ?? [])
+    .filter((rule) => String(rule?.from ?? '') !== '')
+    .map((rule) => ({ from: rule.from, to: rule.to ?? '' }))
+  if (rules.length > 0) next.replace = rules
+  else delete next.replace
   return next
 }
 

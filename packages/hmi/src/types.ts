@@ -150,6 +150,20 @@ export interface HmiItem {
   /** 每一块的圆角，像素。缺省 0。 */
   radius?: number
   default_color?: string
+  /**
+   * 字符替换表，按数组顺序逐条执行（前一条的结果进入后一条），设备端 LVGL 重绘时同样执行。
+   * `from` 是待替换的字面文本，`to` 是替换结果，支持转义：`\s` 一个空格、`\t` 制表符、
+   * `\n` 换行、`\\` 反斜杠本身。`to` 留空表示删除。`from` 为空则忽略该条。
+   * 例：`[{ from: ',', to: '\\s\\s' }]` 把逗号换成两个空格。
+   */
+  replace?: HmiReplaceRule[]
+}
+
+/** 一条字符替换规则。`from` 为空则忽略。 */
+export interface HmiReplaceRule {
+  from: string
+  /** 替换成什么。留空表示删除。 */
+  to: string
 }
 
 export interface HmiCard {
