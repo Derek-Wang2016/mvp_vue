@@ -1,6 +1,6 @@
 # 开发交接：2026-11-15 提交汇总与明日上手清单
 
-> 范围：`20f3f89..c600a32` 共 4 个提交
+> 范围：`20f3f89..fb6598a` 共 5 个提交
 > 用途：更换开发机器后的完整上手依据，涵盖 npm 依赖、数据库、设备 JSON、LVGL 端配套
 > 详细专题文档见文末「相关文档」
 
@@ -11,7 +11,7 @@
 ```bash
 # 1. 拉代码
 cd ~/prj/mvp_vue
-git pull                       # 目标 HEAD: c600a32
+git pull                       # 目标 HEAD: fb6598a
 
 # 2. 装依赖（含新增 3 个包与 workspace 软链）
 pnpm install
@@ -35,7 +35,7 @@ curl http://localhost:3002/api/hmi/sample-sources
 
 ---
 
-## 1. 本次 4 个提交做了什么
+## 1. 本次几个提交做了什么
 
 | commit | 标题 | 影响面 |
 |---|---|---|
@@ -43,8 +43,10 @@ curl http://localhost:3002/api/hmi/sample-sources
 | `8e01a15` | 跨机器同步文档 | 仅文档 |
 | `32cb45e` | 数值卡/拆分块字符替换 | Schema 新字段 + UI |
 | `c600a32` | 卡片格子底色与圆角 | Schema 新字段 + UI |
+| `fb6598a` | 按钮图标独立尺寸与颜色 | Schema 新字段 + UI |
+| `406b039` | 交接文档 | 仅文档 |
 
-**一句话概括**：新增了「1:1 预览 + 截图导出」功能，把「样例数据」改为建表时写入的只读内置项，给卡片格子和数值卡加了 `replace`（字符替换）、`bg`（底色）、`radius`（圆角）三个配置字段。
+**一句话概括**：新增了「1:1 预览 + 截图导出」功能，把「样例数据」改为建表时写入的只读内置项，给卡片格子和数值卡加了 `replace`（字符替换）、`bg`（底色）、`radius`（圆角），给按钮图标加了 `icon_size`（尺寸）、`icon_color`（颜色）。
 
 ---
 
@@ -198,6 +200,8 @@ curl http://localhost:3002/api/hmi/sample-sources | grep -o '"builtin":[a-z]*'
 |---|---|---|
 | `icon_size` | `number` | 图标独立尺寸（像素）。缺省跟随文字字号 |
 | `icon_color` | `string` | 图标独立颜色。缺省跟随文字颜色 `color` |
+
+（引入于 `fb6598a`）
 
 ### 4.2 完整示例
 
@@ -458,7 +462,7 @@ lv_obj_set_style_text_color(icon_label,
 
 ### 7.1 环境
 
-- [ ] `git log --oneline -1` 显示 `c600a32`
+- [ ] `git log --oneline -1` 显示 `fb6598a`（或文档对应的最新提交）
 - [ ] `ls packages/schema/dist/hmiSample.js` 有输出
 - [ ] `curl http://localhost:3002/api/hmi/sample-sources` 返回含 `"builtin":true`
 - [ ] 编辑器打开 `http://localhost:5002` 无报错
