@@ -118,7 +118,7 @@ function gridStyle(card: { w: number; h: number; cols?: number; rows?: number; g
   }
 }
 
-function cellStyle(item: { col?: number; row?: number; colspan?: number; rowspan?: number; align?: 'start' | 'center' | 'end'; pad_x?: number }) {
+function cellStyle(item: { col?: number; row?: number; colspan?: number; rowspan?: number; align?: 'start' | 'center' | 'end'; pad_x?: number }): Record<string, string | number> {
   return {
     gridColumn: `${(item.col ?? 0) + 1} / span ${item.colspan ?? 1}`,
     gridRow: `${(item.row ?? 0) + 1} / span ${item.rowspan ?? 1}`,
@@ -130,6 +130,16 @@ function cellStyle(item: { col?: number; row?: number; colspan?: number; rowspan
     overflow: 'hidden',
     outline: 'none',
   }
+}
+
+/** 格子底纹。只有配了 bg 才画，未配置时保持透明，露出卡片底色。 */
+function cellBoxStyle(item: HmiItem): Record<string, string | number> {
+  const style: Record<string, string | number> = {}
+  const bg = paintColor(item.bg, props.doc)
+  if (bg) style.background = bg
+  // split 的 radius 作用在内部每一块上，外层再加会重复
+  if (item.type !== 'split' && (item.radius ?? 0) > 0) style.borderRadius = `${item.radius}px`
+  return style
 }
 
 function fontStyle(item: { font?: string; bold?: number; color?: string; align?: 'start' | 'center' | 'end' }) {
@@ -362,7 +372,7 @@ function splitParts(item: HmiItem): string[] {
         <div
           v-for="(item, itemIndex) in card.items"
           :key="itemIndex"
-          :style="{ ...cellStyle(item), outline: selectedItem(cardIndex, itemIndex) ? '1px dashed #0284c7' : 'none' }"
+          :style="{ ...cellStyle(item), ...cellBoxStyle(item), outline: selectedItem(cardIndex, itemIndex) ? '1px dashed #0284c7' : 'none' }"
           @pointerdown.stop="onItem($event, cardIndex, itemIndex)"
         >
           <span v-if="item.type === 'label'" :style="fontStyle(item)">{{ item.text }}</span>

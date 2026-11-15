@@ -603,6 +603,8 @@ function colorTable(parsed: unknown): Record<string, string> | null {  const sou
     <template v-if="item.type === 'label' || item.type === 'value' || item.type === 'split'">
       <label class="block">字体<input class="field" :value="item.font ?? ''" @input="emit('patchItem', { font: ($event.target as HTMLInputElement).value })" /></label>
       <ColorField label="颜色" :model-value="item.color ?? ''" @update="emit('patchItem', { color: $event })" />
+      <ColorField label="底色，留空透明" :model-value="item.bg ?? ''" @update="emit('patchItem', { bg: $event || undefined })" />
+      <label class="block">{{ item.type === 'split' ? '块圆角' : '格子圆角' }}<NumberField :value="item.radius ?? 0" @input="emit('patchItem', { radius: num(($event.target as HTMLInputElement).value) || undefined })" /></label>
       <label v-if="item.type !== 'split'" class="flex items-center gap-2">粗体
         <input type="checkbox" :checked="item.bold === 1" @input="emit('patchItem', { bold: ($event.target as HTMLInputElement).checked ? 1 : 0 })" />
       </label>
@@ -628,7 +630,6 @@ function colorTable(parsed: unknown): Record<string, string> | null {  const sou
       <label class="block">{{ item.flow === 'row' ? '列宽' : '块高' }}<NumberField :value="item.item_h ?? 73" @input="emit('patchItem', { item_h: num(($event.target as HTMLInputElement).value) })" /></label>
       <label class="block">块间距<NumberField :value="item.gap ?? 8" @input="emit('patchItem', { gap: num(($event.target as HTMLInputElement).value) })" /></label>
       <label class="block">块内边距<NumberField :value="item.pad ?? 0" @input="emit('patchItem', { pad: num(($event.target as HTMLInputElement).value) })" /></label>
-      <label class="block">块圆角<NumberField :value="item.radius ?? 0" @input="emit('patchItem', { radius: num(($event.target as HTMLInputElement).value) })" /></label>
       <ColorField label="默认底色" :model-value="item.default_color ?? '#7C7C7C'" @update="emit('patchItem', { default_color: $event })" />
       <p class="text-xs text-slate-500">每块底色按文字查页面颜色字典，没有则用默认底色。</p>
       <div class="rounded border border-slate-700 p-2">

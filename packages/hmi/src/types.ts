@@ -136,6 +136,8 @@ export interface HmiItem {
   mask_n?: number
   pad_x?: number
   gap?: number
+  /** 格子底色。`#RRGGBB` 或 `color.字段`。留空透明，露出卡片底色。 */
+  bg?: string
   col?: number
   row?: number
   colspan?: number
@@ -147,7 +149,7 @@ export interface HmiItem {
   item_h?: number
   /** 块内沿对齐方向的内边距。竹简列作用在上下，横条作用在左右。 */
   pad?: number
-  /** 每一块的圆角，像素。缺省 0。 */
+  /** 格子圆角，像素。缺省 0。split 时作用于内部每一块。 */
   radius?: number
   default_color?: string
   /**
