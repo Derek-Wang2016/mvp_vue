@@ -1,6 +1,6 @@
 # 开发交接：2026-11-15 提交汇总与明日上手清单
 
-> 范围：`20f3f89..fb6598a` 共 5 个提交
+> 范围：`20f3f89..fb6598a` 共 5 个提交（另含 `20f3f89` 的形状旋转，见 §4.1、§5.1⑤）
 > 用途：更换开发机器后的完整上手依据，涵盖 npm 依赖、数据库、设备 JSON、LVGL 端配套
 > 详细专题文档见文末「相关文档」
 
@@ -39,6 +39,7 @@ curl http://localhost:3002/api/hmi/sample-sources
 
 | commit | 标题 | 影响面 |
 |---|---|---|
+| `20f3f89` | 基础形状支持旋转 | Schema 新字段 + UI |
 | `270d380` | 预览与截图、统一关闭按钮、内置样例只读 | **npm 依赖 + 数据库 + 新增 UI** |
 | `8e01a15` | 跨机器同步文档 | 仅文档 |
 | `32cb45e` | 数值卡/拆分块字符替换 | Schema 新字段 + UI |
@@ -46,7 +47,7 @@ curl http://localhost:3002/api/hmi/sample-sources
 | `fb6598a` | 按钮图标独立尺寸与颜色 | Schema 新字段 + UI |
 | `406b039` | 交接文档 | 仅文档 |
 
-**一句话概括**：新增了「1:1 预览 + 截图导出」功能，把「样例数据」改为建表时写入的只读内置项，给卡片格子和数值卡加了 `replace`（字符替换）、`bg`（底色）、`radius`（圆角），给按钮图标加了 `icon_size`（尺寸）、`icon_color`（颜色）。
+**一句话概括**：新增了「1:1 预览 + 截图导出」功能，把「样例数据」改为建表时写入的只读内置项，给卡片格子和数值卡加了 `replace`（字符替换）、`bg`（底色）、`radius`（圆角），给按钮图标加了 `icon_size`（尺寸）、`icon_color`（颜色），给矩形和圆形加了 `rotate`（旋转角度）。
 
 ---
 
@@ -203,6 +204,16 @@ curl http://localhost:3002/api/hmi/sample-sources | grep -o '"builtin":[a-z]*'
 
 （引入于 `fb6598a`）
 
+`pages.<name>.shapes[]` 里**矩形与圆形**（`type: "rect"` / `"circle"`）新增：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `rotate` | `number` | 绕中心旋转角度，单位度，范围 `-180..180`。缺省不写，等价 0 |
+
+（引入于 `20f3f89`）
+
+> 线段的旋转已经折算进 `x1` / `y1` / `x2` / `y2` 坐标，不写 `rotate` 字段。设备端无需为线段做旋转处理，按两个端点画线即可。
+
 ### 4.2 完整示例
 
 **数值卡（item）**：
@@ -250,6 +261,20 @@ curl http://localhost:3002/api/hmi/sample-sources | grep -o '"builtin":[a-z]*'
 
 上面这段同时表达了「文字白色、图标红色、图标 40px 比文字更大」的配置。
 
+**旋转矩形（shape）**：
+
+```json
+{
+  "type": "rect",
+  "x": 100, "y": 80, "w": 200, "h": 120,
+  "rotate": 30,
+  "bg": "#0E3A5F",
+  "radius": 8
+}
+```
+
+绕该矩形中心顺时针旋转 30°。`rotate` 缺省时不写，按 0 处理。
+
 ### 4.3 导出时的清理规则
 
 **`replace`**：
@@ -268,14 +293,20 @@ curl http://localhost:3002/api/hmi/sample-sources | grep -o '"builtin":[a-z]*'
 - `icon_color` 未配置或为空白字符串时不写
 - 两个都不写时，设备端按「跟随文字」处理，与旧版行为完全一致
 
+**`rotate`**：
+
+- 未配置时不写；配置为 `0` 时保留（理由同 `radius`，表示显式无旋转）
+- 写入前在编辑器内已归一化到 `-180..180`，`rotateShape` 会把超出范围的角折算回来
+
 > 如果希望 `radius: 0` 也不写，需要在 `omitEmpty` 里特殊处理 —— 当前没这么做，因为 0 有语义（显式无圆角 vs 未配置）。
 
 ### 4.4 向后兼容
 
-- 旧 JSON（无 `replace` / `bg` / `icon_size` / `icon_color`）导入后行为完全不变
+- 旧 JSON（无 `replace` / `bg` / `icon_size` / `icon_color` / `rotate`）导入后行为完全不变
 - `applyReplace(undefined)` 直接返回原文
 - `cellBoxStyle()` 未配 `bg` 时不加 `background`，保持透明
 - 按钮未配 `icon_size` 时图标尺寸回落为文字字号（原先硬编码 24px 的视觉差异见 6.5）
+- 形状未配 `rotate` 时不加旋转，与旧版等价
 
 > ⚠️ **一处视觉变化**：以前按钮的 SVG 图标固定渲染为 24×24px（`h-6 w-6`），现在未配 `icon_size` 时跟随文字字号。字号为 `default`(28) / `status`(30) 时图标会比之前更大，`num_large`(47) 更大。如果旧设计稿依赖 24px，需显式填 `icon_size: 24`。
 
@@ -283,7 +314,9 @@ curl http://localhost:3002/api/hmi/sample-sources | grep -o '"builtin":[a-z]*'
 
 ## 5. LVGL 端配套修改（重点）
 
-### 5.1 需要实现的四件事
+### 5.1 需要实现的五件事
+
+> 五个字段组的实现顺序建议：先 `bg` / `radius`（纯样式），再 `icon_size` / `icon_color`，再 `rotate`，最后 `replace`（涉及文本处理链路）。
 
 #### ① 字符替换（`replace`）
 
@@ -390,7 +423,38 @@ lv_obj_set_style_text_color(icon_label,
 
 **注意**：`icon_size` 用像素数值，不是 `font` 那种预定义字号名（`default` / `status` / `num_large` / `num_huge`）。这样可以直接对齐设计稿上的图标视觉尺寸，不受字号档位限制。
 
-#### ⑤ 不需要改动的地方
+#### ⑤ 形状旋转（`rotate`）
+
+仅矩形（`rect`）和圆形（`circle`）带这个字段，线段的旋转已折算进端点坐标。
+
+| 字段 | 类型 | 缺省行为 |
+|---|---|---|
+| `rotate` | `number`（度，`-180..180`） | 未配置时不旋转 |
+
+**两个必须注意的点**：
+
+1. **单位是 0.1 度**。`rotate: 30` 要传 `300`。
+2. **pivot 默认是 `0,0`（左上角），不是中心**。不显式设中心点会得到完全不同的视觉效果。
+
+```c
+/* LVGL 9 */
+lv_obj_set_style_transform_rotation(rect, shape->rotate * 10, 0);
+
+/* LVGL 8.4 同名语义、不同函数名 */
+lv_obj_set_style_transform_angle(rect, shape->rotate * 10, 0);
+
+/* 两个版本都要设中心 pivot，否则绕左上角转 */
+lv_obj_set_style_transform_pivot_x(rect, shape->w / 2, 0);
+lv_obj_set_style_transform_pivot_y(rect, shape->h / 2, 0);
+```
+
+正角度在网页侧是顺时针（CSS `transform: rotate(30deg)`）。LVGL 的 `transform_rotation` 同样按顺时针解释，两边一致。上板后若发现方向相反，取反即可，编辑器侧不需要改。
+
+旋转会让绘制区超出对象原始包围盒，LVGL 会按需扩层处理，通常不需要额外配置；但贴近屏幕边缘的图元旋转后可能被裁掉，设计时留点余量。
+
+`circle` 本身轴对称，旋转只有配合非等比矩形或圆角才看得出差异，可以直接套用同一套代码。
+
+#### ⑥ 不需要改动的地方
 
 - 布局坐标：`x` / `y` / `w` / `h` 未变
 - 卡片网格：`cols` / `rows` / `col_w` / `row_h` 未变
@@ -401,8 +465,9 @@ lv_obj_set_style_text_color(icon_label,
 
 1. **先做 `bg` / `radius`** —— 最简单，纯样式设置
 2. **再做 `icon_size` / `icon_color`** —— 也是纯样式，但要注意「未配置时回落到文字样式」
-3. **再做 `replace`（数值卡）** —— 单次替换链路
-4. **最后做 `replace`（拆分块）** —— 注意切分顺序
+3. **再做 `rotate`** —— 纯样式，但必须记得设中心 pivot、角度乘 10
+4. **再做 `replace`（数值卡）** —— 单次替换链路
+5. **最后做 `replace`（拆分块）** —— 注意切分顺序
 
 ---
 
@@ -442,8 +507,17 @@ lv_obj_set_style_text_color(icon_label,
 | `value` / `label` / `split` | 底色、格子圆角 | 「颜色」下方 |
 | `split` | 字符替换（增删改规则） | 「默认底色」下方 |
 | **`button`（图形）** | **「图标样式」区块：图标尺寸 px、图标颜色** | 「图标位置」下方 |
+| **`rect` / `circle`（图形）** | **旋转角度** | 属性面板末尾 |
 
-### 6.6 按钮图标样式
+### 6.6 形状旋转
+
+矩形和圆形的属性面板末尾新增「旋转角度」，范围 `-180..180`，步进 1 度。
+
+画布上选中矩形后，包围框的四角外侧会有旋转手柄；拖动手柄即可旋转，按住 `Shift` 按 15° 吸附。
+
+线段没有这个输入框，它的角度由 `x1` / `y1` / `x2` / `y2` 决定；改端点即改变角度。
+
+### 6.7 按钮图标样式
 
 按钮形状的属性面板在「图标位置」下方新增「图标样式」区块：
 
@@ -512,6 +586,18 @@ lv_obj_set_style_text_color(icon_label,
 
 > 若按钮里用的是 SVG 图标（而非 LVGL symbol），行为一致；但需注意 SVG 的染色走 `paintSvg`，仅支持单色图标的整体替换。
 
+### 7.7 形状旋转
+
+- [ ] 拖入一个矩形，选中
+- [ ] 属性面板末尾出现「旋转角度」
+- [ ] 填 `30` → 画布上矩形绕自身中心顺时针转 30°
+- [ ] 「设备 JSON」里该 rect 出现 `"rotate":30`
+- [ ] 拖包围框的旋转手柄 → 角度实时变化
+- [ ] 按住 `Shift` 拖动 → 角度吸附到 15° 的整数倍
+- [ ] 填 `200` → 自动折算为 `-160`
+- [ ] 拖入一个圆形，同样有「旋转角度」
+- [ ] 拖入一条线段 → 没有「旋转角度」输入框
+
 ---
 
 ## 8. 排查
@@ -527,6 +613,9 @@ lv_obj_set_style_text_color(icon_label,
 | 截图导出后文件找不到 | 内置浏览器拦截下载 | 已改 `showSaveFilePicker`，会弹系统保存框 |
 | 属性面板看不到「字符替换」 | 选中的不是 value / split | 检查选中类型 |
 | 属性面板看不到「图标样式」 | 选中的不是 button | 检查选中类型 |
+| 属性面板看不到「旋转角度」 | 选中的不是 rect / circle | 线段无此项，改用端点 |
+| 旋转后绕左上角转 | LVGL 未设 pivot | `transform_pivot_x/y` 设为 `w/2`、`h/2` |
+| 旋转角度小了 10 倍 | 忘了乘以 10 | `transform_rotation` 单位是 0.1 度 |
 | 按钮图标突然变大 | 未配 `icon_size`，跟随了新字号 | 显式填 `icon_size` |
 | 点删除内置样例却成功 | 后端是旧进程 | 重启后端，确认返回 403 |
 | 浏览器标签页图标没变 | 缓存 | `Ctrl+Shift+R` |
@@ -552,15 +641,16 @@ lv_obj_set_style_text_color(icon_label,
 | 文件 | 改动 |
 |---|---|
 | `packages/hmi/src/App.vue` | 预览入口、关闭按钮替换、5 处补关闭入口 |
-| `packages/hmi/src/types.ts` | `HmiItem` 新增 `bg`、`replace`；`HmiShape.button` 新增 `icon_size`、`icon_color`；`HmiReplaceRule` 接口 |
+| `packages/hmi/src/types.ts` | `HmiItem` 新增 `bg`、`replace`；`HmiShape.button` 新增 `icon_size`、`icon_color`；`HmiShape.rect` 新增 `rotate`；`HmiReplaceRule` 接口 |
 | `packages/hmi/src/resolve.ts` | `applyReplace`、`unescapeReplaceValue`、导出清理；按钮导出补 `icon_size` / `icon_color` |
-| `packages/hmi/src/components/Stage.vue` | `cellBoxStyle`、`splitParts`、`maskedValue` 接入替换；按钮图标改用 `buttonIconColor` 与 `symbolSize` |
-| `packages/hmi/src/components/PropertyPanel.vue` | 字符替换区块、底色/圆角输入、按钮「图标样式」区块 |
+| `packages/hmi/src/components/Stage.vue` | `cellBoxStyle`、`splitParts`、`maskedValue` 接入替换；按钮图标改用 `buttonIconColor` 与 `symbolSize`；形状应用 `rotate` |
+| `packages/hmi/src/components/PropertyPanel.vue` | 字符替换区块、底色/圆角输入、按钮「图标样式」区块、矩形/圆形「旋转角度」 |
 | `packages/hmi/src/components/SampleSourceDialog.vue` | 内置样例只读、另存为 |
 | `packages/hmi/src/defaultDocument.ts` | 改用 schema 包的默认样例 |
 | `packages/hmi/src/api.ts` | `HmiSampleSource` 加 `builtin` |
-| `packages/hmi/src/components/HmiCanvas.vue` | 预览打开时屏蔽画布快捷键 |
+| `packages/hmi/src/components/HmiCanvas.vue` | 预览打开时屏蔽画布快捷键；旋转手柄与拖拽旋转 |
 | `packages/hmi/src/components/ImageLibraryDialog.vue` 等 | 关闭按钮替换 |
+| `packages/hmi/src/stores/hmiStore.ts` | `rotateShape`（矩形/圆形存角度，线段折算端点）、`normalizeRotation` |
 | `packages/server/prisma/schema.prisma` | `HmiSampleSource` 加 `builtin` |
 | `packages/server/src/routes/hmiSampleSources.ts` | 建表补列 + 种子 + 403 拦截 |
 
