@@ -55,9 +55,9 @@ export function buildHmiPatientResponse() {
   const tend = pick(TEND)
   const [red, green, blue] = CARE_RGB[tend]
   const allergy = [...ALLERGY].sort(() => Math.random() - 0.5).slice(0, 2)
-  const diet = [...DIET].sort(() => Math.random() - 0.5).slice(0, 1 + Math.floor(Math.random() * 3))
-  const isolation = [...ISOLATION].sort(() => Math.random() - 0.5).slice(0, 1 + Math.floor(Math.random() * 3))
-  const safe = [...SAFE].sort(() => Math.random() - 0.5).slice(0, 6)
+  const diet = [...DIET].sort(() => Math.random() - 0.5).slice(0, 1 + Math.floor(Math.random() * 2))
+  const isolation = [...ISOLATION].sort(() => Math.random() - 0.5).slice(0, 1 + Math.floor(Math.random() * 2))
+  const safe = [...SAFE].sort(() => Math.random() - 0.5).slice(0, 5)
   const diagnose = [...DIAGNOSES].sort(() => Math.random() - 0.5).slice(0, 1 + Math.floor(Math.random() * 2))
   return {
     res: 'ok',
