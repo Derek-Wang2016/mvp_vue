@@ -100,6 +100,8 @@ export interface HmiButton {
   page?: string
   /** action 为 function 时，设备端用来接线的功能键。 */
   key?: string
+  /** action 为 function 时的参数 JSON 文本。设备 JSON 里写成 params 对象。 */
+  params?: string
   locked?: boolean
 }
 

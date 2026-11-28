@@ -8,5 +8,6 @@
 | [parity-checklist.md](./parity-checklist.md) | 与 React 版功能对等验收表 |
 | [hmi-sample-sync.md](./hmi-sample-sync.md) | HMI 内置样例：跨机器同步、数据库迁移、排查清单 |
 | [hmi-replace-rules.md](./hmi-replace-rules.md) | 数值卡字符替换：JSON 结构、执行顺序、LVGL 端实现与验证 |
+| [hmi-function-button-params.md](./hmi-function-button-params.md) | HMI 功能按钮参数：JSON 配置、设备输出与兼容规则 |
 
 需求与方案原文：`../../mvp/doc/需求.md`

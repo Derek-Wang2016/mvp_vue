@@ -64,6 +64,13 @@ const confirmDelete = ref<HmiListItem | null>(null)
 const nameEdit = ref<{ mode: 'rename' | 'copy'; item: HmiListItem; name: string } | null>(null)
 const showAddPage = ref(false)
 const newPageName = ref('')
+const showPageSaveAs = ref(false)
+const pageSaveAsName = ref('')
+const pageSaveAsError = ref('')
+const showProjectSaveAs = ref(false)
+const projectSaveAsName = ref('')
+const projectSaveAsError = ref('')
+const projectSaveAsSaving = ref(false)
 const confirmDropPage = ref(false)
 const showPublish = ref(false)
 const showPublications = ref(false)
@@ -117,6 +124,45 @@ async function save() {
     msg.value = '保存失败，请确认后端已启动'
   } finally {
     saving.value = false
+  }
+}
+
+async function openProjectSaveAs() {
+  projectSaveAsError.value = ''
+  try {
+    screens.value = await listScreens()
+  } catch {
+    msg.value = '无法读取工程列表，请确认后端已启动'
+  }
+  projectSaveAsName.value = uniqueScreenName(`${name.value.trim() || 'HMI工程'} 副本`)
+  showProjectSaveAs.value = true
+}
+
+async function saveProjectAs() {
+  if (projectSaveAsSaving.value) return
+  const nextName = projectSaveAsName.value.trim()
+  if (!nextName) {
+    projectSaveAsError.value = '请填写工程名称'
+    return
+  }
+  if (screens.value.some((item) => item.name === nextName)) {
+    projectSaveAsError.value = '已有同名工程，请换一个名字'
+    return
+  }
+
+  const snapshot = JSON.parse(JSON.stringify(doc.value)) as HmiDocument
+  projectSaveAsSaving.value = true
+  projectSaveAsError.value = ''
+  try {
+    const created = await createScreen(nextName, snapshot)
+    store.load(created.id, nextName, snapshot)
+    showProjectSaveAs.value = false
+    projectSaveAsName.value = ''
+    msg.value = `全套页面已另存为「${nextName}」`
+  } catch {
+    projectSaveAsError.value = '另存失败，请确认后端已启动'
+  } finally {
+    projectSaveAsSaving.value = false
   }
 }
 
@@ -420,6 +466,32 @@ function addPage() {
   showAddPage.value = false
 }
 
+function openPageSaveAs() {
+  let index = 1
+  let candidate = `${doc.value.active}_copy`
+  while (doc.value.pages[candidate]) {
+    index += 1
+    candidate = `${doc.value.active}_copy${index}`
+  }
+  pageSaveAsName.value = candidate
+  pageSaveAsError.value = ''
+  showPageSaveAs.value = true
+}
+
+function saveCurrentPageAs() {
+  const sourceName = doc.value.active
+  const error = store.duplicatePage(sourceName, pageSaveAsName.value)
+  if (error) {
+    pageSaveAsError.value = error
+    return
+  }
+  const savedName = doc.value.active
+  pageSaveAsName.value = ''
+  pageSaveAsError.value = ''
+  showPageSaveAs.value = false
+  msg.value = `已将「${sourceName}」另存为「${savedName}」`
+}
+
 function openInsertData() {
   if (!selectedCard.value) return
   insertKey.value = ''
@@ -454,10 +526,12 @@ function removePage() {
         </select>
       </label>
       <button class="icon-btn" title="添加页面" @click="showAddPage = true" v-html="tabler('file-plus')" />
+      <button class="icon-btn" title="当前页另存为" @click="openPageSaveAs" v-html="tabler('copy')" />
       <button v-if="doc.active !== 'index'" class="icon-btn text-rose-300" title="删除页面" @click="confirmDropPage = true" v-html="tabler('file-minus')" />
       <button class="icon-btn" title="新建" @click="store.reset()" v-html="tabler('file')" />
       <button class="icon-btn" title="打开" @click="openList" v-html="tabler('folder-open')" />
       <button class="icon-btn" :title="saving ? '保存中' : '保存'" :disabled="saving" @click="save" v-html="tabler('device-floppy')" />
+      <button class="btn" title="将当前工程的全部页面另存为新的工程" @click="openProjectSaveAs">工程另存为</button>
       <button class="icon-btn" title="发布" @click="openPublish" v-html="tabler('upload')" />
       <button class="icon-btn" title="发布管理" @click="openPublications" v-html="tabler('list-details')" />
       <button class="icon-btn" title="预览（1:1，可改数据）" @click="showPreview = true" v-html="tabler('eye')" />
@@ -680,6 +754,48 @@ function removePage() {
         <div class="mt-3 flex justify-end gap-2">
           <button class="btn" @click="showAddPage = false">取消</button>
           <button class="btn" @click="addPage">添加</button>
+        </div>
+      </div>
+    </div>
+    <div v-if="showPageSaveAs" class="overlay" @click.self="showPageSaveAs = false">
+      <div class="dialog">
+        <div class="mb-2 flex items-center justify-between gap-2">
+          <span>当前页另存为</span>
+          <DialogClose @close="showPageSaveAs = false" />
+        </div>
+        <p class="mb-2 text-xs text-slate-400">复制页面「{{ doc.active }}」的形状、卡片和背景，并切换到新页面。</p>
+        <input
+          v-model="pageSaveAsName"
+          class="w-full rounded border border-slate-600 bg-slate-950 px-2 py-1"
+          placeholder="请输入新页面名称"
+          @keyup.enter="saveCurrentPageAs"
+        />
+        <p v-if="pageSaveAsError" class="mt-2 text-xs text-rose-300">{{ pageSaveAsError }}</p>
+        <div class="mt-3 flex justify-end gap-2">
+          <button class="btn" @click="showPageSaveAs = false">取消</button>
+          <button class="btn" :disabled="!pageSaveAsName.trim()" @click="saveCurrentPageAs">另存为</button>
+        </div>
+      </div>
+    </div>
+    <div v-if="showProjectSaveAs" class="overlay" @click.self="showProjectSaveAs = false">
+      <div class="dialog">
+        <div class="mb-2 flex items-center justify-between gap-2">
+          <span>全套页面另存为</span>
+          <DialogClose @close="showProjectSaveAs = false" />
+        </div>
+        <p class="mb-2 text-xs text-slate-400">复制工程「{{ name }}」的全部 {{ pageNames.length }} 个页面、页面背景、颜色和图标字典、样例数据及屏幕配置，并切换到新工程。</p>
+        <input
+          v-model="projectSaveAsName"
+          class="w-full rounded border border-slate-600 bg-slate-950 px-2 py-1"
+          placeholder="请输入新工程名称"
+          @keyup.enter="saveProjectAs"
+        />
+        <p v-if="projectSaveAsError" class="mt-2 text-xs text-rose-300">{{ projectSaveAsError }}</p>
+        <div class="mt-3 flex justify-end gap-2">
+          <button class="btn" @click="showProjectSaveAs = false">取消</button>
+          <button class="btn" :disabled="projectSaveAsSaving || !projectSaveAsName.trim()" @click="saveProjectAs">
+            {{ projectSaveAsSaving ? '另存中' : '另存工程' }}
+          </button>
         </div>
       </div>
     </div>

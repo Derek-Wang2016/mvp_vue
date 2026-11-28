@@ -113,6 +113,19 @@ export const useHmiStore = defineStore('hmi', {
       this.showPage(pageName)
       return null
     },
+    duplicatePage(sourceName: string, name: string): string | null {
+      const pageName = name.trim()
+      if (!pageName) return '请填写页面名称'
+      if (this.doc.pages[pageName]) return '页面名称已存在，请换一个名字'
+      const source = this.doc.pages[sourceName]
+      if (!source) return '当前页不存在'
+      this.doc.pages = {
+        ...this.doc.pages,
+        [pageName]: clone(source),
+      }
+      this.showPage(pageName)
+      return null
+    },
     removePage(name: string) {
       if (name === 'index' || !this.doc.pages[name]) return
       delete this.doc.pages[name]
@@ -566,13 +579,34 @@ function asPage(value: unknown): HmiPage | null {
   const page = value as HmiPage
   if (!Array.isArray(page.shapes) || !Array.isArray(page.cards)) return null
   return {
-    shapes: page.shapes,
+    shapes: page.shapes.map(normalizeShapeParams),
     cards: page.cards.map((card) => ({ ...card, items: card.items ?? [] })),
     bg: page.bg,
     bgImage: page.bgImage,
     bgUrl: page.bgUrl,
     bgOpa: page.bgOpa,
   }
+}
+
+/**
+ * 设备 JSON 的 params 是对象，编辑器里用 JSON 文本编辑。
+ * 导入设备 JSON 时统一转成文本，避免属性面板对对象调用字符串方法。
+ */
+function normalizeShapeParams(shape: HmiShape): HmiShape {
+  if (shape.type !== 'button' && shape.type !== 'block') return shape
+  const raw = (shape as HmiShape & { params?: unknown }).params
+  let params: string | undefined
+  if (typeof raw === 'string') {
+    params = raw
+  } else if (raw != null) {
+    try {
+      params = JSON.stringify(raw)
+    } catch {
+      params = undefined
+    }
+  }
+  if (params === shape.params) return shape
+  return { ...shape, params }
 }
 
 export function normalizeDocument(raw: Partial<HmiDocument> & { shapes?: HmiShape[]; cards?: HmiCard[] } | null | undefined): HmiDocument {
@@ -587,7 +621,7 @@ export function normalizeDocument(raw: Partial<HmiDocument> & { shapes?: HmiShap
   }
   if (!pages.index && Array.isArray(raw.shapes) && Array.isArray(raw.cards)) {
     pages.index = {
-      shapes: raw.shapes,
+      shapes: raw.shapes.map(normalizeShapeParams),
       cards: raw.cards.map((card) => ({ ...card, items: card.items ?? [] })),
     }
   }

@@ -68,7 +68,7 @@ async function uploadImage(event: Event) {
   }
 }
 
-function blockParamsError(text: string | undefined): string {
+function paramsError(text: string | undefined): string {
   const raw = text?.trim() ?? ''
   if (!raw) return ''
   try {
@@ -432,7 +432,7 @@ function colorTable(parsed: unknown): Record<string, string> | null {  const sou
       <label class="block">参数 JSON
         <textarea class="field editor-scrollbar h-28 font-mono" :value="shape.params ?? ''" @input="emit('patchShape', { params: ($event.target as HTMLTextAreaElement).value })" />
       </label>
-      <p v-if="blockParamsError(shape.params)" class="text-xs text-rose-300">{{ blockParamsError(shape.params) }}</p>
+      <p v-if="paramsError(shape.params)" class="text-xs text-rose-300">{{ paramsError(shape.params) }}</p>
       <p class="text-xs text-slate-500">这里只画区域。设备按功能 KEY 和参数 JSON 在这块区域里实现功能。</p>
     </template>
     <template v-else-if="shape.type === 'button'">
@@ -505,7 +505,16 @@ function colorTable(parsed: unknown): Record<string, string> | null {  const sou
       <label v-else class="block">功能 KEY
         <input class="field" maxlength="39" :value="shape.key ?? ''" placeholder="例如 CALL_NURSE" @input="emit('patchShape', { key: ($event.target as HTMLInputElement).value })" />
       </label>
-      <p class="text-xs text-slate-500">这里只占位。功能 KEY 由设备接线。LVGL 图标写 CALL 这种短名，画在文字左边，颜色和字号跟按钮文字一致。</p>
+      <label v-if="shape.action === 'function'" class="block">参数 JSON
+        <textarea
+          class="field editor-scrollbar h-28 font-mono"
+          :value="shape.params ?? ''"
+          placeholder='例如 {"floor":"3F","bed":"08"}'
+          @input="emit('patchShape', { params: ($event.target as HTMLTextAreaElement).value })"
+        />
+      </label>
+      <p v-if="shape.action === 'function' && paramsError(shape.params)" class="text-xs text-rose-300">{{ paramsError(shape.params) }}</p>
+      <p class="text-xs text-slate-500">这里只占位。功能 KEY 和参数 JSON 由设备接线；参数以对象写入设备 JSON 的 params。</p>
     </template>
     <template v-else>
       <div class="grid grid-cols-2 gap-2">

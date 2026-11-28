@@ -218,6 +218,7 @@ function exportShape(shape: HmiShape, docLibrary?: Record<string, string>): Reco
       action: shape.action,
       page: shape.action === 'page' ? shape.page : undefined,
       key: shape.action === 'function' ? shape.key : undefined,
+      params: shape.action === 'function' ? exportParams(shape.params) : undefined,
     }
   }
   if (shape.type === 'image') {
